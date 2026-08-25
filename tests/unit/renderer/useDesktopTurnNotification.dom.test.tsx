@@ -31,6 +31,7 @@ vi.mock('@/common/config/configService', () => ({ configService: { get: () => se
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
 import { useDesktopTurnNotification } from '@/renderer/hooks/system/notification/useDesktopTurnNotification';
+import { BRAND_NAME } from '@/branding';
 
 const emitStream = (message: unknown) => streamHandlers.forEach((h) => h(message));
 
@@ -47,7 +48,7 @@ describe('useDesktopTurnNotification', () => {
     emitStream({ type: 'finish', conversation_id: 's1', turn_id: 't1' });
     expect(showInvoke).toHaveBeenCalledTimes(1);
     expect(showInvoke).toHaveBeenCalledWith({
-      title: 'AionUi',
+      title: BRAND_NAME,
       body: 'settings.browserNotification.bodyTurnCompleted',
       conversation_id: 's1',
     });

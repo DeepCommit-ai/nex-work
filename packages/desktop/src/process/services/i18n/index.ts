@@ -13,6 +13,7 @@ import {
   ensureAndSwitch,
   type LocaleData,
 } from '@/common/config/i18n';
+import { applyBrandToTranslations, resolveInitialLanguage } from '@/branding';
 
 // Static imports – Vite bundles these into the main-process output so they
 // work correctly in both development and production (no fs.readFile needed).
@@ -50,10 +51,10 @@ const localeData: LocaleData = {
   'fa-IR': faIR,
 };
 
-const fallbackData = localeData[DEFAULT_LANGUAGE] ?? {};
+const fallbackData = applyBrandToTranslations(localeData[DEFAULT_LANGUAGE] ?? {});
 
 function getLocaleModules(locale: string): Record<string, unknown> {
-  const data = localeData[locale];
+  const data = applyBrandToTranslations(localeData[locale]);
   if (!data) return fallbackData;
   if (locale === DEFAULT_LANGUAGE) return data;
   return mergeWithFallback(fallbackData, data);
@@ -70,7 +71,7 @@ export const i18nReady = (async (): Promise<void> => {
     interpolation: { escapeValue: false },
   });
 
-  const language = await ProcessConfig.get('language');
+  const language = resolveInitialLanguage(await ProcessConfig.get('language'));
   if (language) {
     await ensureAndSwitch(i18n, language, getLocaleModules);
   }

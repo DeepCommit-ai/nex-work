@@ -7,6 +7,7 @@
 import React, { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { BRAND_NAME } from '@/branding';
 
 /**
  * Single owner of `document.title`.
@@ -18,7 +19,7 @@ import { useTranslation } from 'react-i18next';
  * navigation and language switches.
  */
 export function titleForPath(pathname: string, t: (key: string) => string): string {
-  return pathname.startsWith('/login') ? t('login.pageTitle') : 'AionUi';
+  return pathname.startsWith('/login') ? t('login.pageTitle') : BRAND_NAME;
 }
 
 const DocumentTitle: React.FC = () => {

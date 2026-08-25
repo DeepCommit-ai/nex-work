@@ -13,6 +13,7 @@ import {
   type SupportedLanguage,
 } from '@/common/config/i18n';
 import { applyDocumentDirection } from './direction';
+import { applyBrandToTranslations, resolveInitialLanguage } from '@/branding';
 
 // Static imports for all locales to ensure packaged app can always switch language.
 import enUS from './locales/en-US/index';
@@ -52,7 +53,7 @@ const localeData: LocaleData = {
   'fa-IR': faIR,
 };
 
-const fallbackLocale = localeData[DEFAULT_LANGUAGE] ?? {};
+const fallbackLocale = applyBrandToTranslations(localeData[DEFAULT_LANGUAGE] ?? {});
 
 // Cache for loaded translations
 const loadedTranslations = new Map<string, Record<string, unknown>>();
@@ -62,7 +63,7 @@ loadedTranslations.set(DEFAULT_LANGUAGE, fallbackLocale as Record<string, unknow
 
 function getLocaleModules(locale: string): Record<string, unknown> {
   const normalized = normalizeLanguageCode(locale);
-  const modules = localeData[normalized] ?? fallbackLocale;
+  const modules = applyBrandToTranslations(localeData[normalized] ?? fallbackLocale);
   if (normalized === DEFAULT_LANGUAGE) return modules;
   return mergeWithFallback(fallbackLocale, modules);
 }
@@ -92,7 +93,7 @@ function getInitialLanguage(): SupportedLanguage {
   const hint = backendStartupFailed
     ? injectedLanguage || localStorageLanguage || systemLanguage
     : localStorageLanguage || injectedLanguage;
-  return normalizeLanguageCode(hint || DEFAULT_LANGUAGE);
+  return normalizeLanguageCode(resolveInitialLanguage(hint));
 }
 
 async function loadLocaleModules(locale: string): Promise<Record<string, unknown>> {
@@ -145,7 +146,7 @@ async function initLanguage(): Promise<void> {
   try {
     await configService.whenReady();
     const savedLanguage = configService.get('language');
-    const language = savedLanguage || normalizeLanguageCode(navigator.language || DEFAULT_LANGUAGE);
+    const language = resolveInitialLanguage(savedLanguage);
     await ensureAndSwitch(i18n, language, loadLocaleModules);
     // Sync to localStorage so next page load can use it as a fast hint
     if (typeof localStorage !== 'undefined') {

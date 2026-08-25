@@ -18,6 +18,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { BRAND_NAME } from '@/branding';
 
 const repoRoot = resolve(__dirname, '../../..');
 
@@ -144,7 +145,7 @@ childProcess.execSync = function mockedExecSync(command) {
     expect(queryScript).toContain("'installer-self-lock'");
     expect(queryScript).toContain('outerInstallerPid');
     expect(queryScript).toContain('currentOutDir');
-    expect(queryScript).toContain("name = 'AionUi installer'");
+    expect(queryScript).toContain(`name = '${BRAND_NAME} installer'`);
   });
 
   it('continues with the bundled uninstaller when installed-uninstaller repair remains locked', () => {
@@ -375,6 +376,74 @@ childProcess.execSync = function mockedExecSync(command) {
         renameSync(backupOutDir, outDir);
       }
       rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * First-upgrade coverage: a machine running a pre-rebrand AionUi build.
+ *
+ * `appId` is deliberately unchanged across the NexWork rebrand so existing user
+ * data survives, which means the very first NexWork installer every existing
+ * user runs is an *upgrade over an AionUi install*: the recorded InstallLocation
+ * holds `AionUi.exe`, and `AionUi.exe` is the process still running. Any check
+ * that only knows `NexWork.exe` misjudges that install — the registry-heal path
+ * would clear valid uninstall metadata and skip the old-uninstaller path.
+ *
+ * These are source-level contract assertions over the NSIS sources, not an
+ * execution of the installer: NSIS cannot be built or run on macOS/Linux CI.
+ */
+describe('first upgrade from a pre-rebrand AionUi install', () => {
+  const readProjectFile = (relPath: string): string => readFileSync(resolve(repoRoot, relPath), 'utf8');
+  const observability = () => readProjectFile('resources/windows/installer-observability.nsh');
+  const repairHeal = () => readProjectFile('resources/windows/installer-repair-heal.nsh');
+  const updateVerify = () => readProjectFile('resources/windows/installer-update-verify.nsh');
+  const processControl = () => readProjectFile('resources/windows/installer-process-control.nsh');
+  const removeRegistry = () => readProjectFile('resources/windows/installer-remove-registry.nsh');
+
+  it('declares the legacy executable name alongside the current one', () => {
+    expect(observability()).toContain('!define AIONUI_APP_EXECUTABLE_FILENAME "NexWork.exe"');
+    expect(observability()).toContain('!define AIONUI_LEGACY_APP_EXECUTABLE_FILENAME "AionUi.exe"');
+  });
+
+  it('accepts a legacy install location before deciding the registry is stale', () => {
+    const heal = repairHeal().match(/!macro AIONUI_HEAL_INSTALL_REGISTRY[\s\S]*?!macroend/)?.[0];
+    expect(heal).toBeDefined();
+    // The legacy fallback must be assigned BEFORE the FileExists branch that clears.
+    const legacyAt = heal!.indexOf('${AIONUI_LEGACY_APP_EXECUTABLE_FILENAME}');
+    const clearAt = heal!.indexOf('AIONUI_CLEAR_INSTALL_REGISTRY "stale-install-location"');
+    expect(legacyAt).toBeGreaterThan(-1);
+    expect(clearAt).toBeGreaterThan(-1);
+    expect(legacyAt).toBeLessThan(clearAt);
+  });
+
+  it('waits for a running legacy process to exit, not only the renamed one', () => {
+    const macro = updateVerify().match(/!macro AIONUI_WAIT_FOR_UPDATED_APP_EXIT[\s\S]*?!macroend/)?.[0];
+    expect(macro).toBeDefined();
+    expect(macro).toContain("$$_.Name -ieq '${AIONUI_LEGACY_APP_EXECUTABLE_FILENAME}'");
+    // Both install paths must be compared, or a legacy process is never matched.
+    expect(macro).toContain('$$legacyTarget');
+  });
+
+  it('registers the legacy executable with Restart Manager', () => {
+    expect(processControl()).toContain("'${AIONUI_LEGACY_APP_EXECUTABLE_FILENAME}'");
+  });
+
+  it('recognises the self-lock label under either brand', () => {
+    // installer-process-control.nsh emits the NexWork label; the diagnostics
+    // matcher must accept it as well as anything a legacy run wrote.
+    expect(processControl()).toContain("$$lockerText = 'NexWork installer('");
+    expect(removeRegistry()).toContain("$$lockerText -like 'NexWork installer(*)'");
+    expect(removeRegistry()).toContain("$$lockerText -like 'AionUi installer(*)'");
+  });
+
+  it('keeps the smoke harnesses compiling the real macros', () => {
+    // The harnesses define the symbols the .nsh sources reference; a missing
+    // define is an NSIS compile error that only surfaces on Windows.
+    for (const harness of ['scripts/smoke-installer-self-lock.js', 'scripts/smoke-installer-rstrtmgr-ui.js']) {
+      const source = readProjectFile(harness);
+      expect(source).toContain('!define AIONUI_APP_EXECUTABLE_FILENAME "NexWork.exe"');
+      expect(source).toContain('!define AIONUI_LEGACY_APP_EXECUTABLE_FILENAME "AionUi.exe"');
     }
   });
 });

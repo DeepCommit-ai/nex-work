@@ -1,10 +1,10 @@
 appId: com.aionui.app
-productName: AionUi
-executableName: AionUi
-copyright: Copyright © 2024 AionUi
+productName: NexWork
+executableName: NexWork
+copyright: Copyright © 2024 NexWork
 
 protocols:
-  - name: AionUi Protocol
+  - name: NexWork Protocol
     schemes:
       - aionui
 
@@ -107,6 +107,13 @@ extraResources:
     to: .
   - from: resources/app.png
     to: app.png
+  # macOS menu-bar template images. extraResources is an explicit allow-list, so
+  # these must be named here or the tray silently falls back to the app icon in
+  # packaged builds only.
+  - from: resources/trayTemplate.png
+    to: trayTemplate.png
+  - from: resources/trayTemplate@2x.png
+    to: trayTemplate@2x.png
   # aioncore binary (pre-compiled per platform/arch, ships its own bun runtime)
   - from: resources/bundled-aioncore
     to: bundled-aioncore
@@ -169,15 +176,15 @@ linux:
   icon: resources/app.png
   artifactName: ${productName}-${version}-${os}-${arch}.${ext}
   category: Utility
-  maintainer: aionui
-  vendor: aionui
+  maintainer: NexWork
+  vendor: NexWork
   synopsis: ${description}
   description: ${description}
   desktop:
     entry:
-      Name: AionUi
+      Name: NexWork
       Comment: ${description}
-      Icon: AionUi
+      Icon: NexWork
       Categories: Office;Utility;
       MimeType: x-scheme-handler/aionui;
 
@@ -220,5 +227,7 @@ publish:
   provider: github
   owner: iOfficeAI
   repo: AionUi
-  publishAutoUpdate: true
+  # Disabled with AUTO_UPDATE_ENABLED (src/branding/constants.ts): NexWork has
+  # no release channel yet, and this block still targets upstream's repo.
+  publishAutoUpdate: false
   releaseType: release

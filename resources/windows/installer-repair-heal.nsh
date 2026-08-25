@@ -9,11 +9,11 @@ Var /GLOBAL AionUiInnerFailureReadResult
 !macro AIONUI_READ_LAST_INNER_FAILURE
   InitPluginsDir
   StrCpy $AionUiInnerRootCode ""
-  StrCpy $AionUiInnerFailureSummary "No specific locking process was identified. Close AionUi, terminals, editors, and file managers opened in the install folder."
+  StrCpy $AionUiInnerFailureSummary "No specific locking process was identified. Close NexWork, terminals, editors, and file managers opened in the install folder."
   nsExec::ExecToStack `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "& { \
     $$ErrorActionPreference = 'SilentlyContinue'; \
     $$logPath = '$AionUiSessionLogPath'; \
-    $$summary = 'No specific locking process was identified. Close AionUi, terminals, editors, and file managers opened in the install folder.'; \
+    $$summary = 'No specific locking process was identified. Close NexWork, terminals, editors, and file managers opened in the install folder.'; \
     $$code = ''; \
     if ($$logPath -and (Test-Path -LiteralPath $$logPath)) { \
       $$events = @(Get-Content -LiteralPath $$logPath -ErrorAction SilentlyContinue | ForEach-Object { try { $$_ | ConvertFrom-Json } catch { $$null } } | Where-Object { $$_ }); \
@@ -128,6 +128,10 @@ Var /GLOBAL AionUiInnerFailureReadResult
     !insertmacro AIONUI_CLEAR_INSTALL_REGISTRY "missing-install-location"
   ${Else}
     StrCpy $AionUiRegInstallExe "$AionUiRegInstallLocation\${AIONUI_APP_EXECUTABLE_FILENAME}"
+    ${IfNot} ${FileExists} "$AionUiRegInstallExe"
+      ; Pre-rebrand install: the recorded location holds AionUi.exe, not NexWork.exe.
+      StrCpy $AionUiRegInstallExe "$AionUiRegInstallLocation\${AIONUI_LEGACY_APP_EXECUTABLE_FILENAME}"
+    ${EndIf}
     ${If} ${FileExists} "$AionUiRegInstallExe"
       StrCpy $INSTDIR "$AionUiRegInstallLocation"
       StrCpy $AionUiRegistryInstallIsValid "1"

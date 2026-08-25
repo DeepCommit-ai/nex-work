@@ -1,0 +1,38 @@
+/**
+ * NexWork brand override — fork-owned ("ours") stylesheet.
+ *
+ * Imported LAST in `renderer/main.tsx`, after `uno.css`, `arco-override.css`,
+ * `themes/index.css` and `markdown.css`, so equal-specificity rules here win on
+ * source order and no `!important` is needed. This is the single place to put
+ * visual brand deviations from upstream AionUi: keeping them here means an
+ * upstream re-sync never has to merge them.
+ *
+ * Colours are sampled from the app icon (`resources/app.png`) and mirror
+ * `BRAND_COLOR_INK` / `BRAND_COLOR_CREAM` in `constants.ts`.
+ */
+
+:root {
+  --nexwork-brand-ink: #1e2230;
+  --nexwork-brand-cream: #f2efe5;
+}
+
+/*
+ * Sidebar brand chip. Upstream paints a `bg-black` square and centres a small
+ * mark inside it. The NexWork mark is the app icon, which carries its own cream
+ * field and its own rounded corners — so the chip's paint has to go, or it shows
+ * through the icon's transparent corners as dark slivers.
+ *
+ * `:has()` targets whichever element wraps the mark, so this survives upstream
+ * reshuffling the surrounding markup.
+ */
+div:has(> .nexwork-brand-mark) {
+  background-color: transparent;
+}
+
+/*
+ * Sizing is deliberately left to upstream. `Layout.tsx` gives the mark
+ * `w-5.5 h-5.5 absolute inset-0 m-auto` plus a `scale-140` when expanded; those
+ * classes describe the footprint the brand mark has always occupied, and the
+ * icon must keep it. Overriding them to fill the chip made the mark visibly
+ * larger than before. Nothing here touches width, height or transform.
+ */

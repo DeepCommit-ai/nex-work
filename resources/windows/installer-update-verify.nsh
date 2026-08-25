@@ -26,12 +26,14 @@ Var /GLOBAL AionUiActiveMarkerResult
       $$ErrorActionPreference = 'SilentlyContinue'; \
       $$deadline = (Get-Date).AddSeconds(10); \
       $$target = [System.IO.Path]::GetFullPath((Join-Path '$INSTDIR' '${AIONUI_APP_EXECUTABLE_FILENAME}')); \
+      $$legacyTarget = [System.IO.Path]::GetFullPath((Join-Path '$INSTDIR' '${AIONUI_LEGACY_APP_EXECUTABLE_FILENAME}')); \
       do { \
         $$hits = @(Get-CimInstance -ClassName Win32_Process | Where-Object { \
           $$path = $$_.ExecutablePath; \
           if (-not $$path) { $$path = $$_.Path } \
-          $$_.Name -ieq '${AIONUI_APP_EXECUTABLE_FILENAME}' -and $$path -and \
-          [string]::Equals([System.IO.Path]::GetFullPath($$path), $$target, [System.StringComparison]::CurrentCultureIgnoreCase) \
+          ($$_.Name -ieq '${AIONUI_APP_EXECUTABLE_FILENAME}' -or $$_.Name -ieq '${AIONUI_LEGACY_APP_EXECUTABLE_FILENAME}') -and $$path -and \
+          ([string]::Equals([System.IO.Path]::GetFullPath($$path), $$target, [System.StringComparison]::CurrentCultureIgnoreCase) -or \
+           [string]::Equals([System.IO.Path]::GetFullPath($$path), $$legacyTarget, [System.StringComparison]::CurrentCultureIgnoreCase)) \
         }); \
         if ($$hits.Count -eq 0) { exit 0 }; \
         Start-Sleep -Milliseconds 500; \
@@ -170,7 +172,7 @@ Var /GLOBAL AionUiActiveMarkerResult
 
 !macro AIONUI_VERIFY_CORE_APP_FILES
   !insertmacro AIONUI_LOG_EVENT "verify-install start instDir=$INSTDIR"
-  !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\AionUi.exe" "AionUi.exe"
+  !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\NexWork.exe" "NexWork.exe"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\ffmpeg.dll" "ffmpeg.dll"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\libEGL.dll" "libEGL.dll"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\libGLESv2.dll" "libGLESv2.dll"

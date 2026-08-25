@@ -1,7 +1,12 @@
 !ifndef AIONUI_INSTALLER_OBSERVABILITY_NSH
 !define AIONUI_INSTALLER_OBSERVABILITY_NSH
 
-!define AIONUI_APP_EXECUTABLE_FILENAME "AionUi.exe"
+!define AIONUI_APP_EXECUTABLE_FILENAME "NexWork.exe"
+; Executable name shipped before the NexWork rebrand. Every machine upgrading
+; from an AionUi build still has this on disk and running, and appId is
+; deliberately unchanged, so all "is this a real install / is the app still
+; running" checks must accept BOTH names or they misjudge a valid install.
+!define AIONUI_LEGACY_APP_EXECUTABLE_FILENAME "AionUi.exe"
 !define AIONUI_FALLBACK_LOG "aionui-installer-${VERSION}-fallback-log.jsonl"
 
 !pragma warning disable 6001
@@ -106,16 +111,16 @@ Var /GLOBAL AionUiSessionLogPath
 !macroend
 
 !macro AIONUI_LOG_EXTRACT_RESULT _METHOD
-  ${IfNot} ${FileExists} "$INSTDIR\AionUi.exe"
+  ${IfNot} ${FileExists} "$INSTDIR\NexWork.exe"
     !insertmacro AIONUI_FAIL_UX \
       "${AIONUI_E_EXTRACT_FAILED}" \
-      "event=extract result=fail method=${_METHOD} missing=AionUi.exe" \
+      "event=extract result=fail method=${_METHOD} missing=NexWork.exe" \
       "${AIONUI_MSG_EXTRACT_FAILED_ZH}" \
       "${AIONUI_MSG_EXTRACT_FAILED_EN}" \
       "${AIONUI_MSG_EXTRACT_FAILED_ACTION_ZH}" \
       "${AIONUI_MSG_EXTRACT_FAILED_ACTION_EN}" \
-      "extract result=fail method=${_METHOD} missing=AionUi.exe instDir=$INSTDIR" \
-      "extract result=fail method=${_METHOD} missing=AionUi.exe instDir=$INSTDIR"
+      "extract result=fail method=${_METHOD} missing=NexWork.exe instDir=$INSTDIR" \
+      "extract result=fail method=${_METHOD} missing=NexWork.exe instDir=$INSTDIR"
   ${Else}
     !insertmacro AIONUI_SLOG "event=extract result=ok method=${_METHOD} detail=customFiles_${AIONUI_TARGET_ARCH}"
   ${EndIf}

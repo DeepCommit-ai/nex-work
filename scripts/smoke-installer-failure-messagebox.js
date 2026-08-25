@@ -16,6 +16,16 @@ const { spawnSync } = require('node:child_process');
 
 const repoRoot = path.resolve(__dirname, '..');
 
+// Brand name the installer prints, read from the single source that produces it
+// (electron-builder stamps productName onto the installer). Asserting on this
+// rather than a literal keeps the smoke test correct across a rebrand.
+const PRODUCT_NAME = (() => {
+  const yml = readFileSync(path.join(repoRoot, 'packages/desktop/electron-builder.yml'), 'utf8');
+  const match = yml.match(/^productName:\s*(.+)$/m);
+  if (!match) throw new Error('Could not read productName from packages/desktop/electron-builder.yml');
+  return match[1].trim();
+})();
+
 const INSTALLER_ERROR_SCENARIOS = [
   {
     id: 'uninstaller-copy-or-rebuild-failed',
@@ -49,7 +59,7 @@ const INSTALLER_ERROR_SCENARIOS = [
     code: 'E1010',
     message: 'AionUi could not extract the application files correctly.',
     action: 'Download a fresh installer and run it again.',
-    diagnostics: 'scenario=extract-failed phase=extract method=zip missing=AionUi.exe',
+    diagnostics: 'scenario=extract-failed phase=extract method=zip missing=NexWork.exe',
   },
   {
     id: 'disk-insufficient',
@@ -520,7 +530,10 @@ function runHarness({ autoDecline, compileOnly, makensis, scenario }) {
         if (status.status !== 'skipped' || status.reason !== 'empty-dsn') {
           throw new Error(`unexpected report status for ${code}: ${JSON.stringify(status)}`);
         }
-        if (typeof status.copyText !== 'string' || !status.copyText.includes(`AionUi installer failure ${code}`)) {
+        if (
+          typeof status.copyText !== 'string' ||
+          !status.copyText.includes(`${PRODUCT_NAME} installer failure ${code}`)
+        ) {
           throw new Error(`report copyText missing support payload for ${code}`);
         }
       }

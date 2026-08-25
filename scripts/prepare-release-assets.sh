@@ -16,6 +16,15 @@ set -euo pipefail
 ARTIFACTS_DIR="${1:-build-artifacts}"
 OUTPUT_DIR="${2:-release-assets}"
 
+# Product name drives electron-builder's artifactName (${productName}-${version}-...),
+# so read it from the same config rather than hardcoding a brand here.
+BUILDER_CONFIG="$(dirname "$0")/../packages/desktop/electron-builder.yml"
+PRODUCT_NAME="$(sed -n 's/^productName:[[:space:]]*//p' "$BUILDER_CONFIG" | head -n 1 | tr -d '\r')"
+if [ -z "$PRODUCT_NAME" ]; then
+  echo "::error::Could not read productName from $BUILDER_CONFIG"
+  exit 1
+fi
+
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
@@ -133,7 +142,7 @@ echo "==> Validating desktop release assets ..."
 
 for arch in x64 arm64; do
   for ext in dmg zip; do
-    asset="AionUi-${VERSION}-mac-${arch}.${ext}"
+    asset="${PRODUCT_NAME}-${VERSION}-mac-${arch}.${ext}"
     if [ ! -f "$OUTPUT_DIR/$asset" ]; then
       if [ "$ext" = "zip" ]; then
         echo "::error::Missing macOS zip artifact: $asset"

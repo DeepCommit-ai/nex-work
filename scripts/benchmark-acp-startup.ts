@@ -86,10 +86,13 @@ function agentPillByBackend(backend: string) {
 
 function getLogFilePath(): string {
   const today = new Date().toISOString().slice(0, 10);
-  // Dev mode uses "AionUi-Dev", production uses "AionUi"
-  const devPath = path.join(os.homedir(), 'Library', 'Logs', 'AionUi-Dev', `${today}.log`);
-  const prodPath = path.join(os.homedir(), 'Library', 'Logs', 'AionUi', `${today}.log`);
-  return fs.existsSync(devPath) ? devPath : prodPath;
+  // Dev builds log under "AionUi-Dev" (the dev app name is deliberately
+  // unchanged); packaged builds follow app.getName(), which the NexWork rebrand
+  // moved to "NexWork". "AionUi" stays last so pre-rebrand logs still resolve.
+  const candidates = ['AionUi-Dev', 'NexWork', 'AionUi'].map((dir) =>
+    path.join(os.homedir(), 'Library', 'Logs', dir, `${today}.log`)
+  );
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[candidates.length - 1];
 }
 
 function getLogFileSize(logPath: string): number {

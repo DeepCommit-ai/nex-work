@@ -143,6 +143,8 @@ function getLogFilePath(): string {
   if (process.platform === 'darwin') {
     candidates.push(
       path.join(os.homedir(), 'Library', 'Logs', 'AionUi-Dev', `${today}.log`),
+      // Packaged builds follow app.getName(); the rebrand moved that to NexWork.
+      path.join(os.homedir(), 'Library', 'Logs', 'NexWork', `${today}.log`),
       path.join(os.homedir(), 'Library', 'Logs', 'AionUi', `${today}.log`)
     );
   } else if (process.platform === 'win32') {

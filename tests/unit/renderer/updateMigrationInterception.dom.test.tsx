@@ -61,8 +61,11 @@ vi.mock('@/renderer/components/settings/SettingsModal/contents/FeedbackReportMod
 
 import { OPEN_MIGRATION_DIALOG_EVENT } from '@/renderer/components/settings/UpdateMigrationDialog';
 import AboutModalContent from '@/renderer/components/settings/SettingsModal/contents/AboutModalContent';
+import { AUTO_UPDATE_ENABLED } from '@/branding';
 
-describe('About panel check-update in discontinued build', () => {
+// Requires the About panel's check-update control, which is not rendered while
+// AUTO_UPDATE_ENABLED is false. Re-arms with the flag.
+describe.skipIf(!AUTO_UPDATE_ENABLED)('About panel check-update in discontinued build', () => {
   beforeEach(() => {
     vi.stubGlobal('__APP_VERSION__', '2.1.40');
   });

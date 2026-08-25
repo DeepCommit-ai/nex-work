@@ -43,7 +43,7 @@ function Test-SamePath([string]$left, [string]$right) {
 }
 
 function New-SelfLockProcess([int]$processId) {
-  return [pscustomobject]@{ name = 'AionUi installer'; pid = $processId }
+  return [pscustomobject]@{ name = 'NexWork installer'; pid = $processId }
 }
 
 function Write-LockersAndExit($lockers, [string]$fallbackReason, [string]$message, [int]$exitCode, [int]$resources, [int]$count) {
@@ -78,6 +78,9 @@ try {
   } elseif ($targetPathFull -and (Test-Path -LiteralPath $targetPathFull -PathType Container)) {
     $topLevel = @(Get-ChildItem -LiteralPath $targetPathFull -Force -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
     $knownRelative = @(
+      'NexWork.exe',
+      'Uninstall NexWork.exe',
+      # Pre-rebrand install being upgraded in place.
       'AionUi.exe',
       'Uninstall AionUi.exe',
       'resources\app.asar',

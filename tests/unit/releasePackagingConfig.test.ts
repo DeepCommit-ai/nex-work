@@ -11,6 +11,13 @@ function readProjectFile(path: string): string {
   return readFileSync(resolve(projectRoot, path), 'utf8');
 }
 
+/** The product name electron-builder stamps onto every artifact name. */
+function productName(): string {
+  const match = readProjectFile('packages/desktop/electron-builder.yml').match(/^productName:\s*(.+)$/m);
+  if (!match) throw new Error('productName missing from packages/desktop/electron-builder.yml');
+  return match[1].trim();
+}
+
 function yamlBlock(content: string, key: string): string {
   const startMatch = content.match(new RegExp(`^${key}:\\s*$`, 'm'));
   if (!startMatch || startMatch.index === undefined) return '';
@@ -41,8 +48,24 @@ describe('release packaging configuration', () => {
   it('uploads mac zip artifacts without a stale Windows zip glob', () => {
     const workflow = readProjectFile('.github/workflows/_build-reusable.yml');
 
-    expect(workflow).toContain('out/AionUi-*-mac-*.zip');
-    expect(workflow).not.toContain('out/AionUi-*-win32-*.zip');
+    // Derived from productName rather than pinned: electron-builder builds
+    // artifactName from ${productName}, so a rebrand must move this glob too.
+    expect(workflow).toContain(`out/${productName()}-*-mac-*.zip`);
+    expect(workflow).not.toContain(`out/${productName()}-*-win32-*.zip`);
+  });
+
+  it('looks for the Windows installer under the current product name', () => {
+    const workflow = readProjectFile('.github/workflows/pr-checks.yml');
+
+    expect(workflow).toContain(`-Filter "${productName()}-*-win-*.exe"`);
+  });
+
+  it('validates release assets against the configured product name', () => {
+    // Both the fixture generator and the validator must read productName, or a
+    // rebrand leaves them agreeing on a name electron-builder no longer emits.
+    expect(readProjectFile('scripts/prepare-release-assets.sh')).toContain('${PRODUCT_NAME}-${VERSION}-mac-');
+    expect(readProjectFile('scripts/create-mock-release-artifacts.sh')).toContain('${PRODUCT_NAME}-1.0.0-mac-');
+    expect(readProjectFile('scripts/prepare-release-assets.sh')).not.toContain('AionUi-${VERSION}');
   });
 
   it('retries mac prepackaged builds with both dmg and zip targets', () => {
@@ -65,7 +88,7 @@ describe('release packaging configuration', () => {
       });
       expect(createResult.status).toBe(0);
 
-      rmSync(resolve(artifactsDir, 'macos-build-arm64', 'AionUi-1.0.0-mac-arm64.zip'), { force: true });
+      rmSync(resolve(artifactsDir, 'macos-build-arm64', `${productName()}-1.0.0-mac-arm64.zip`), { force: true });
 
       const prepareResult = spawnSync('bash', ['scripts/prepare-release-assets.sh', artifactsDir, outputDir], {
         cwd: projectRoot,
