@@ -56,9 +56,12 @@ and scheduling control are not yet.**
 - **LiteLLM is an enforcement point only for what flows through it.** An ACP CLI configured with its
   own credentials would bypass it. Making the gateway the _only_ reachable path is a deployment
   concern, not something this spec delivers.
-- **Trajectory export is one-way and unauthenticated.** The desktop pushes; nothing comes back.
-  **Therefore server-driven policy cannot be fetched yet** — this is why the static provider ships,
-  and it is a consequence of the backend design, not a convenience.
+- **Collection happens at the gateway, not in the client.** LiteLLM logs what flows through it, so
+  the client does not export trajectories (spec 005, withdrawn). The client's obligation is to make
+  gateway records attributable — see FR-8.
+- **There is no server-to-client channel yet.** Backend integration is one-way and unauthenticated,
+  so **server-driven policy cannot be fetched**. This is why the static provider ships: it is forced
+  by the backend design, not chosen for convenience.
 - **Auth arrives later, likely via an MCP endpoint.** Out of scope here.
 
 ## User Scenarios
@@ -100,10 +103,12 @@ and scheduling control are not yet.**
   - **Operability fails open** — concealment must never be why a user cannot send, reach settings or
     recover. Where they collide, operability wins, because CLI identity is explicitly not a security
     boundary.
-- **FR-8** Every decision record carries **provenance**: which policy was in force, its version, and
-  its source (`static` / `cached` / `remote`). It must not claim a server decision when the static
-  provider was in force. This ships from day one — a corpus of records without provenance cannot
-  later be split into "server routed this" and "local default did".
+- **FR-8** Every request to the LiteLLM gateway carries **provenance as request metadata**: the
+  assistant id, the policy version, and the policy source (`static` / `cached` / `remote`). LiteLLM
+  passes metadata through to its logs, so the gateway's records are attributable without the client
+  exporting anything. It must not claim a server decision when the static provider was in force.
+  This ships from day one — a corpus without provenance cannot later be split into "server routed
+  this" and "local default did".
 
 ## Forward compatibility — decided now, so the backend costs nothing later
 
@@ -117,8 +122,8 @@ The backend cannot yet specify its endpoint. These choices make that irrelevant:
 - **Model identity at the wire is a LiteLLM alias, never a vendor model name.** Aliases are stable
   across gateway-side remapping; vendor names are not. A trajectory recording `claude-sonnet-4` binds
   the corpus to a routing decision that may change tomorrow.
-- **Provenance is recorded before there is anything but `static` to record.** Adding it later would
-  leave the earliest data — the data we most want for training — unattributable.
+- **Provenance is sent before there is anything but `static` to report.** Adding it later would leave
+  the earliest gateway logs — the data we most want for training — unattributable.
 
 ## Surfaces to gate (~30 listed; the inventory is known to be incomplete)
 
