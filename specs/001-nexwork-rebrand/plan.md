@@ -1,6 +1,6 @@
 # Implementation Plan: AionUi → NexWork Rebrand
 
-**Spec**: [spec.md](spec.md) · **Status**: Implemented, uncommitted
+**Spec**: [spec.md](spec.md) · **Status**: Implemented
 
 ## Approach
 

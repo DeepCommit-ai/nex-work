@@ -2,165 +2,176 @@
 
 **Feature Branch**: `nex-work`
 **Created**: 2026-08-25
-**Status**: Draft, revision 2 — awaiting approval before implementation
-**Review**: revised after an adversarial review found four design defects; see _Review Corrections_
-**Input**: "服务端能否控制前端的功能…我想要准确的识别到用户究竟想要做什么，以及说是用什么样的模型、怎么调度 agent，这些都是在后台做，为了更好的收集数据来改进系统。所以我希望能够服务端控制功能开关…目前先实现隐藏 CLI（对于用户来说没办法控制 CLI 是什么，感知不到什么是 CLI，没有 claude code、codex 这种感知的区别，以及不能控制模型）"
+**Status**: Draft, revision 3 — awaiting approval before implementation
+**Revisions**: rev 2 fixed four defects found by adversarial review; rev 3 rewrites the architecture
+around the private LiteLLM gateway and one-way trajectory export.
 
 ## Why
 
-NexWork's value comes from the server deciding what happens: recognising what the user actually
-wants, choosing the model, and scheduling agents. That server-side decision loop is what produces
-usable trajectories and what lets us improve the system and cut cost over time.
+NexWork's value comes from the system deciding what happens: what the user actually wants, which
+model serves it, how agents are scheduled. Every choice pushed onto the user is a decision the server
+did not make, and a trajectory that teaches us nothing about our own routing.
 
-Today the desktop app pushes those decisions onto the user. It asks them to pick a CLI backend
-(Claude Code vs. Codex vs. Gemini) and a model, in ~30 places. Every such choice is a decision the
-server did not make, and therefore a trajectory that teaches us nothing about our own routing.
+Clerical staff also should not have to know what a "CLI" is. It is an implementation detail of how we
+run agents; exposing it costs usability and buys nothing.
 
-Clerical staff also should not have to know what a "CLI" is. The concept is an implementation
-detail of how we run agents; exposing it is a usability cost with no upside.
+## Current state — what already exists
 
-## Current state (what already exists)
+Three things exist today, which is why this spec is mostly wiring rather than invention.
 
-- **`Assistant` already binds CLI + models.** `assistant.agent.type` / `acp_backend` is the CLI;
-  `assistant.models[]` is the model set. Users picking an assistant are already, indirectly, not
-  picking a CLI — the UI simply also exposes the layer underneath.
+- **`Assistant` already binds CLI and models.** `assistant.agent.type` / `acp_backend` is the CLI;
+  `assistant.models[]` is the model set. Picking an assistant already means not picking a CLI — the
+  UI simply also exposes the layer underneath.
 - **Server-pinned model already exists.** `AssistantDetail.defaults.model` is
-  `{ mode: 'fixed' | 'auto', value }`. `mode: 'fixed'` pins the model to the assistant definition.
-  `permission` and `thought_level` work the same way. **This capability does not need to be built.**
-- **No policy channel exists.** `/api/settings/client` is a user-preference bag the renderer can
-  `PUT` freely — unusable as an authority. `aioncore` is a _local_ 127.0.0.1 binary owned by
-  upstream, not our server. `AuthContext` is a local WebUI session, not company identity.
+  `{ mode: 'fixed' | 'auto', value }`. `permission` and `thought_level` work the same way.
+- **The private LiteLLM gateway is the real routing point.** The desktop needs no new code to use it:
+  - `platform: 'custom'` with a `base_url` is already an OpenAI-compatible provider
+    (`modelPlatforms.ts`), so LiteLLM slots in as one.
+  - `AgentEnvEntry` (`agentTypes.ts`) already injects environment into a spawned agent, and the app
+    ships a description for exactly this scenario — _"Custom API endpoint or gateway (e.g.
+    `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`) for self-hosted or proxied services"_. That is how ACP
+    CLIs (Claude Code, Codex) are pointed at LiteLLM.
 
-So the gap is narrower than it first appears: what is missing is a **read-only capability channel**
-and the UI gating that consumes it.
+What does **not** exist: any channel by which the server can tell the client anything.
 
-## Scope boundary — what this phase actually is
+## Architecture — where each guarantee actually lives
 
-This phase delivers **L1** (a capability channel) and **L2** (UI concealment). It delivers neither
-enforcement nor server-side routing, and the spec must not be read as if it did.
+| Guarantee                                                   | Mechanism                                                                                                                                             | Real today?               |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| The server decides **which model** serves a request         | **LiteLLM aliases.** The client sends a virtual name; the gateway maps it to an actual model and can remap it at any time without touching the client | **Yes**                   |
+| Staff cannot **perceive** CLI or model identity             | UI gating from a capability policy                                                                                                                    | Yes, once built           |
+| Staff cannot **bypass** routing                             | LiteLLM is the only configured provider; the gateway sees every request                                                                               | Partly — see _Boundaries_ |
+| The server decides **which CLI / how agents are scheduled** | Assistant definitions; later, remote policy                                                                                                           | Not yet                   |
 
-Three separate claims, only the first of which this phase satisfies:
+This is the substantive change in revision 3. Reviewers of revision 2 were right that UI gating alone
+is concealment of a _client_ decision. With LiteLLM in the path the model decision is genuinely made
+server-side, so gating conceals a decision the server actually makes. **Model control is real; CLI
+and scheduling control are not yet.**
 
-| Claim                                              | Delivered here?                                                          |
-| -------------------------------------------------- | ------------------------------------------------------------------------ |
-| Staff cannot _perceive_ which CLI or model is used | Yes                                                                      |
-| Staff cannot _bypass_ server routing               | No — that is L3, in the backend repo. Devtools still reveals the runtime |
-| The _server_ decides the runtime and model         | **No** — see below                                                       |
+## Boundaries — stated so they are not blurred later
 
-**This phase does not implement constitution Principle I ("The Server Decides").** With the shipped
-static provider there is no server in the loop at all: selecting an assistant still selects its
-client-bound runtime and model, and concealing that fact does not turn it into a routing decision or
-produce a routing trajectory. What this phase builds is the _channel and the gating_ that a real
-server decision will later flow through, plus the concealment that has independent usability value.
-
-Principle I is satisfied only when the remote provider is enabled **and** the backend actually makes
-the routing decision. That is spec 005+, and this spec must not be cited as discharging it.
+- **UI gating is not a security boundary.** Devtools still reveals which runtime is executing. This
+  is acceptable: the goal is that staff do not _think in terms of_ CLIs, not that a determined
+  engineer cannot find out.
+- **LiteLLM is an enforcement point only for what flows through it.** An ACP CLI configured with its
+  own credentials would bypass it. Making the gateway the _only_ reachable path is a deployment
+  concern, not something this spec delivers.
+- **Trajectory export is one-way and unauthenticated.** The desktop pushes; nothing comes back.
+  **Therefore server-driven policy cannot be fetched yet** — this is why the static provider ships,
+  and it is a consequence of the backend design, not a convenience.
+- **Auth arrives later, likely via an MCP endpoint.** Out of scope here.
 
 ## User Scenarios
 
-1. A clerical user opens the app, picks an assistant by what it _does_, types their task, and sends.
-   At no point are they shown a CLI name, a CLI logo, or a model name.
-2. The same user opens Settings and finds no agent-management page and no model-provider
-   configuration. There is no surface that implies a CLI exists.
-3. A user browses conversation history. Past conversations show the assistant, not the runtime that
-   served them.
-4. An administrator changes policy centrally; the next app start reflects it without a release.
-5. The policy source is unreachable at start (offline, server down). The app still works: CLI and
-   model identity stay concealed, **and the user can still send a message**. Concealment degrades
-   toward hidden; operability never degrades.
+1. A clerical user opens the app, picks an assistant by what it _does_, types their task, sends. No
+   CLI name, CLI logo or model name is shown at any point.
+2. Settings contains no agent-management page and no model-provider configuration. Nothing implies a
+   CLI exists.
+3. Conversation history shows the assistant, not the runtime that served it.
+4. An administrator remaps a LiteLLM alias. The next request is served by a different model, with no
+   client change and no release.
+5. The policy source is unreachable. CLI and model identity stay concealed **and the user can still
+   send a message**. Concealment degrades toward hidden; operability never degrades.
 
 ## Functional Requirements
 
 - **FR-1** A capability policy is resolved at app start and exposed to the renderer as a **read-only**
   set. Nothing in the renderer can write to it.
-- **FR-2** Policy resolution goes through a provider interface with at least two implementations: a
-  **static local provider** (the default, shipped) and a **remote provider** (wired, disabled until
-  the backend endpoint exists). Swapping providers must require no change to any gating call site.
-- **FR-3** When `cli.visible` is off, no surface reveals the CLI/runtime identity: no selector, no
-  badge, no logo, no runtime name in labels, tooltips, settings or conversation history.
-- **FR-4** When `model.userSelectable` is off, no model selector is rendered anywhere, and the model
-  used comes from the assistant definition. If the assistant's fixed model is not present in the
-  provider catalogue, the app must **not** silently fall back to some other model — that would hide a
-  wrong-model send behind a hidden selector. It must surface a blocked state naming the assistant.
+- **FR-2** Policy resolution goes through a `PolicyProvider` interface. Implementations: **static**
+  (ships now), **cached**, **remote** (wired, disabled). Swapping providers must require no change to
+  any gating call site — verified by diff.
+- **FR-3** When `cli.visible` is off, no surface reveals CLI/runtime identity: no selector, badge,
+  logo, runtime name in labels, tooltips, settings or conversation history.
+- **FR-4** When `model.userSelectable` is off, no model selector renders anywhere, and the model comes
+  from the assistant definition. If the assistant's fixed model is absent from the catalogue, the app
+  must **not** silently substitute another — that hides a wrong-model send behind a hidden selector.
+  It surfaces a blocked state naming the assistant.
 - **FR-5** Hiding a selector must never break sending. A surface may only be gated once a resolvable
   default is guaranteed for it.
-  **Known gap: this does not currently hold for `aionrs`.** ACP tolerates an omitted model override —
-  the CLI picks its own default — but aionrs does not. With no configured provider,
-  `useGuidModelSelection` selects nothing (`useGuidModelSelection.ts:75`), `GuidPage.tsx:403` applies a
-  fixed model only when it exists in the provider list, and the send path rejects
-  (`useGuidSend.ts:173`, and `AionrsSendBox.tsx:254` for existing conversations). Gating the aionrs
-  model selector is therefore **blocked** until aionrs has a guaranteed default. Ship ACP gating
-  first; track aionrs separately.
+  **With LiteLLM configured as the single provider this is satisfiable for `aionrs` too** — the
+  revision 2 blocker was "no configured provider → send rejected" (`useGuidModelSelection.ts:75`,
+  `GuidPage.tsx:403`, `useGuidSend.ts:173`, `AionrsSendBox.tsx:254`). A company gateway that is always
+  present removes the precondition. **Gating aionrs therefore depends on LiteLLM provisioning, and
+  must not ship before it.**
 - **FR-6** Policy is cached locally and survives restart, so an offline start behaves like the last
   online start.
-- **FR-7** Fetch failure splits along two axes, and they resolve in opposite directions:
-  - **Concealment fails closed.** A server outage must not reveal CLI or model identity.
-  - **Operability fails open.** Concealment must never be the reason a user cannot send, reach
-    settings, or recover. Where the two collide — a hidden selector whose default cannot be
-    resolved — operability wins and the control is shown, because CLI identity is explicitly _not_ a
-    security boundary (see _Scope boundary_). Making recovery impossible is the worse failure mode.
-- **FR-8** The trajectory record states which policy was in force and where it came from
-  (`static` / `cached` / `remote`, plus policy version). It must not claim a server made a decision
-  when the static provider was in force.
+- **FR-7** Fetch failure resolves on two axes, in opposite directions:
+  - **Concealment fails closed** — an outage must not reveal CLI or model identity.
+  - **Operability fails open** — concealment must never be why a user cannot send, reach settings or
+    recover. Where they collide, operability wins, because CLI identity is explicitly not a security
+    boundary.
+- **FR-8** Every decision record carries **provenance**: which policy was in force, its version, and
+  its source (`static` / `cached` / `remote`). It must not claim a server decision when the static
+  provider was in force. This ships from day one — a corpus of records without provenance cannot
+  later be split into "server routed this" and "local default did".
+
+## Forward compatibility — decided now, so the backend costs nothing later
+
+The backend cannot yet specify its endpoint. These choices make that irrelevant:
+
+- **The policy payload is shaped for remote delivery from the start** — `version`, `source`, `ttl`,
+  `etag`, plus the capability map. The static provider fills them with fixed values. A remote provider
+  changes no consumer.
+- **Capability keys are the only vocabulary at gating call sites.** No call site knows which provider
+  answered. This is what makes FR-2's diff check meaningful.
+- **Model identity at the wire is a LiteLLM alias, never a vendor model name.** Aliases are stable
+  across gateway-side remapping; vendor names are not. A trajectory recording `claude-sonnet-4` binds
+  the corpus to a routing decision that may change tomorrow.
+- **Provenance is recorded before there is anything but `static` to record.** Adding it later would
+  leave the earliest data — the data we most want for training — unattributable.
 
 ## Surfaces to gate (~30 listed; the inventory is known to be incomplete)
 
-| Group           | Files                                                                                                                                                       |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Selectors       | `GuidModelSelector`, `AcpModelSelector`, `AionrsModelSelector`, `GoogleModelSelector`, `AgentModeSelector`, `RuntimeSelectorPill`, `runtimeSelectorOptions` |
-| Settings        | `pages/settings/AgentSettings/*` (whole section), `ModelModalContent`, `AssistantEditorSections`, `ArchivedSettings`                                        |
-| Identity        | `AgentBadge`, `agentLogo`, `RuntimeBadge`, `ThemedLogo`, `MobileConversationBrand`, `conversationAssistantIdentity`                                         |
-| Conversation    | `ChatConversation`, `ChatLayout`, `SingleChatEmptyState`, `AcpSendBox`, `AionrsSendBox`, `MessageText`                                                      |
-| History         | `GroupedHistory/ConversationRow`, `ConversationSearchPopover`                                                                                               |
-| Scheduled tasks | `CreateTaskDialog`, `TaskDetailPage`, `jobAgentMeta`, `ScheduledTasksPage`                                                                                  |
+| Group            | Files                                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Selectors        | `GuidModelSelector`, `AcpModelSelector`, `AionrsModelSelector`, `GoogleModelSelector`, `AgentModeSelector`, `RuntimeSelectorPill`, `runtimeSelectorOptions` |
+| Settings         | `pages/settings/AgentSettings/*`, `ModelModalContent`, `AssistantEditorSections`, `ArchivedSettings`                                                        |
+| Identity         | `AgentBadge`, `agentLogo`, `RuntimeBadge`, `ThemedLogo`, `MobileConversationBrand`, `conversationAssistantIdentity`                                         |
+| Conversation     | `ChatConversation`, `ChatLayout`, `SingleChatEmptyState`, `AcpSendBox`, `AionrsSendBox`, `MessageText`                                                      |
+| History          | `GroupedHistory/ConversationRow`, `ConversationSearchPopover`                                                                                               |
+| Scheduled tasks  | `CreateTaskDialog`, `TaskDetailPage`, `jobAgentMeta`, `ScheduledTasksPage`                                                                                  |
+| Error & recovery | `main.tsx:221` resolves literal "Codex ACP" / "Claude ACP"; `TeamWarmupOverlay.tsx:188` tells users to switch models                                        |
+| Import wizards   | `OneClickImportModal.tsx` — literal Claude/Codex options, "Select CLI" label                                                                                |
+| Channel forms    | all 7 under `SettingsModal/contents/channels/` — model sections, "CLI runtime model" descriptions                                                           |
+| Team mode        | `TeamPage.tsx:452` mounts ACP/Aionrs selectors independently of the guid page                                                                               |
 
 ## Key Entities
 
-- **CapabilityPolicy** — a versioned, flat map of capability keys to values, plus the metadata needed
-  to cache and revalidate it.
-- **PolicyProvider** — resolves a `CapabilityPolicy`. Implementations: static, remote, cached.
+- **CapabilityPolicy** — `{ version, source, ttl, etag, capabilities }`.
+- **PolicyProvider** — resolves a `CapabilityPolicy`. Static / cached / remote.
 - **Capability key** — initially `cli.visible`, `model.userSelectable`, `agent.settingsVisible`.
 
 ## Acceptance Criteria
 
-- [ ] With the shipped default policy, a full pass through the app surfaces zero CLI names, CLI logos
-      and model names. A "grep the rendered tree" test is **not sufficient** — it passes while lazy
-      routes, modals, mobile states and error states stay unmounted. Error and recovery states must be
-      driven into view explicitly
-- [ ] Sending a message works with every selector hidden, for each assistant type that is gated
-- [ ] An assistant whose fixed model is absent from the catalogue produces a named blocked state, not
-      a silent substitution (FR-4)
-- [ ] Flipping a policy key re-renders the affected surfaces without a restart
-- [ ] With no cached policy and an unreachable source: CLI and model identity stay hidden **and a
-      message can still be sent** (FR-7, both axes)
-- [ ] Swapping static → remote provider changes no gating call site (verified by diff)
-- [ ] `tsc`, `lint`, `format:check`, `check-i18n`, full test suite pass
-- [ ] Upstream-drift accounting recorded in `plan.md`
+- [ ] With the shipped default policy, a full pass surfaces zero CLI names, CLI logos and model names.
+      A "grep the rendered tree" test is **not sufficient** — it passes while lazy routes, modals,
+      mobile and error states stay unmounted. Error and recovery states must be driven into view
+- [ ] Sending works with every selector hidden, for each gated assistant type
+- [ ] An assistant whose fixed model is absent produces a named blocked state, not a substitution
+- [ ] Flipping a policy key re-renders affected surfaces without a restart
+- [ ] Unreachable source with no cache: identity stays hidden **and** a message can still be sent
+- [ ] Swapping static → remote changes no gating call site (verified by diff)
+- [ ] Every decision record carries provenance, including under the static provider
+- [ ] `tsc`, `lint`, `format:check`, `check-i18n`, full suite pass; drift accounted in `plan.md`
 
 ## Open Questions
 
-- **OQ-1** Remote endpoint contract: URL, auth (device identity vs. staff login), payload shape,
-  cache TTL. Needs the backend repo. Blocks the remote provider only, not this spec.
-- **OQ-2** Policy granularity — per-install, per-user, or per-role? Affects whether the remote
-  provider needs identity before it can ask for policy.
-- **OQ-3** Resolved: the constitution was replaced (spec 003). Principle I now states that the server
-  decides — which this phase does **not** yet satisfy, by its own admission above.
-- **OQ-4** What is the guaranteed aionrs default that would unblock FR-5 for it? Likely a
-  backend-supplied fallback model rather than anything the desktop can synthesise.
+- **OQ-1** LiteLLM provisioning: how does a fresh install learn the gateway URL and key? This gates
+  FR-5 for aionrs and is the one dependency that blocks shipping.
+- **OQ-2** Alias vocabulary — what virtual model names does the gateway expose, and who owns them?
+- **OQ-3** Resolved: the constitution was replaced (spec 003) and its data boundaries are suspended
+  for the prototype (rev 3 of that spec), so nothing here is gated on them.
+- **OQ-4** Resolved by LiteLLM: the aionrs default gap closes once a gateway provider is always
+  present.
 
 ## Review Corrections
 
-Revision 2 after an adversarial review. Four defects, all in the spec rather than in code, which is
-the cheapest place for them to be found:
+**Revision 2** — four defects, found by adversarial review before any code was written:
+the spec claimed a server decision it did not make; FR-5 was unachievable for aionrs; FR-7's
+fail-closed default contradicted the offline scenario; the surface inventory was materially
+incomplete.
 
-1. **The spec claimed a server decision it does not make.** With the static provider there is no
-   server in the loop; FR-8's original wording ("when the server hid a choice") was simply false.
-   Corrected in _Scope boundary_ and FR-8, and Principle I is explicitly **not** claimed.
-2. **FR-5 was unachievable for aionrs.** ACP tolerates an omitted model; aionrs rejects the send.
-   Recorded as a named blocked gap rather than an aspiration.
-3. **FR-7 contradicted scenario 5.** Fail-closed on everything meant an unreachable server could
-   leave a user unable to send or recover — for a boundary the spec itself says is not a security
-   boundary. Split into concealment (fails closed) and operability (fails open).
-4. **The surface inventory was materially incomplete** — error dialogs, import wizards, channel forms
-   and team mode all leak CLI or model identity and were missing. Added, and the acceptance criterion
-   now rejects a rendered-tree grep as sufficient evidence.
+**Revision 3** — the LiteLLM gateway and the one-way export change two of those conclusions:
+model routing _is_ a real server decision, and the aionrs gap has a route to closure. It also makes
+explicit why the static provider ships — one-way export means there is no channel to fetch policy
+over, not that a remote channel was skipped for convenience.

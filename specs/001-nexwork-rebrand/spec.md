@@ -2,7 +2,7 @@
 
 **Feature Branch**: `nex-work`
 **Created**: 2026-08-25
-**Status**: Implemented (uncommitted at time of writing — spec recorded retroactively)
+**Status**: Implemented (spec recorded retroactively, before the change was committed)
 **Input**: "把 logo 换成这个，然后把名字也改成 NexWork，检查所有名字出现的地方…我希望整体是钩子式修改，最后加载一个 override 样式，然后还有一些配置，默认要设置成简体中文"
 
 ## Why
