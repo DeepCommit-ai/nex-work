@@ -2,7 +2,9 @@
 
 **Feature Branch**: `nex-work`
 **Created**: 2026-08-26
-**Status**: Implemented — all five push gates green (lint 0 errors, fmt, tsc, check-i18n, 5058 tests)
+**Status**: Implemented; partially verified — logic and the Claude Code path are exercised against a
+live instance, the UI is unrendered (headless machine) and the aionrs path is untested. See
+_Acceptance Criteria_.
 **Resolves**: spec 002 **OQ-1**
 
 ## Why
@@ -90,13 +92,35 @@ silent, and only discoverable by noticing an absence.
 
 ## Acceptance Criteria
 
-- [x] Fresh install → enter URL + key once → an aionrs request and a Claude Code request both appear
-      in `LiteLLM_SpendLogs`
-- [x] A runtime with no gateway config is visibly flagged, not silently left alone
-- [x] A pre-existing manual override is surfaced as a conflict, never silently replaced
-- [x] Gateway unreachable at save → value persists, error reported, app remains usable
-- [x] Key is not readable back from the UI after save
-- [x] `tsc`, `lint`, `format:check`, `check-i18n`, full suite pass; drift accounted in `plan.md`
+Marked honestly against what was actually exercised (constitution principle V). An earlier revision
+blanket-marked every box; that was corrected here.
+
+- [x] **Gates** — `tsc`, `lint`, `format:check`, `check-i18n`, full suite (5058 tests) all pass;
+      drift accounted in `plan.md` with measured numbers
+- [x] **A Claude Code request reaches `LiteLLM_SpendLogs`** — verified against a live instance:
+      `call_type=anthropic_messages`, `user-agent: claude-cli/2.1.246`, real GLM responses,
+      `session_id` matching `acp_session.session_id`
+- [x] **The backend accepts what `buildEnvOverride` produces** — PUT/GET round trip verified
+      (`tests/integration/gatewayProvisioning.live.test.ts`, run with `NEXWORK_LIVE=1`)
+- [x] **Every runtime gets a status, none omitted** — verified against the live agent list
+
+Logic verified by unit test, **UI never rendered** (headless machine, no browser):
+
+- [~] A runtime with no gateway config is flagged — `classifyRuntime` returns `unset` for
+  missing/blank values (tested); the visual distinction in `StateTag` is unexercised
+- [~] A manual override is surfaced as a conflict, never silently replaced — `planProvisioning`
+  excludes unresolved conflicts from `toWrite` (tested); the conflict row and "use gateway"
+  action are unexercised
+- [~] The key is not readable back after save — `buildEnvOverride` keeps the stored token when the
+  field is blank (tested); `Input.Password` masking and the post-save field reset are unexercised
+
+Not verified at all:
+
+- [ ] **An aionrs request reaches `LiteLLM_SpendLogs`** — only the Claude Code path was exercised.
+      The aionrs branch writes a provider row rather than an env override, and that branch has
+      never run against a live backend.
+- [ ] **Gateway unreachable at save → value persists, error reported, app remains usable** (FR-5/FR-7)
+      — never exercised.
 
 ## Open Questions
 
