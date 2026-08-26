@@ -1412,5 +1412,27 @@
   "crossSessionMessageDesc": "Erlaubt Agenten, Nachrichten an Ihre anderen Unterhaltungen zu senden. Beim Ausschalten wird auch die @@-Erwähnung im Eingabefeld deaktiviert.",
   "crossSessionMessageDisabledBanner": "Nachrichten zwischen Unterhaltungen sind aus, die @@-Erwähnung ist nicht verfügbar.",
   "crossSessionMessageResume": "Wieder einschalten",
-  "crossSessionMessageUpdateFailed": "Einstellung konnte nicht aktualisiert werden"
+  "crossSessionMessageUpdateFailed": "Einstellung konnte nicht aktualisiert werden",
+  "gateway": {
+    "title": "Gateway",
+    "baseUrl": "Gateway-URL",
+    "baseUrlRequired": "Bitte Gateway-URL eingeben",
+    "apiKey": "Gateway-Schlüssel",
+    "apiKeyKeep": "Leer lassen, um den gespeicherten Schlüssel zu behalten",
+    "save": "Speichern und auf alle Laufzeiten anwenden",
+    "saved": "Auf {{count}} Laufzeit(en) angewendet",
+    "savedPartial": "{{ok}} angewendet, {{failed}} fehlgeschlagen",
+    "saveFailed": "Speichern fehlgeschlagen: {{msg}}",
+    "runtimes": "Laufzeitstatus",
+    "refresh": "Aktualisieren",
+    "unsetWarning": "{{count}} Laufzeit(en) verweisen nicht auf das Gateway – ihr Datenverkehr wird nicht erfasst.",
+    "currentValue": "Verweist derzeit auf: {{v}}",
+    "useGateway": "Gateway verwenden",
+    "conflictHint": "Manuell überschriebene Laufzeiten werden nicht automatisch geändert; bitte einzeln bestätigen.",
+    "state": {
+      "gateway": "Über Gateway",
+      "overridden": "Manuell überschrieben",
+      "unset": "Nicht konfiguriert"
+    }
+  }
 }

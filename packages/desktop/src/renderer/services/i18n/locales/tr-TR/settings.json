@@ -1412,5 +1412,27 @@
   "crossSessionMessageDesc": "Aracıların diğer sohbetlerinize mesaj göndermesine izin verir. Kapatmak giriş alanındaki @@ sohbet etiketini de devre dışı bırakır.",
   "crossSessionMessageDisabledBanner": "Sohbetler arası mesajlar kapalı, @@ sohbet etiketi kullanılamıyor.",
   "crossSessionMessageResume": "Yeniden aç",
-  "crossSessionMessageUpdateFailed": "Sohbetler arası mesaj ayarı güncellenemedi"
+  "crossSessionMessageUpdateFailed": "Sohbetler arası mesaj ayarı güncellenemedi",
+  "gateway": {
+    "title": "Ağ geçidi",
+    "baseUrl": "Ağ geçidi URL'si",
+    "baseUrlRequired": "Ağ geçidi URL'sini girin",
+    "apiKey": "Ağ geçidi anahtarı",
+    "apiKeyKeep": "Kayıtlı anahtarı korumak için boş bırakın",
+    "save": "Kaydet ve tüm çalışma zamanlarına uygula",
+    "saved": "{{count}} çalışma zamanına uygulandı",
+    "savedPartial": "{{ok}} uygulandı, {{failed}} başarısız",
+    "saveFailed": "Kaydetme başarısız: {{msg}}",
+    "runtimes": "Çalışma zamanı durumu",
+    "refresh": "Yenile",
+    "unsetWarning": "{{count}} çalışma zamanı ağ geçidine yönlendirilmemiş — trafikleri kaydedilmiyor.",
+    "currentValue": "Şu anda şuna işaret ediyor: {{v}}",
+    "useGateway": "Ağ geçidini kullan",
+    "conflictHint": "Elle geçersiz kılınan çalışma zamanları otomatik olarak değiştirilmez; her birini onaylayın.",
+    "state": {
+      "gateway": "Ağ geçidi üzerinden",
+      "overridden": "Elle geçersiz kılındı",
+      "unset": "Yapılandırılmadı"
+    }
+  }
 }

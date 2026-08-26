@@ -1414,5 +1414,27 @@
   "crossSessionMessageDesc": "에이전트가 다른 대화로 메시지를 보낼 수 있게 합니다. 끄면 입력창의 @@ 대화 멘션도 비활성화됩니다.",
   "crossSessionMessageDisabledBanner": "대화 간 메시지가 꺼져 있어 입력창의 @@ 대화 멘션을 사용할 수 없습니다.",
   "crossSessionMessageResume": "다시 켜기",
-  "crossSessionMessageUpdateFailed": "대화 간 메시지 설정 업데이트에 실패했습니다"
+  "crossSessionMessageUpdateFailed": "대화 간 메시지 설정 업데이트에 실패했습니다",
+  "gateway": {
+    "title": "게이트웨이",
+    "baseUrl": "게이트웨이 URL",
+    "baseUrlRequired": "게이트웨이 URL을 입력하세요",
+    "apiKey": "게이트웨이 키",
+    "apiKeyKeep": "비워 두면 저장된 키를 유지합니다",
+    "save": "저장하고 모든 런타임에 적용",
+    "saved": "{{count}}개 런타임에 적용했습니다",
+    "savedPartial": "{{ok}}개 적용, {{failed}}개 실패",
+    "saveFailed": "저장 실패: {{msg}}",
+    "runtimes": "런타임 상태",
+    "refresh": "새로 고침",
+    "unsetWarning": "{{count}}개 런타임이 게이트웨이를 거치지 않습니다. 해당 트래픽은 기록되지 않습니다.",
+    "currentValue": "현재 대상: {{v}}",
+    "useGateway": "게이트웨이 사용",
+    "conflictHint": "수동으로 재정의된 런타임은 자동으로 변경되지 않습니다. 개별로 확인하세요.",
+    "state": {
+      "gateway": "게이트웨이 사용 중",
+      "overridden": "수동 재정의",
+      "unset": "설정되지 않음"
+    }
+  }
 }

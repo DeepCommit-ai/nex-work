@@ -1412,5 +1412,27 @@
   "crossSessionMessageDesc": "Permet aux agents d'envoyer des messages à vos autres conversations. La désactivation coupe aussi la mention @@ dans la zone de saisie.",
   "crossSessionMessageDisabledBanner": "Les messages entre conversations sont désactivés, la mention @@ est indisponible.",
   "crossSessionMessageResume": "Réactiver",
-  "crossSessionMessageUpdateFailed": "Échec de la mise à jour du réglage des messages entre conversations"
+  "crossSessionMessageUpdateFailed": "Échec de la mise à jour du réglage des messages entre conversations",
+  "gateway": {
+    "title": "Passerelle",
+    "baseUrl": "URL de la passerelle",
+    "baseUrlRequired": "Veuillez saisir l'URL de la passerelle",
+    "apiKey": "Clé de la passerelle",
+    "apiKeyKeep": "Laisser vide pour conserver la clé enregistrée",
+    "save": "Enregistrer et appliquer à tous les runtimes",
+    "saved": "Appliqué à {{count}} runtime(s)",
+    "savedPartial": "{{ok}} appliqué(s), {{failed}} en échec",
+    "saveFailed": "Échec de l'enregistrement : {{msg}}",
+    "runtimes": "État des runtimes",
+    "refresh": "Actualiser",
+    "unsetWarning": "{{count}} runtime(s) ne passent pas par la passerelle — leur trafic n'est pas enregistré.",
+    "currentValue": "Pointe actuellement vers : {{v}}",
+    "useGateway": "Utiliser la passerelle",
+    "conflictHint": "Les runtimes remplacés manuellement ne sont pas modifiés automatiquement ; confirmez-les un par un.",
+    "state": {
+      "gateway": "Via la passerelle",
+      "overridden": "Remplacé manuellement",
+      "unset": "Non configuré"
+    }
+  }
 }

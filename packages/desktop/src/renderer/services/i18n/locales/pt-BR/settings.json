@@ -1415,5 +1415,27 @@
   "crossSessionMessageDesc": "Permite que agentes enviem mensagens para suas outras conversas. Desativar também desliga a menção @@ na caixa de entrada.",
   "crossSessionMessageDisabledBanner": "As mensagens entre conversas estão desativadas, a menção @@ não está disponível.",
   "crossSessionMessageResume": "Ativar novamente",
-  "crossSessionMessageUpdateFailed": "Falha ao atualizar a configuração de mensagens entre conversas"
+  "crossSessionMessageUpdateFailed": "Falha ao atualizar a configuração de mensagens entre conversas",
+  "gateway": {
+    "title": "Gateway",
+    "baseUrl": "URL do gateway",
+    "baseUrlRequired": "Informe a URL do gateway",
+    "apiKey": "Chave do gateway",
+    "apiKeyKeep": "Deixe em branco para manter a chave salva",
+    "save": "Salvar e aplicar a todos os runtimes",
+    "saved": "Aplicado a {{count}} runtime(s)",
+    "savedPartial": "{{ok}} aplicado(s), {{failed}} com falha",
+    "saveFailed": "Falha ao salvar: {{msg}}",
+    "runtimes": "Status dos runtimes",
+    "refresh": "Atualizar",
+    "unsetWarning": "{{count}} runtime(s) não apontam para o gateway — o tráfego deles não é registrado.",
+    "currentValue": "Aponta atualmente para: {{v}}",
+    "useGateway": "Usar o gateway",
+    "conflictHint": "Runtimes substituídos manualmente não são alterados automaticamente; confirme um a um.",
+    "state": {
+      "gateway": "Via gateway",
+      "overridden": "Substituído manualmente",
+      "unset": "Não configurado"
+    }
+  }
 }

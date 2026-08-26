@@ -1412,5 +1412,27 @@
   "crossSessionMessageDesc": "Let agents send messages to your other conversations. Turning this off also disables the @@ conversation mention in the input box.",
   "crossSessionMessageDisabledBanner": "Cross-conversation messages are off, so the @@ conversation mention is unavailable.",
   "crossSessionMessageResume": "Turn back on",
-  "crossSessionMessageUpdateFailed": "Failed to update the cross-conversation message setting"
+  "crossSessionMessageUpdateFailed": "Failed to update the cross-conversation message setting",
+  "gateway": {
+    "title": "Gateway",
+    "baseUrl": "Gateway URL",
+    "baseUrlRequired": "Enter the gateway URL",
+    "apiKey": "Gateway key",
+    "apiKeyKeep": "Leave blank to keep the saved key",
+    "save": "Save and provision all runtimes",
+    "saved": "Saved and provisioned {{count}} runtime(s)",
+    "savedPartial": "Provisioned {{ok}} runtime(s), {{failed}} failed",
+    "saveFailed": "Save failed: {{msg}}",
+    "runtimes": "Runtime status",
+    "refresh": "Refresh",
+    "unsetWarning": "{{count}} runtime(s) do not point at the gateway — their traffic is not recorded.",
+    "currentValue": "Currently points at: {{v}}",
+    "useGateway": "Use gateway",
+    "conflictHint": "Manually overridden runtimes are not rewritten automatically; confirm each one.",
+    "state": {
+      "gateway": "On gateway",
+      "overridden": "Manually overridden",
+      "unset": "Not configured"
+    }
+  }
 }

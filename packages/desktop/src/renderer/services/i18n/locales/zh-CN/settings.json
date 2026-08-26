@@ -1413,5 +1413,27 @@
   "crossSessionMessageDesc": "允许 Agent 向你的其他会话发送消息。关闭后，输入框的 @@ 会话提及与投递能力同时停用。",
   "crossSessionMessageDisabledBanner": "跨会话消息已关闭，输入框的 @@ 会话提及不可用。",
   "crossSessionMessageResume": "重新开启",
-  "crossSessionMessageUpdateFailed": "跨会话消息设置更新失败"
+  "crossSessionMessageUpdateFailed": "跨会话消息设置更新失败",
+  "gateway": {
+    "title": "网关",
+    "baseUrl": "网关地址",
+    "baseUrlRequired": "请填写网关地址",
+    "apiKey": "网关密钥",
+    "apiKeyKeep": "留空表示不修改已保存的密钥",
+    "save": "保存并下发到所有运行时",
+    "saved": "已保存并下发到 {{count}} 个运行时",
+    "savedPartial": "已下发 {{ok}} 个运行时，{{failed}} 个失败",
+    "saveFailed": "保存失败：{{msg}}",
+    "runtimes": "运行时状态",
+    "refresh": "刷新",
+    "unsetWarning": "{{count}} 个运行时未指向网关——它们的流量不会被记录。",
+    "currentValue": "当前指向：{{v}}",
+    "useGateway": "改用网关",
+    "conflictHint": "手动覆盖的运行时不会被自动改写，需逐个确认。",
+    "state": {
+      "gateway": "已指向网关",
+      "overridden": "手动覆盖",
+      "unset": "未配置"
+    }
+  }
 }

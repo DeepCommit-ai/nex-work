@@ -13,6 +13,7 @@ import {
   Lightning,
   LinkCloud,
   Puzzle,
+  Router,
   Speed,
   System,
   Toolkit,
@@ -28,6 +29,8 @@ import { getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 export const BUILTIN_TAB_IDS = [
   'agent',
   'model',
+  // [ENTERPRISE PATCH] spec 006
+  'gateway',
   'skills',
   'tools',
   'appearance',
@@ -105,6 +108,8 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
         path: 'tools',
       },
       appearance: { id: 'appearance', label: t('settings.appearancePanel'), icon: <Computer />, path: 'appearance' },
+      // [ENTERPRISE PATCH] spec 006 — gateway provisioning
+      gateway: { id: 'gateway', label: t('settings.gateway.title'), icon: <Router />, path: 'gateway' },
       webui: {
         id: 'webui',
         label: t('settings.webui'),
