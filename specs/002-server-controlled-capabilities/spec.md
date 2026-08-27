@@ -181,10 +181,16 @@ Marked against what was actually exercised (constitution principle V).
   construction and the store's notify path is unit-tested; no surface was flipped live.
 - [ ] **Unreachable source with no cache** — the shipped provider is static, so there is no source
       to make unreachable. Untestable until a remote provider exists.
-- [ ] **Provenance on every decision record (FR-8)** — not implemented. The client does not yet put
-      the assistant id, policy version and policy source on gateway requests. This is the one
-      acceptance item with a deadline attached: adding it later leaves the earliest gateway logs,
-      the data most wanted for training, unattributable.
+- [~] **Provenance on every decision record (FR-8)** — the carrier is built and tested
+  (`common/capabilities/provenance.ts`), and verified end to end against a live gateway:
+  `x-litellm-spend-logs-metadata` lands verbatim in
+  `LiteLLM_SpendLogs.metadata.spend_logs_metadata`. A more intuitive route was measured and
+  **ruled out** — custom `x-cynapse-*` headers are not recorded; LiteLLM's
+  `requester_custom_headers` only keeps an allowlist (`x-claude-code-*`, `x-stainless-*`,
+  `x-app`).
+  **Not yet attached to outgoing requests.** The CLI runtimes send their own HTTP; the header
+  has to be injected where the runtime is spawned, which is the remaining work. Until then the
+  deadline still runs: records produced now do not carry provenance and never will.
 
 ### What rendering the app changed
 
