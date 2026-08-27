@@ -93,7 +93,8 @@ silent, and only discoverable by noticing an absence.
 ## Acceptance Criteria
 
 Marked honestly against what was actually exercised (constitution principle V). An earlier revision
-blanket-marked every box; that was corrected here.
+blanket-marked every box; that was corrected, and revision 2 then closed the two remaining gaps by
+driving the aionrs path against a live gateway — which found four defects the unit suite could not.
 
 - [x] **Gates** — `tsc`, `lint`, `format:check`, `check-i18n`, full suite (5058 tests) all pass;
       drift accounted in `plan.md` with measured numbers
@@ -114,13 +115,53 @@ Logic verified by unit test, **UI never rendered** (headless machine, no browser
 - [~] The key is not readable back after save — `buildEnvOverride` keeps the stored token when the
   field is blank (tested); `Input.Password` masking and the post-save field reset are unexercised
 
-Not verified at all:
+Verified in revision 2, after the defects below were fixed:
 
-- [ ] **An aionrs request reaches `LiteLLM_SpendLogs`** — only the Claude Code path was exercised.
-      The aionrs branch writes a provider row rather than an env override, and that branch has
-      never run against a live backend.
-- [ ] **Gateway unreachable at save → value persists, error reported, app remains usable** (FR-5/FR-7)
-      — never exercised.
+- [x] **An aionrs request reaches `LiteLLM_SpendLogs`** — three turns driven through a live
+      `aionrs` conversation against the company LiteLLM; each produced a `call_type=acompletion`
+      row with real `spend`, and each got a correct model reply back. Exercising this is what
+      surfaced D1 and D2 below: as shipped in revision 1, this state was **unreachable**.
+- [x] **Gateway unreachable at save → value persists, error reported, app remains usable**
+      (FR-5/FR-7) — the write persists unchanged, and the save now probes the gateway first and
+      reports when it does not answer. Before this, an unreachable address was accepted in silence
+      and every runtime still showed the green "reaches the gateway" tag (D3).
+
+### Defects found by actually exercising the aionrs path
+
+Every one of these passed `tsc`, `lint` and the full unit suite. None was visible without a live
+backend, which is the argument for the live tests rather than more unit tests.
+
+- **D1 — the provider row carried no models.** `save()` created it with `{name, platform, base_url,
+  api_key}` and nothing else. `getAvailableModels` iterates `provider.models`, so aionrs could
+  select nothing and send nothing. Fixed: the save probes the gateway's model list first
+  (`POST /api/providers/fetch-models`, anonymous) and writes it into the row. This also answers
+  spec 002's **OQ-2** — the alias vocabulary is whatever the gateway advertises, and the client
+  never carries a list of its own.
+- **D2 — every save appended a duplicate row.** `planProvisioning` puts already-provisioned
+  runtimes in `toWrite`, and the aionrs branch always called `createProvider`. Verified live: two
+  saves, two `NexWork Gateway` rows, the second with an empty model list — while the status read
+  (`find` by name) kept reporting the first. Fixed: the status read returns the row id and the save
+  updates in place.
+- **D3 — the green tag asserted a health it never checked.** `classifyRuntime` compares URL strings.
+  A typo in the port persisted happily and every runtime reported `gateway`. Fixed by the same
+  probe, reported separately from the per-runtime tags because reachability is a property of the
+  gateway, not of any one runtime.
+- **D4 — a needless `as never` on the `createProvider` call.** Confirmed unnecessary by
+  type-checking the call without it. It would have hidden exactly the kind of shape mismatch D1 was.
+
+### Known limitation — aionrs traffic is not attributable
+
+The traffic arrives; the attribution does not. Measured against the live gateway:
+
+- aionrs has no `acp_session` row — that table is written by the ACP path, and `aionrs` is not ACP.
+  The conversation id appears nowhere in `LiteLLM_SpendLogs`.
+- `session_id` on an aionrs row is generated per call, not per session: two turns of the *same*
+  conversation produced `4820a338…` and `675ca681…`. It is not a session key.
+
+So the join chain the collector relies on — `LiteLLM_SpendLogs.session_id` → `acp_session.session_id`
+→ the transcript file — covers ACP CLI runtimes only. aionrs rows are orphans: correctly billed,
+un-attributable. Closing this needs the client to put a stable conversation id on the
+OpenAI-compatible request, which is out of scope here and is filed rather than hidden.
 
 ## Open Questions
 

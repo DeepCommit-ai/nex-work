@@ -8,7 +8,7 @@
  */
 
 import type { EnvEntry, GatewayConfig, GatewayState, RuntimeGatewayStatus } from './types';
-import { GATEWAY_ENV_AUTH_TOKEN, GATEWAY_ENV_BASE_URL } from './types';
+import { GATEWAY_ENV_AUTH_TOKEN, GATEWAY_ENV_BASE_URL, GATEWAY_WILDCARD_MODEL } from './types';
 
 const findEntry = (entries: readonly EnvEntry[], name: string): EnvEntry | undefined =>
   entries.find((e) => e.name === name);
@@ -81,3 +81,29 @@ export const planProvisioning = (
 /** True when every runtime reaches the gateway — the condition collection depends on. */
 export const isFullyProvisioned = (statuses: readonly RuntimeGatewayStatus[]): boolean =>
   statuses.length > 0 && statuses.every((s) => s.state === 'gateway');
+
+/**
+ * Extract the selectable model list from a gateway's fetch-models response.
+ *
+ * The backend returns a mixed array of bare ids and `{ id, name }` pairs. The
+ * wildcard row is dropped: a runtime that "selected" it would send `*` as the
+ * model name and the request would fail at the gateway.
+ *
+ * An aionrs provider row with an empty model list is not a usable provider —
+ * `getAvailableModels` iterates `provider.models`, so an empty list means no
+ * model can be chosen and nothing can be sent. That is the FR-5 failure this
+ * function exists to prevent, which is why an empty result is returned as-is
+ * for the caller to treat as a probe failure rather than quietly accepted.
+ */
+export const parseGatewayModels = (raw: unknown): string[] => {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    const id = typeof item === 'string' ? item : ((item as { id?: unknown })?.id ?? '');
+    if (typeof id !== 'string') continue;
+    const trimmed = id.trim();
+    if (!trimmed || trimmed === GATEWAY_WILDCARD_MODEL) continue;
+    if (!out.includes(trimmed)) out.push(trimmed);
+  }
+  return out;
+};

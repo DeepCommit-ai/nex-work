@@ -16,14 +16,43 @@
  */
 
 import { acpConversation, mode } from '@/common/adapter/ipcBridge';
-import { planProvisioning } from '@/common/gateway/provisionGateway';
-import type { GatewayConfig, RuntimeGatewayStatus } from '@/common/gateway/types';
+import { parseGatewayModels, planProvisioning } from '@/common/gateway/provisionGateway';
+import type { GatewayConfig, GatewayProbe, RuntimeGatewayStatus } from '@/common/gateway/types';
 import { Button, Form, Input, Message, Tag } from '@arco-design/web-react';
 import { CheckOne, Caution, Close, Refresh } from '@icon-park/react';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import SettingsPageWrapper from '../components/SettingsPageWrapper';
 import { GATEWAY_PROVIDER_NAME, useGatewayStatus } from './useGatewayStatus';
+
+/**
+ * Ask the gateway for its model list before provisioning anything (FR-5, FR-7).
+ *
+ * This runs through the backend's anonymous fetch-models endpoint rather than a
+ * renderer fetch, so no cross-origin question arises and the same code path is
+ * exercised on desktop and web.
+ *
+ * Two things ride on this one call:
+ *   - **Reachability.** A URL that merely parses proves nothing. Without the
+ *     probe a typo in the port persists, every runtime reports `gateway`, and
+ *     the surface asserts a health it never checked.
+ *   - **The model list.** An aionrs provider row with no models cannot serve a
+ *     send at all, because `getAvailableModels` iterates `provider.models`.
+ */
+const probeGateway = async (config: GatewayConfig): Promise<GatewayProbe> => {
+  try {
+    const res = await mode.fetchModelList.invoke({
+      platform: 'custom',
+      base_url: config.baseUrl,
+      api_key: config.apiKey,
+    });
+    const models = parseGatewayModels(res?.models);
+    if (models.length === 0) return { status: 'failed', detail: 'no models returned' };
+    return { status: 'ok', models };
+  } catch (e) {
+    return { status: 'failed', detail: String(e) };
+  }
+};
 
 const StateTag: React.FC<{ status: RuntimeGatewayStatus }> = ({ status }) => {
   const { t } = useTranslation();
@@ -55,7 +84,8 @@ const GatewaySettings: React.FC = () => {
   const [baseUrl, setBaseUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [resolved, setResolved] = useState<string[]>([]);
-  const { runtimes, statuses, loading, refresh } = useGatewayStatus(baseUrl);
+  const [probe, setProbe] = useState<GatewayProbe | undefined>();
+  const { runtimes, provider, statuses, loading, refresh } = useGatewayStatus(baseUrl);
 
   const conflicts = useMemo(() => statuses.filter((s) => s.state === 'overridden'), [statuses]);
   const unset = useMemo(() => statuses.filter((s) => s.state === 'unset'), [statuses]);
@@ -65,19 +95,41 @@ const GatewaySettings: React.FC = () => {
     const config: GatewayConfig = { baseUrl: values.baseUrl.trim(), apiKey: (values.apiKey ?? '').trim() };
     setSaving(true);
     try {
+      // FR-5: the probe informs the write, it never gates it. A save against an
+      // unreachable gateway must still persist — the operator has to be able to
+      // type the right URL in and correct it, and a rejected save loses the key
+      // they just entered.
+      const result = await probeGateway(config);
+      setProbe(result);
+
       const { toWrite } = planProvisioning(runtimes, config, resolved);
 
       const provisionOne = (w: { runtimeId: string; env: (typeof toWrite)[number]['env'] }) => {
         const rt = runtimes.find((r) => r.runtimeId === w.runtimeId);
-        // aionrs reaches the gateway through a provider row, not env.
-        return rt?.agentType === 'aionrs'
-          ? mode.createProvider.invoke({
+        if (rt?.agentType !== 'aionrs') {
+          return acpConversation.setAgentOverrides.invoke({ id: w.runtimeId, env_override: w.env });
+        }
+        // aionrs reaches the gateway through a provider row, not env. The row
+        // carries the model list, without which nothing can be sent, and it is
+        // updated in place — creating unconditionally appended a duplicate
+        // `NexWork Gateway` row on every save.
+        const models = result.status === 'ok' ? result.models : (provider?.models ?? []);
+        return provider
+          ? mode.updateProvider.invoke({
+              id: provider.id,
+              platform: 'custom',
+              name: GATEWAY_PROVIDER_NAME,
+              base_url: config.baseUrl,
+              ...(config.apiKey ? { api_key: config.apiKey } : {}),
+              models,
+            })
+          : mode.createProvider.invoke({
               name: GATEWAY_PROVIDER_NAME,
               platform: 'custom',
               base_url: config.baseUrl,
               api_key: config.apiKey,
-            } as never)
-          : acpConversation.setAgentOverrides.invoke({ id: w.runtimeId, env_override: w.env });
+              models,
+            });
       };
 
       // allSettled, not all: a partial failure must report which runtimes were
@@ -89,7 +141,17 @@ const GatewaySettings: React.FC = () => {
       setBaseUrl(config.baseUrl);
       // FR-6: never echo the key back.
       form.setFieldValue('apiKey', '');
-      if (failed > 0) {
+      if (result.status === 'failed') {
+        // Reported, not swallowed: the values are saved, but claiming the
+        // runtimes "reach the gateway" when the gateway never answered is the
+        // exact lie FR-7 forbids.
+        Message.warning(
+          t('settings.gateway.probeFailed', {
+            defaultValue: '已保存，但网关没有响应，请检查地址与密钥：{{msg}}',
+            msg: result.detail,
+          })
+        );
+      } else if (failed > 0) {
         Message.warning(
           t('settings.gateway.savedPartial', {
             defaultValue: '已下发 {{ok}} 个运行时，{{failed}} 个失败',
@@ -109,7 +171,7 @@ const GatewaySettings: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  }, [form, runtimes, resolved, refresh, t]);
+  }, [form, runtimes, provider, resolved, refresh, t]);
 
   return (
     <SettingsPageWrapper>
@@ -133,6 +195,25 @@ const GatewaySettings: React.FC = () => {
             {t('settings.gateway.save', { defaultValue: '保存并下发到所有运行时' })}
           </Button>
         </Form>
+
+        {probe && (
+          // The green per-runtime tag only says the URL matches; this line is
+          // the only place the surface says whether the gateway actually answered.
+          <div
+            className={
+              probe.status === 'ok' ? 'text-13px text-[rgb(var(--success-6))]' : 'text-13px text-[rgb(var(--danger-6))]'
+            }
+          >
+            {probe.status === 'ok'
+              ? t('settings.gateway.probeOk', {
+                  defaultValue: '网关已响应，可用模型 {{count}} 个。',
+                  count: probe.models.length,
+                })
+              : t('settings.gateway.probeFailedHint', {
+                  defaultValue: '网关未响应——配置已保存，但流量不会成功送达。',
+                })}
+          </div>
+        )}
 
         <div className='flex items-center justify-between'>
           <span className='font-medium'>{t('settings.gateway.runtimes', { defaultValue: '运行时状态' })}</span>

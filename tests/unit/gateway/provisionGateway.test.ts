@@ -3,6 +3,7 @@ import {
   buildEnvOverride,
   classifyRuntime,
   isFullyProvisioned,
+  parseGatewayModels,
   planProvisioning,
 } from '@/common/gateway/provisionGateway';
 import { GATEWAY_ENV_AUTH_TOKEN, GATEWAY_ENV_BASE_URL, type EnvEntry } from '@/common/gateway/types';
@@ -121,5 +122,37 @@ describe('isFullyProvisioned', () => {
 
   it('is true only when every runtime reaches the gateway', () => {
     expect(isFullyProvisioned([{ runtimeId: 'a', runtimeName: 'A', state: 'gateway' }])).toBe(true);
+  });
+});
+
+describe('parseGatewayModels', () => {
+  it('accepts the bare-id shape LiteLLM returns', () => {
+    expect(parseGatewayModels(['glm-4.7', 'glm-5'])).toEqual(['glm-4.7', 'glm-5']);
+  });
+
+  it('accepts the { id, name } shape the backend may return instead', () => {
+    expect(
+      parseGatewayModels([
+        { id: 'glm-4.7', name: 'GLM 4.7' },
+        { id: 'glm-5', name: 'GLM 5' },
+      ])
+    ).toEqual(['glm-4.7', 'glm-5']);
+  });
+
+  it('drops the wildcard row', () => {
+    // Verified against a live LiteLLM: /v1/models lists `*` beside real aliases.
+    // Selecting it would send `*` as the model name and the request would fail.
+    expect(parseGatewayModels(['glm-4.7', '*'])).toEqual(['glm-4.7']);
+  });
+
+  it('drops blanks and de-duplicates', () => {
+    expect(parseGatewayModels(['glm-5', '  ', 'glm-5', { id: '' }])).toEqual(['glm-5']);
+  });
+
+  it('returns empty for a non-array payload rather than throwing', () => {
+    // The caller treats empty as a probe failure; a throw here would take the
+    // whole save down instead, which FR-7 forbids.
+    expect(parseGatewayModels(undefined)).toEqual([]);
+    expect(parseGatewayModels({ models: ['glm-5'] })).toEqual([]);
   });
 });

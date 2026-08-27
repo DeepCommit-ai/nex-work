@@ -38,3 +38,20 @@ export type RuntimeGatewayStatus = {
 
 /** An env override entry as the backend stores it. */
 export type EnvEntry = { name: string; value: string };
+
+/**
+ * Outcome of probing the gateway before provisioning (FR-5, FR-7).
+ *
+ * The probe exists because a URL that merely *parses* tells us nothing: a typo
+ * in the port persists happily, every runtime then reports `gateway`, and the
+ * surface asserts a health it never checked. Either we got the gateway's model
+ * list back, or we did not.
+ */
+export type GatewayProbe = { status: 'ok'; models: string[] } | { status: 'failed'; detail: string };
+
+/**
+ * LiteLLM advertises a `*` wildcard row next to real aliases. It is a
+ * passthrough rule, not something anyone can select; offering it would put an
+ * unsendable entry in the model list.
+ */
+export const GATEWAY_WILDCARD_MODEL = '*';

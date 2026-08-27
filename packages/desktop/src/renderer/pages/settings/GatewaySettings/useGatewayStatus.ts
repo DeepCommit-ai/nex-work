@@ -28,10 +28,20 @@ export type RuntimeEnv = { runtimeId: string; runtimeName: string; agentType: st
 /** The provider row aionrs uses to reach an OpenAI-compatible gateway. */
 export const GATEWAY_PROVIDER_NAME = 'NexWork Gateway';
 
+/**
+ * Everything a save needs to know about the current aionrs provider row.
+ *
+ * `id` is what makes the write an update rather than another insert. Without it
+ * every save appended a fresh `NexWork Gateway` row (verified against a live
+ * backend: two saves, two rows) and the status read below — a `find` by name —
+ * kept reporting the *first* one while later saves went to the last.
+ */
+export type GatewayProviderRow = { id: string; baseUrl: string; models: string[] };
+
 const isCliAgent = (a: ManagedAgent): boolean => a.agent_type === 'acp';
 
 /** Read every runtime's current gateway-relevant configuration. */
-export const loadRuntimeEnvs = async (): Promise<RuntimeEnv[]> => {
+export const loadRuntimeEnvs = async (): Promise<{ runtimes: RuntimeEnv[]; provider?: GatewayProviderRow }> => {
   const agents = (await acpConversation.getManagedAgents.invoke()) ?? [];
   const cli = agents.filter(isCliAgent);
 
@@ -53,34 +63,41 @@ export const loadRuntimeEnvs = async (): Promise<RuntimeEnv[]> => {
   // aionrs is represented by its provider row, projected into the same shape so
   // the surface has one uniform list.
   const aionrs = agents.find((a) => a.agent_type === 'aionrs');
+  let provider: GatewayProviderRow | undefined;
   if (aionrs) {
-    let baseUrl = '';
     try {
       const providers = (await mode.listProviders.invoke()) as IProvider[] | undefined;
-      baseUrl = providers?.find((p) => p.name === GATEWAY_PROVIDER_NAME)?.base_url ?? '';
+      const row = providers?.find((p) => p.name === GATEWAY_PROVIDER_NAME);
+      if (row) provider = { id: row.id, baseUrl: row.base_url ?? '', models: row.models ?? [] };
     } catch {
-      baseUrl = '';
+      provider = undefined;
     }
+    // A row whose model list is empty cannot serve a send: `getAvailableModels`
+    // iterates `provider.models`, so aionrs would have nothing to select. Report
+    // it as unset rather than as a working gateway.
+    const usable = provider && provider.baseUrl && provider.models.length > 0;
     envs.push({
       runtimeId: aionrs.id,
       runtimeName: aionrs.name,
       agentType: 'aionrs',
-      env: baseUrl ? [{ name: GATEWAY_ENV_BASE_URL, value: baseUrl }] : [],
+      env: usable ? [{ name: GATEWAY_ENV_BASE_URL, value: provider!.baseUrl }] : [],
     });
   }
-  return envs;
+  return { runtimes: envs, provider };
 };
 
 export const useGatewayStatus = (gatewayBaseUrl: string) => {
   const [runtimes, setRuntimes] = useState<RuntimeEnv[]>([]);
+  const [provider, setProvider] = useState<GatewayProviderRow | undefined>();
   const [statuses, setStatuses] = useState<RuntimeGatewayStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const rs = await loadRuntimeEnvs();
+      const { runtimes: rs, provider: row } = await loadRuntimeEnvs();
       setRuntimes(rs);
+      setProvider(row);
       setStatuses(
         rs.map((r) => {
           const { state, currentValue } = classifyRuntime(r.env, gatewayBaseUrl);
@@ -96,5 +113,5 @@ export const useGatewayStatus = (gatewayBaseUrl: string) => {
     void refresh();
   }, [refresh]);
 
-  return { runtimes, statuses, loading, refresh };
+  return { runtimes, provider, statuses, loading, refresh };
 };
