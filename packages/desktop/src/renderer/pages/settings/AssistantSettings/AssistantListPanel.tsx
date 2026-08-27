@@ -2,6 +2,8 @@
  * AssistantListPanel — Renders the collapsible list of assistants
  * with avatar, name, enabled switch, and persistent row actions.
  */
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
@@ -222,6 +224,8 @@ const AssistantListPanel: React.FC<AssistantListPanelProps> = ({
   onHighlightConsumed,
 }) => {
   const { t } = useTranslation();
+  // [ENTERPRISE PATCH] spec 002 FR-3
+  const cliVisible = useCapability('cli.visible');
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -275,6 +279,21 @@ const AssistantListPanel: React.FC<AssistantListPanelProps> = ({
           className='!rounded-10px !bg-fill-1 !px-8px !py-1px !text-10px !font-600 !leading-16px !text-primary-6'
         >
           {t('settings.builtin', { defaultValue: 'Built-in' })}
+        </Tag>
+      );
+    }
+    // [ENTERPRISE PATCH] spec 002 FR-3. This tag says "CLI" in so many words —
+    // the only surface in the inventory that names the concept directly rather
+    // than a vendor. Under the gate it reads as the neutral source it actually
+    // is; the source itself is still distinguished, just not by that word.
+    if (tag === 'cli' && !cliVisible) {
+      return (
+        <Tag
+          size='small'
+          bordered={false}
+          className='!rounded-10px !bg-fill-1 !px-8px !py-1px !text-10px !font-600 !leading-16px !text-t-tertiary'
+        >
+          {t('settings.assistantSourceManaged', { defaultValue: '内置' })}
         </Tag>
       );
     }

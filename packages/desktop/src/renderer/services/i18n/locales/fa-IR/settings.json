@@ -167,6 +167,7 @@
   "assistantSourceCustom": "سفارشی",
   "assistantSourceOfficial": "رسمی",
   "assistantSourceCli": "CLI",
+  "assistantSourceManaged": "مدیریت‌شده",
   "assistantSectionEnabled": "فعال",
   "assistantSectionDisabled": "غیرفعال",
   "assistantTabMine": "دستیارهای من",

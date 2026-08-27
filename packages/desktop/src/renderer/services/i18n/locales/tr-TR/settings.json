@@ -167,6 +167,7 @@
   "assistantSourceCustom": "Özel",
   "assistantSourceOfficial": "Resmi",
   "assistantSourceCli": "CLI",
+  "assistantSourceManaged": "Yönetilen",
   "assistantSectionEnabled": "Etkin",
   "assistantSectionDisabled": "Devre Dışı",
   "assistantTabMine": "Asistanlarım",

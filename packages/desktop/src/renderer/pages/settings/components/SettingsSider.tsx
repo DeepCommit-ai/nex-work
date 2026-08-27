@@ -137,7 +137,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
     // the thing staff are not meant to think in terms of. Extension tabs anchored
     // to a dropped entry fall through to `unanchored` by the existing check.
     const result: SiderItem[] = BUILTIN_TAB_IDS.filter((id) => isDesktop || id !== 'pet')
-      .filter((id) => agentSettingsVisible || (id !== 'agent' && id !== 'model'))
+      .filter((id) => agentSettingsVisible || (id !== 'agent' && id !== 'model' && id !== 'gateway'))
       .map((id) => builtinMap[id]);
 
     // Extension tabs with position anchoring

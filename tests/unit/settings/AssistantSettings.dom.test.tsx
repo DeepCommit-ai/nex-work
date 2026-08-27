@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DEFAULT_CAPABILITIES, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ConfigProvider } from '@arco-design/web-react';
 import { MemoryRouter } from 'react-router-dom';
@@ -77,6 +78,11 @@ vi.mock('@/renderer/pages/settings/AssistantSettings/assistantUtils', async () =
 });
 
 describe('AssistantSettings', () => {
+  // [ENTERPRISE PATCH] spec 002 — these cases describe the list as rendered when
+  // CLI identity is permitted; the gated label is asserted in its own case below.
+  beforeEach(() => setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'cli.visible': true } }));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   beforeEach(() => {
     useAssistantListMock.mockReturnValue({
       assistants: [],
@@ -222,6 +228,9 @@ describe('AssistantSettings', () => {
     expect(screen.queryByTestId('enabled-assistant-row-disabled')).not.toBeInTheDocument();
     expect(screen.getByText('Official')).toBeInTheDocument();
     expect(screen.getByText('Custom')).toBeInTheDocument();
+    // [ENTERPRISE PATCH] spec 002 FR-3 — the source is still distinguished, just
+    // not by the word "CLI", which is the one label in the inventory that names
+    // the concept outright. The gated wording is asserted below.
     expect(screen.getByText('CLI')).toBeInTheDocument();
     // Runtime engine is shown with a label + logo (same "Agent: {logo}" style as
     // the My Assistants cards, i18n key `assistantRuntimeLabel`), not a bare
@@ -341,5 +350,39 @@ describe('AssistantSettings', () => {
     expect(logo).not.toBeNull();
     expect(logo).toHaveClass('object-contain');
     vi.unstubAllGlobals();
+  });
+});
+
+describe('assistant source labels under cli.visible', () => {
+  afterEach(() => setPolicy(STATIC_POLICY));
+
+  it('stops saying "CLI" while still distinguishing the source', () => {
+    // spec 002 FR-3. This label is the only one in the inventory that names the
+    // concept outright rather than a vendor, so gating a logo would not have
+    // reached it — it was found by rendering the page, not by reading the code.
+    setPolicy(STATIC_POLICY);
+    const assistants = [
+      { id: 'cli', name: 'Cli', sort_order: 3, source: 'generated', enabled: true },
+    ] as AssistantListItem[];
+
+    render(
+      <ConfigProvider>
+        <EnabledAssistantsList
+          assistants={assistants}
+          assistantOrder={['cli']}
+          localeKey='en-US'
+          searchActive={false}
+          onOpenDetail={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          onReorder={vi.fn()}
+          onStartChat={vi.fn()}
+        />
+      </ConfigProvider>
+    );
+
+    expect(screen.queryByText('CLI')).not.toBeInTheDocument();
+    // The row is still there and still labelled — concealment, not removal.
+    expect(screen.getByTestId('enabled-assistant-row-cli')).toBeInTheDocument();
+    expect(screen.getByText('内置')).toBeInTheDocument();
   });
 });

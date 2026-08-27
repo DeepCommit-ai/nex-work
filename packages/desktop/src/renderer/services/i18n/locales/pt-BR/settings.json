@@ -167,6 +167,7 @@
   "assistantSourceCustom": "Personalizado",
   "assistantSourceOfficial": "Oficial",
   "assistantSourceCli": "CLI",
+  "assistantSourceManaged": "Gerenciado",
   "assistantSectionEnabled": "Ativado",
   "assistantSectionDisabled": "Desativado",
   "assistantTabMine": "Meus assistentes",

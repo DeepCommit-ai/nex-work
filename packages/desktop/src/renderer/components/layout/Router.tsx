@@ -120,7 +120,13 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/settings/display' element={<Navigate to='/settings/appearance' replace />} />
           <Route path='/settings/webui' element={withRouteFallback(WebuiSettings)} />
           {/* [ENTERPRISE PATCH] spec 006 */}
-          <Route path='/settings/gateway' element={withRouteFallback(GatewaySettings)} />
+          {/* [ENTERPRISE PATCH] spec 002 FR-3 — the gateway page lists every runtime
+              by name, so it is an administrator surface by the same argument as the
+              agent page: measured against a live instance it rendered 15 CLI names. */}
+          <Route
+            path='/settings/gateway'
+            element={agentSettingsVisible ? withRouteFallback(GatewaySettings) : <Navigate to='/guid' replace />}
+          />
           <Route path='/settings/pet' element={withRouteFallback(PetSettings)} />
           <Route path='/settings/archived' element={withRouteFallback(ArchivedSettings)} />
           <Route path='/settings/system' element={withRouteFallback(SystemSettings)} />

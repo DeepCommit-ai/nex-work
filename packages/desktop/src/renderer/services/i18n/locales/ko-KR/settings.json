@@ -167,6 +167,7 @@
   "assistantSourceCustom": "사용자 지정",
   "assistantSourceOfficial": "공식",
   "assistantSourceCli": "CLI",
+  "assistantSourceManaged": "기본",
   "assistantSectionEnabled": "활성화됨",
   "assistantSectionDisabled": "비활성화됨",
   "assistantTabMine": "내 어시스턴트",

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 import type { AssistantListItem } from '../types';
 import { resolveAssistantSourceTag } from '../assistantUtils';
 import AssistantAvatar from '../AssistantAvatar';
@@ -59,6 +61,8 @@ const EnabledAssistantRow: React.FC<EnabledAssistantRowProps> = ({
   onStartChat,
 }) => {
   const { t } = useTranslation();
+  // [ENTERPRISE PATCH] spec 002 FR-3
+  const cliVisible = useCapability('cli.visible');
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } = useSortable({
     id: assistant.id,
     disabled: !draggable,
@@ -69,7 +73,10 @@ const EnabledAssistantRow: React.FC<EnabledAssistantRowProps> = ({
     sourceTag === 'builtin'
       ? t('settings.assistantSourceOfficial', { defaultValue: 'Official' })
       : sourceTag === 'cli'
-        ? t('settings.assistantSourceCli', { defaultValue: 'CLI' })
+        ? // [ENTERPRISE PATCH] spec 002 FR-3 — see AssistantListPanel.
+          cliVisible
+          ? t('settings.assistantSourceCli', { defaultValue: 'CLI' })
+          : t('settings.assistantSourceManaged', { defaultValue: '内置' })
         : t('settings.assistantSourceCustom', { defaultValue: 'Custom' });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),

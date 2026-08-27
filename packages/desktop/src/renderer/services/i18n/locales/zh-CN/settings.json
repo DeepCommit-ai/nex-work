@@ -167,6 +167,7 @@
   "assistantSourceCustom": "自定义",
   "assistantSourceOfficial": "官方",
   "assistantSourceCli": "CLI",
+  "assistantSourceManaged": "内置",
   "assistantSectionEnabled": "已启用",
   "assistantSectionDisabled": "已禁用",
   "assistantTabMine": "我的助手",

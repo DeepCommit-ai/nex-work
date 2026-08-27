@@ -1741,6 +1741,7 @@ export type I18nKey =
   | 'settings.assistantSkillsPlaceholder'
   | 'settings.assistantSourceCli'
   | 'settings.assistantSourceCustom'
+  | 'settings.assistantSourceManaged'
   | 'settings.assistantSourceOfficial'
   | 'settings.assistantTabMine'
   | 'settings.assistantTabOfficial'

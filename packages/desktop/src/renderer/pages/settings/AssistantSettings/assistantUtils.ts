@@ -1,5 +1,10 @@
 import { resolveExtensionAssetUrl } from '@/renderer/utils/platform';
-import { isBackendRelativeAssetPath, isLikelyLocalFilePath } from '@/renderer/utils/model/assistantAvatar';
+import { can } from '@/common/capabilities/policy';
+import {
+  isBackendRelativeAssetPath,
+  isLikelyLocalFilePath,
+  isVendorLogoPath,
+} from '@/renderer/utils/model/assistantAvatar';
 import type { AssistantListItem, AvailableBackend } from './types';
 import type { ManagedAgent } from '@/renderer/utils/model/agentTypes';
 
@@ -32,9 +37,18 @@ export const isEmoji = (str: string): boolean => {
 /**
  * Resolve an avatar string to an image src URL, or undefined if it is not an image.
  */
+/**
+ * [ENTERPRISE PATCH] spec 002 FR-3.
+ *
+ * The third near-identical avatar resolver in this codebase, after
+ * `resolveAssistantAvatar` and `resolveAgentAvatar`. Each has to be gated on its
+ * own, and each was found the same way — by rendering the page and seeing the
+ * vendor logos that the previous "single funnel" fix had not reached.
+ */
 export const resolveAvatarImageSrc = (avatar: string | undefined): string | undefined => {
   const value = avatar?.trim();
   if (!value) return undefined;
+  if (isVendorLogoPath(value) && !can('cli.visible')) return undefined;
 
   if (isLikelyLocalFilePath(value)) return undefined;
   if (value.startsWith('/') && !isBackendRelativeAssetPath(value)) return undefined;

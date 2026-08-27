@@ -175,6 +175,7 @@
   "assistantSourceCustom": "Власний",
   "assistantSourceOfficial": "Офіційний",
   "assistantSourceCli": "CLI",
+  "assistantSourceManaged": "Штатний",
   "assistantSectionEnabled": "Увімкнено",
   "assistantSectionDisabled": "Вимкнено",
   "assistantTabMine": "Мої асистенти",

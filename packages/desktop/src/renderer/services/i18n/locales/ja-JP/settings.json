@@ -167,6 +167,7 @@
   "assistantSourceCustom": "カスタム",
   "assistantSourceOfficial": "公式",
   "assistantSourceCli": "CLI",
+  "assistantSourceManaged": "標準",
   "assistantSectionEnabled": "有効",
   "assistantSectionDisabled": "無効",
   "assistantTabMine": "マイアシスタント",

@@ -1,3 +1,5 @@
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 import classNames from 'classnames';
 import React from 'react';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
@@ -19,6 +21,8 @@ import {
   LinkCloud,
   Puzzle,
   Robot,
+  // [ENTERPRISE PATCH] spec 006
+  Router,
   System,
   Toolkit,
 } from '@icon-park/react';
@@ -38,7 +42,13 @@ type NavItem = { label: string; icon: React.ReactElement; path: string; id: stri
 
 type TranslateFn = (key: string, options?: { defaultValue?: string }) => string;
 
-export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): NavItem[] {
+/**
+ * [ENTERPRISE PATCH] spec 002 FR-3 — `agentSettingsVisible` gates the same two
+ * entries the sider drops. This list is a second, independent copy of the sider's
+ * menu (it backs the mobile and wrapper navigation), so gating only the sider
+ * would have left the entries one viewport away.
+ */
+export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn, agentSettingsVisible = true): NavItem[] {
   const builtinMap: Record<string, NavItem> = {
     model: { id: 'model', label: t('settings.model'), icon: <LinkCloud theme='outline' size='16' />, path: 'model' },
     assistants: {
@@ -85,10 +95,26 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): 
       icon: <Inbox theme='outline' size='16' />,
       path: 'archived',
     },
+    // [ENTERPRISE PATCH] spec 006 — gateway provisioning.
+    // `BUILTIN_TAB_IDS` is shared with SettingsSider but the two maps are not:
+    // adding the id in spec 006 without a row here made `builtinMap['gateway']`
+    // undefined, and the very next loop reads `result[i].id`. Every settings page
+    // crashed to a blank screen in web mode. It survived because spec 006's UI was
+    // never rendered — the gap that spec's acceptance criteria marked as unverified.
+    gateway: {
+      id: 'gateway',
+      label: t('settings.gateway.title'),
+      icon: <Router theme='outline' size='16' />,
+      path: 'gateway',
+    },
     about: { id: 'about', label: t('settings.about'), icon: <Info theme='outline' size='16' />, path: 'about' },
   };
 
-  return BUILTIN_TAB_IDS.map((id) => builtinMap[id]);
+  // A missing row must not become an `undefined` element: the callers below index
+  // into this list and read `.id` from it.
+  return BUILTIN_TAB_IDS.filter((id) => agentSettingsVisible || (id !== 'agent' && id !== 'model' && id !== 'gateway'))
+    .map((id) => builtinMap[id])
+    .filter((item): item is NavItem => Boolean(item));
 }
 
 const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, className, contentClassName }) => {
@@ -102,9 +128,11 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
   const extensionTabs = useExtensionSettingsTabs();
 
   const { resolveExtTabName } = useExtI18n();
+  // [ENTERPRISE PATCH] spec 002 FR-3
+  const agentSettingsVisible = useCapability('agent.settingsVisible');
 
   const menuItems = React.useMemo(() => {
-    const builtins = getBuiltinSettingsNavItems(isDesktop, t);
+    const builtins = getBuiltinSettingsNavItems(isDesktop, t, agentSettingsVisible);
 
     // Insert extension tabs before system (unanchored default) or at anchor position
     const result = [...builtins];
@@ -161,7 +189,7 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
     }
 
     return result;
-  }, [isDesktop, t, extensionTabs, resolveExtTabName]);
+  }, [isDesktop, t, extensionTabs, resolveExtTabName, agentSettingsVisible]);
 
   // Keep only horizontal padding on the scroll container — vertical padding is
   // moved to the content layer below. A sticky header inside a scroll container

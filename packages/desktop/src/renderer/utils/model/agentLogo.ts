@@ -25,6 +25,7 @@ import type { AssistantAvatar } from '@/renderer/utils/model/assistantAvatar';
 import {
   isBackendRelativeAssetPath,
   isLikelyLocalFilePath,
+  isVendorLogoPath,
   resolveAssistantAvatar,
 } from '@/renderer/utils/model/assistantAvatar';
 import type { ManagedAgent } from '@/renderer/utils/model/agentTypes';
@@ -144,7 +145,9 @@ export function resolveAgentLogo(
     isExtension?: boolean;
   }
 ): string | null {
-  if (opts.icon) return normalizeLogoUrl(opts.icon);
+  // [ENTERPRISE PATCH] spec 002 FR-3 — see VENDOR_LOGO_PREFIX. An explicit icon
+  // still wins; it just cannot be the vendor's own mark while identity is gated.
+  if (opts.icon && !(isVendorLogoPath(opts.icon) && !can('cli.visible'))) return normalizeLogoUrl(opts.icon);
 
   if (opts.isExtension && opts.custom_agent_id) {
     const adapterId = opts.custom_agent_id.split(':').pop();
@@ -164,7 +167,9 @@ export function resolveAgentAvatar(
     isExtension?: boolean;
   }
 ): AssistantAvatar {
-  const explicitAvatar = resolveAssistantAvatar(opts.icon || undefined);
+  // [ENTERPRISE PATCH] spec 002 FR-3 — same cut as resolveAgentLogo above.
+  const gatedVendorIcon = isVendorLogoPath(opts.icon) && !can('cli.visible');
+  const explicitAvatar = resolveAssistantAvatar(gatedVendorIcon ? undefined : opts.icon || undefined);
   if (explicitAvatar.kind !== 'fallback') return explicitAvatar;
 
   if (opts.isExtension && opts.custom_agent_id) {
