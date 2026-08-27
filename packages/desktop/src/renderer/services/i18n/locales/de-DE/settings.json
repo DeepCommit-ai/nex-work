@@ -909,6 +909,7 @@
   "envKeyPlaceholder": "SCHLÜSSEL",
   "envValuePlaceholder": "wert",
   "addEnvVar": "Variable hinzufügen",
+  "envManagedByAdmin": "Umgebungsvariablen werden zentral verwaltet und können hier nicht bearbeitet werden.",
   "testConnectionBtn": "Verbindung testen",
   "testConnectionTesting": "Testet...",
   "testConnectionSuccess": "Verbindung erfolgreich! CLI existiert und ACP-Protokoll funktioniert.",

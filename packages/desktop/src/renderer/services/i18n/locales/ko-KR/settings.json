@@ -905,6 +905,7 @@
   "envKeyPlaceholder": "키",
   "envValuePlaceholder": "값",
   "addEnvVar": "변수 추가",
+  "envManagedByAdmin": "환경 변수는 관리자가 일괄 배포하며 여기서는 변경할 수 없습니다.",
   "testConnectionBtn": "연결 테스트",
   "testConnectionTesting": "테스트 중...",
   "testConnectionSuccess": "연결 성공! CLI가 존재하고 ACP 프로토콜이 정상 작동합니다.",

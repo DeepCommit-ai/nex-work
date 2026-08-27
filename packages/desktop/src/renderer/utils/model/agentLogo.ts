@@ -18,6 +18,8 @@
  * {@link resolveAgentLogo}; non-React utilities receive the map as an argument.
  */
 
+import { can } from '@/common/capabilities/policy';
+import { useCapability } from '@/renderer/hooks/useCapability';
 import { ipcBridge } from '@/common';
 import type { AssistantAvatar } from '@/renderer/utils/model/assistantAvatar';
 import {
@@ -68,13 +70,19 @@ export async function fetchAgentLogos(): Promise<AgentLogoMap> {
  * Subscribe to the backend logo catalog. SWR dedups across subscribers, so a
  * single network request warms a shared cache and every consumer re-renders
  * once it hydrates.
+ *
+ * [ENTERPRISE PATCH] Also subscribes to `cli.visible`. The guard inside
+ * `lookupBackendLogoValue` is what makes the answer correct; this subscription
+ * is what makes it *current* — without it a flipped policy key would not reach
+ * these components until something else re-rendered them.
  */
 export function useAgentLogos(): AgentLogoMap {
+  const cliVisible = useCapability('cli.visible');
   const { data } = useSWR(AGENT_LOGOS_SWR_KEY, fetchAgentLogos, {
     revalidateOnFocus: false,
     dedupingInterval: 60_000,
   });
-  return data ?? {};
+  return cliVisible ? (data ?? {}) : {};
 }
 
 function normalizeLogoUrl(logo: string): string | null {
@@ -87,7 +95,23 @@ function normalizeLogoUrl(logo: string): string | null {
   return isImage ? resolved : null;
 }
 
+/**
+ * [ENTERPRISE PATCH] The single funnel for vendor-logo lookups.
+ *
+ * Spec: specs/002-server-controlled-capabilities/spec.md (FR-3)
+ *
+ * Every surface that shows a CLI's logo reaches the catalog through here —
+ * badges, conversation history, scheduled tasks, team, message avatars, the
+ * archived list, agent cards. Gating one function covers all of them, and more
+ * importantly keeps them from drifting apart as surfaces are added.
+ *
+ * Only the *vendor* logo is suppressed. An assistant's own explicit icon is
+ * checked before this function is reached and is left alone: that icon is the
+ * assistant's identity as a product, which is exactly what staff are meant to
+ * pick things by. Suppressing it would leave every assistant looking identical.
+ */
 function lookupBackendLogoValue(logos: AgentLogoMap, backend: string | undefined | null): string | null {
+  if (!can('cli.visible')) return null;
   if (!backend || typeof backend !== 'string') return null;
   return logos?.[backend.toLowerCase()] ?? null;
 }
@@ -179,3 +203,28 @@ export const getModelDisplayLabel = ({
   if (!selectedLabel) return fallbackLabel;
   return selectedLabel;
 };
+
+/**
+ * [ENTERPRISE PATCH] The name to show for an agent.
+ *
+ * Spec: specs/002-server-controlled-capabilities/spec.md (FR-3)
+ *
+ * Six surfaces wrote `agent_name || backend` independently. The first half is
+ * fine and must stay: `agent_name` comes from the backend's `agent_metadata`
+ * row, so renaming "Claude Code" to something a clerk recognises is a data
+ * change, not a code change — and blanking it would leave every assistant
+ * looking identical, which is worse than the leak.
+ *
+ * The `|| backend` half is the leak. It surfaces the raw vendor id — `claude`,
+ * `codex`, `gemini` — precisely when the admin has not named the agent, which
+ * is exactly the case nobody notices until a clerk asks what Codex is.
+ *
+ * Returns `null` when nothing may be shown; the caller supplies its own
+ * translated fallback, because the right neutral word differs per surface.
+ */
+export function resolveAgentDisplayName(agent_name?: string | null, backend?: string | null): string | null {
+  const name = agent_name?.trim();
+  if (name) return name;
+  if (!can('cli.visible')) return null;
+  return backend?.trim() || null;
+}

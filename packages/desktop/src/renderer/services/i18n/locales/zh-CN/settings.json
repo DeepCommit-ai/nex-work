@@ -917,6 +917,7 @@
   "envKeyPlaceholder": "变量名",
   "envValuePlaceholder": "值",
   "addEnvVar": "添加变量",
+  "envManagedByAdmin": "环境变量由管理员统一下发，此处不可修改。",
   "testConnectionBtn": "测试连接",
   "testConnectionTesting": "测试中...",
   "testConnectionSuccess": "连接成功！CLI 存在且 ACP 协议正常工作。",

@@ -905,6 +905,7 @@
   "envKeyPlaceholder": "ANAHTAR",
   "envValuePlaceholder": "değer",
   "addEnvVar": "Değişken Ekle",
+  "envManagedByAdmin": "Ortam değişkenleri merkezî olarak yönetilir ve burada düzenlenemez.",
   "testConnectionBtn": "Bağlantıyı Test Et",
   "testConnectionTesting": "Test ediliyor...",
   "testConnectionSuccess": "Bağlantı başarılı! CLI mevcut ve ACP protokolü çalışıyor.",

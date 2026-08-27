@@ -917,6 +917,7 @@
   "envKeyPlaceholder": "KEY",
   "envValuePlaceholder": "مقدار",
   "addEnvVar": "افزودن متغیر",
+  "envManagedByAdmin": "متغیرهای محیطی به‌صورت متمرکز مدیریت می‌شوند و اینجا قابل ویرایش نیستند.",
   "testConnectionBtn": "آزمایش اتصال",
   "testConnectionTesting": "در حال آزمایش...",
   "testConnectionSuccess": "اتصال موفق! CLI وجود دارد و پروتکل ACP کار می‌کند.",

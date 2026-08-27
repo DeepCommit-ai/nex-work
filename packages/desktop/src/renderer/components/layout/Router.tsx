@@ -5,6 +5,8 @@ import DocumentTitle from '@renderer/components/layout/DocumentTitle';
 import { useCrossSessionRateLimitNotice } from '@/renderer/hooks/system/useCrossSessionRateLimitNotice';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { TEAM_MODE_ENABLED } from '@/common/config/constants';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 const Conversation = React.lazy(() => import('@renderer/pages/conversation'));
 const Guid = React.lazy(() => import('@renderer/pages/guid'));
 const AgentSettings = React.lazy(() => import('@renderer/pages/settings/AgentSettings'));
@@ -64,6 +66,8 @@ const ProtectedLayout: React.FC<{ layout: React.ReactElement }> = ({ layout }) =
 
 const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
   const { status } = useAuth();
+  // [ENTERPRISE PATCH] spec 002 FR-3
+  const agentSettingsVisible = useCapability('agent.settingsVisible');
 
   return (
     <HashRouter>
@@ -81,13 +85,25 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
             path='/team/:id'
             element={TEAM_MODE_ENABLED ? withRouteFallback(TeamIndex) : <Navigate to='/guid' replace />}
           />
-          <Route path='/settings/model' element={withRouteFallback(ModeSettings)} />
+          {/* [ENTERPRISE PATCH] spec 002 FR-3 — a gated route redirects rather than
+              renders empty: an unreachable page that still exists in the router is
+              reachable by typing the URL, and a blank one reads as a bug. */}
+          <Route
+            path='/settings/model'
+            element={agentSettingsVisible ? withRouteFallback(ModeSettings) : <Navigate to='/guid' replace />}
+          />
           <Route path='/assistants' element={withRouteFallback(AssistantSettings)} />
           {/* Assistants moved out of Settings to a top-level entry; keep a redirect
               so old deep links / back-nav still land on the new page. */}
           <Route path='/settings/assistants' element={<Navigate to='/assistants' replace />} />
-          <Route path='/settings/agent' element={withRouteFallback(AgentSettings)} />
-          <Route path='/settings/agent/:id/repair' element={withRouteFallback(AgentRepairPage)} />
+          <Route
+            path='/settings/agent'
+            element={agentSettingsVisible ? withRouteFallback(AgentSettings) : <Navigate to='/guid' replace />}
+          />
+          <Route
+            path='/settings/agent/:id/repair'
+            element={agentSettingsVisible ? withRouteFallback(AgentRepairPage) : <Navigate to='/guid' replace />}
+          />
           {/* Skills and Tools are top-level settings entries. */}
           <Route path='/settings/skills' element={withRouteFallback(SkillsSettings)} />
           <Route path='/settings/skills/import-history' element={withRouteFallback(SkillsSettings)} />
@@ -110,7 +126,13 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/settings/system' element={withRouteFallback(SystemSettings)} />
           <Route path='/settings/about' element={withRouteFallback(SystemSettings)} />
           <Route path='/settings/ext/:tabId' element={withRouteFallback(ExtensionSettingsPage)} />
-          <Route path='/settings' element={<Navigate to='/settings/agent' replace />} />
+          {/* The bare `/settings` landing followed the agent page. With that page
+              gated it would land on a redirect to `/guid`, i.e. the settings entry
+              would silently throw the user out of settings. */}
+          <Route
+            path='/settings'
+            element={<Navigate to={agentSettingsVisible ? '/settings/agent' : '/settings/appearance'} replace />}
+          />
           <Route path='/test/components' element={withRouteFallback(ComponentsShowcase)} />
           <Route path='/scheduled' element={withRouteFallback(ScheduledTasksPage)} />
           <Route path='/scheduled/:job_id' element={withRouteFallback(TaskDetailPage)} />

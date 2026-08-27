@@ -9,6 +9,8 @@ import { Button, Input } from '@arco-design/web-react';
 import { Plus, Delete, PreviewOpen, PreviewClose } from '@icon-park/react';
 import { useTranslation } from 'react-i18next';
 import { uuid } from '@/common/utils';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 
 export type EnvVarRow = { id: string; key: string; value: string };
 
@@ -17,9 +19,27 @@ type EnvVarEditorProps = {
   onChange: (rows: EnvVarRow[]) => void;
 };
 
+/**
+ * [ENTERPRISE PATCH] Free-form agent environment.
+ *
+ * Spec: specs/002-server-controlled-capabilities/spec.md — `provider.userConfigurable`
+ *
+ * This is the one surface in the inventory where gating is not merely
+ * concealment. The field accepts any key, `ANTHROPIC_BASE_URL` included, which
+ * is exactly the variable spec 006 writes to pin every runtime at the company
+ * gateway. A row typed here routes that runtime's traffic off the gateway, and
+ * traffic that never reaches the gateway leaves no record anywhere — the gap is
+ * undetectable after the fact.
+ *
+ * Gated here rather than at the route so that opening the settings page to an
+ * administrator later does not silently hand the write path back with it. Read
+ * stays open: seeing what is set is diagnostics, and taking that away would make
+ * a misconfigured runtime harder to explain without making it any safer.
+ */
 const EnvVarEditor: React.FC<EnvVarEditorProps> = ({ value, onChange }) => {
   const { t } = useTranslation();
   const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
+  const editable = useCapability('provider.userConfigurable');
 
   const handleAdd = useCallback(() => {
     onChange([...value, { id: uuid(), key: '', value: '' }]);
@@ -71,6 +91,7 @@ const EnvVarEditor: React.FC<EnvVarEditorProps> = ({ value, onChange }) => {
               <Input
                 size='large'
                 value={envVar.key}
+                readOnly={!editable}
                 onChange={(v) => handleUpdateKey(envVar.id, v)}
                 placeholder={t('settings.envKeyPlaceholder')}
               />
@@ -78,6 +99,7 @@ const EnvVarEditor: React.FC<EnvVarEditorProps> = ({ value, onChange }) => {
                 size='large'
                 type={isVisible ? 'text' : 'password'}
                 value={envVar.value}
+                readOnly={!editable}
                 onChange={(v) => handleUpdateValue(envVar.id, v)}
                 placeholder={t('settings.envValuePlaceholder')}
               />
@@ -90,26 +112,36 @@ const EnvVarEditor: React.FC<EnvVarEditorProps> = ({ value, onChange }) => {
                 onClick={() => toggleVisibility(envVar.id)}
                 className='!h-36px !w-36px !rounded-10px !px-0 text-t-tertiary hover:text-t-secondary'
               />
-              <Button
-                type='text'
-                size='small'
-                icon={<Delete theme='outline' size={16} />}
-                onClick={() => handleRemove(envVar.id)}
-                className='!h-36px !w-36px !rounded-10px !px-0 text-t-tertiary hover:text-danger'
-              />
+              {editable ? (
+                <Button
+                  type='text'
+                  size='small'
+                  icon={<Delete theme='outline' size={16} />}
+                  onClick={() => handleRemove(envVar.id)}
+                  className='!h-36px !w-36px !rounded-10px !px-0 text-t-tertiary hover:text-danger'
+                />
+              ) : (
+                <span className='w-36px' />
+              )}
             </div>
           );
         })}
       </div>
-      <Button
-        type='text'
-        size='small'
-        icon={<Plus theme='outline' size={14} />}
-        onClick={handleAdd}
-        className='mt-8px !px-0 text-t-secondary hover:!text-primary-6'
-      >
-        {t('settings.addEnvVar')}
-      </Button>
+      {editable ? (
+        <Button
+          type='text'
+          size='small'
+          icon={<Plus theme='outline' size={14} />}
+          onClick={handleAdd}
+          className='mt-8px !px-0 text-t-secondary hover:!text-primary-6'
+        >
+          {t('settings.addEnvVar')}
+        </Button>
+      ) : (
+        <div className='mt-8px text-12px text-t-tertiary'>
+          {t('settings.envManagedByAdmin', { defaultValue: '环境变量由管理员统一下发，此处不可修改。' })}
+        </div>
+      )}
     </div>
   );
 };

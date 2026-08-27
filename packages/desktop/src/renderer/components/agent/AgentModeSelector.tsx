@@ -12,6 +12,8 @@ import {
 import type { AgentModeOption } from '@/renderer/utils/model/agentTypes';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { AgentLogoIcon } from './AgentBadge';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { resolveAgentDisplayName } from '@/renderer/utils/model/agentLogo';
 import { Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
 import { Down } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -102,6 +104,9 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
   configOptionsPort,
 }) => {
   const { t } = useTranslation();
+  // [ENTERPRISE PATCH] spec 002 FR-3 — `agent_name || backend || 'Agent'` leaked the vendor id.
+  const agentDisplayName =
+    resolveAgentDisplayName(agent_name, backend) ?? t('common.assistant', { defaultValue: '助手' });
   const layout = useLayoutContext();
   const isMobile = Boolean(layout?.isMobile);
   const runtimeConfig = useAcpConfigOptions({
@@ -276,11 +281,7 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
     const isSetting = isLoading || runtimeConfig.setStatus.state === 'setting';
     const legacyCompactBehavior = !showLogoInCompact && compactLabelType === 'mode';
     const baseCompactLabel =
-      compactLabelType === 'agent'
-        ? agent_name || backend || 'Agent'
-        : can_switchMode
-          ? getCurrentModeLabel()
-          : agent_name || backend || 'Agent';
+      compactLabelType === 'agent' ? agentDisplayName : can_switchMode ? getCurrentModeLabel() : agentDisplayName;
     // With a pending target the pill has to say two things in the width of one. The
     // "权限 · " prefix is what gives: the shield icon already marks this as the
     // permission pill, so the prefix is the least informative part at that moment, and
@@ -349,7 +350,7 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
       }}
     >
       {renderLogo()}
-      <span className='text-sm text-t-primary'>{agent_name || backend}</span>
+      <span className='text-sm text-t-primary'>{agentDisplayName}</span>
       {canInteract && (
         <>
           {current_mode !== defaultMode && <span className='text-xs text-t-tertiary'>({getCurrentModeLabel()})</span>}

@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { resolveAgentLogo, useAgentLogos } from '@/renderer/utils/model/agentLogo';
+import { resolveAgentDisplayName, resolveAgentLogo, useAgentLogos } from '@/renderer/utils/model/agentLogo';
 import { iconColors } from '@/renderer/styles/colors';
 import { Robot } from '@icon-park/react';
 import React, { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import ThemedLogo from './ThemedLogo';
 
@@ -73,6 +74,7 @@ const AgentBadge: React.FC<AgentBadgeProps> = ({
   agentLogoIsFallback,
   assistantId,
 }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const handleClick = useCallback(() => {
     if (!assistantId) return;
@@ -92,7 +94,10 @@ const AgentBadge: React.FC<AgentBadgeProps> = ({
         agentLogoIsEmoji={agentLogoIsEmoji}
         agentLogoIsFallback={agentLogoIsFallback}
       />
-      <span className='text-sm text-t-primary'>{agent_name || backend}</span>
+      {/* [ENTERPRISE PATCH] spec 002 FR-3 — never fall back to the vendor id. */}
+      <span className='text-sm text-t-primary'>
+        {resolveAgentDisplayName(agent_name, backend) ?? t('common.assistant', { defaultValue: '助手' })}
+      </span>
     </div>
   );
 };

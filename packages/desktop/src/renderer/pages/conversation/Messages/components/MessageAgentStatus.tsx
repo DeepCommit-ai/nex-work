@@ -10,6 +10,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import ButlerDiagnoseButton from '@/renderer/components/base/ButlerDiagnoseButton';
 import FeedbackButton from '@/renderer/components/base/FeedbackButton';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { resolveAgentDisplayName } from '@/renderer/utils/model/agentLogo';
 
 const { Text } = Typography;
 
@@ -25,7 +27,13 @@ const MessageAgentStatus: React.FC<MessageAgentStatusProps> = ({ message }) => {
   const { backend, status, agent_name } = message.content;
 
   // Resolve display name: explicit agent_name > capitalized backend.
-  const display_name = agent_name || backend.charAt(0).toUpperCase() + backend.slice(1);
+  // [ENTERPRISE PATCH] spec 002 FR-3 — the title-cased vendor id was the leak.
+  const resolved = resolveAgentDisplayName(agent_name, backend);
+  const display_name = resolved
+    ? resolved === backend
+      ? backend.charAt(0).toUpperCase() + backend.slice(1)
+      : resolved
+    : t('common.assistant', { defaultValue: '助手' });
 
   // Hide disconnected status from historical messages (no longer emitted but may exist in DB)
   if ((status as string) === 'disconnected') return null;

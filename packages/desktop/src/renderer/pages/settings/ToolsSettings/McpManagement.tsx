@@ -6,6 +6,8 @@ import { BUILTIN_IMAGE_GEN_ID, BUILTIN_IMAGE_GEN_NAME, type IMcpServer } from '@
 import { useMcpConnection, useMcpModal, useMcpOAuth, useMcpServerCRUD, useMcpServers } from '@/renderer/hooks/mcp';
 import AddMcpServerModal from '../components/AddMcpServerModal';
 import McpServerItem from './McpServerItem';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 
 interface McpManagementProps {
   message: ReturnType<typeof import('@arco-design/web-react').Message.useMessage>[0];
@@ -108,6 +110,8 @@ const McpManagement: React.FC<McpManagementProps> = ({ message }) => {
   );
 
   const [importMode, setImportMode] = React.useState<'json' | 'oneclick'>('json');
+  // [ENTERPRISE PATCH] spec 002 FR-3
+  const cliVisible = useCapability('cli.visible');
 
   React.useEffect(() => {
     mcpServers.filter(isOAuthCapableServer).forEach((server) => {
@@ -145,16 +149,23 @@ const McpManagement: React.FC<McpManagementProps> = ({ message }) => {
                   >
                     {t('settings.mcpImportFromJSON')}
                   </Menu.Item>
-                  <Menu.Item
-                    key='oneclick'
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setImportMode('oneclick');
-                      showAddMcpModal();
-                    }}
-                  >
-                    {t('settings.mcpOneKeyImport')}
-                  </Menu.Item>
+                  {/* [ENTERPRISE PATCH] spec 002 FR-3 — one-click import reads config out
+                      of a named CLI: its picker is labelled "Select CLI" and its options
+                      are the vendor names. Concealing CLI identity and offering this in
+                      the same build would be incoherent, so the entry goes with the key
+                      rather than being reworded. JSON import stays: it needs no CLI. */}
+                  {cliVisible && (
+                    <Menu.Item
+                      key='oneclick'
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setImportMode('oneclick');
+                        showAddMcpModal();
+                      }}
+                    >
+                      {t('settings.mcpOneKeyImport')}
+                    </Menu.Item>
+                  )}
                 </Menu>
               }
             >

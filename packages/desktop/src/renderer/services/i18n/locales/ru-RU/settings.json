@@ -909,6 +909,7 @@
   "envKeyPlaceholder": "КЛЮЧ",
   "envValuePlaceholder": "значение",
   "addEnvVar": "Добавить переменную",
+  "envManagedByAdmin": "Переменные среды задаются централизованно и не редактируются здесь.",
   "testConnectionBtn": "Тест подключения",
   "testConnectionTesting": "Тестирование...",
   "testConnectionSuccess": "Подключение успешно! CLI существует и протокол ACP работает.",

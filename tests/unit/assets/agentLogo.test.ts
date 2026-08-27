@@ -9,10 +9,12 @@ import type { AgentLogoMap } from '@/renderer/utils/model/agentLogo';
 import {
   fetchAgentLogos,
   resolveAgentAvatar,
+  resolveAgentDisplayName,
   resolveAgentLogo,
   isDefaultModel,
   getModelDisplayLabel,
 } from '@/renderer/utils/model/agentLogo';
+import { DEFAULT_CAPABILITIES, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 
 const bridgeMocks = vi.hoisted(() => ({
   getManagedAgents: vi.fn(),
@@ -40,10 +42,18 @@ const LOGOS: AgentLogoMap = {
   'openclaw-gateway': '/api/assets/logos/tools/openclaw.svg',
 };
 
+/** [ENTERPRISE PATCH] spec 002 — run resolution with vendor identity permitted. */
+const withCliVisible = () =>
+  setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'cli.visible': true } });
+
 describe('agentLogo', () => {
   let originalDocument: Document | undefined;
 
   beforeEach(() => {
+    // These cases describe how a vendor logo is *resolved*, which is still the
+    // rule whenever identity is permitted. The shipped policy conceals it, so
+    // without this they would be asserting the gate rather than the resolver.
+    withCliVisible();
     bridgeMocks.getManagedAgents.mockReset();
     if (typeof document !== 'undefined') {
       originalDocument = document;
@@ -56,6 +66,7 @@ describe('agentLogo', () => {
   });
 
   afterEach(() => {
+    setPolicy(STATIC_POLICY);
     if (originalDocument) {
       global.document = originalDocument as any;
     }
@@ -238,5 +249,72 @@ describe('agentLogo', () => {
       });
       expect(result).toBe('Fallback');
     });
+  });
+});
+
+/**
+ * [ENTERPRISE PATCH] spec 002 FR-3 — the gate itself.
+ *
+ * Every surface that shows vendor identity reaches the catalog through the same
+ * two resolvers, so these cases stand in for the whole inventory: badges,
+ * conversation history, scheduled tasks, team, message avatars, archived list.
+ */
+describe('vendor identity under cli.visible', () => {
+  const logos: AgentLogoMap = { claude: '/api/assets/logos/ai-major/claude.svg' };
+
+  afterEach(() => setPolicy(STATIC_POLICY));
+
+  it('withholds the vendor logo under the shipped policy', () => {
+    setPolicy(STATIC_POLICY);
+    expect(resolveAgentLogo(logos, { backend: 'claude' })).toBeNull();
+  });
+
+  it('keeps the assistant its own explicit icon', () => {
+    // Suppressing this too would leave every assistant looking identical, which
+    // defeats picking one by what it does — the point of the whole spec.
+    setPolicy(STATIC_POLICY);
+    expect(resolveAgentLogo(logos, { icon: '/api/assets/custom.svg', backend: 'claude' })).toBe(
+      '/api/assets/custom.svg'
+    );
+  });
+
+  it('withholds the vendor avatar as well as the logo', () => {
+    setPolicy(STATIC_POLICY);
+    expect(resolveAgentAvatar(logos, { backend: 'claude' }).kind).toBe('fallback');
+  });
+
+  it('restores both when identity is permitted', () => {
+    setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'cli.visible': true } });
+    expect(resolveAgentLogo(logos, { backend: 'claude' })).toBe('/api/assets/logos/ai-major/claude.svg');
+  });
+});
+
+describe('resolveAgentDisplayName', () => {
+  afterEach(() => setPolicy(STATIC_POLICY));
+
+  it('prefers the name the backend gave the agent, gated or not', () => {
+    // `agent_name` is an `agent_metadata` row: renaming is a data change, and
+    // hiding it would leave nothing for a clerk to pick by.
+    setPolicy(STATIC_POLICY);
+    expect(resolveAgentDisplayName('文档助手', 'claude')).toBe('文档助手');
+  });
+
+  it('withholds the raw vendor id when there is no name', () => {
+    // This is the case nobody notices: the fallback only fires when an admin has
+    // not named the agent, so the leak shows up exactly where it was not looked for.
+    setPolicy(STATIC_POLICY);
+    expect(resolveAgentDisplayName(undefined, 'codex')).toBeNull();
+    expect(resolveAgentDisplayName('   ', 'codex')).toBeNull();
+  });
+
+  it('falls back to the vendor id when identity is permitted', () => {
+    setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'cli.visible': true } });
+    expect(resolveAgentDisplayName(undefined, 'codex')).toBe('codex');
+  });
+
+  it('returns null rather than an empty string when there is nothing to show', () => {
+    // Callers use `?? t(...)`, which an empty string would defeat silently.
+    setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'cli.visible': true } });
+    expect(resolveAgentDisplayName(undefined, '  ')).toBeNull();
   });
 });

@@ -28,6 +28,8 @@ import { isNewApiPlatform, NEW_API_PROTOCOL_OPTIONS } from '@/renderer/utils/mod
 import EditModeModal from '@/renderer/pages/settings/components/EditModeModal';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 import { useProvidersQuery } from '@/renderer/hooks/agent/useModelProviderList';
 import { useSettingsViewMode } from '../settingsViewContext';
 import SettingsPageHeader from '@/renderer/pages/settings/components/SettingsPageHeader';
@@ -106,8 +108,24 @@ const isModelEnabled = (platform: IProvider, model: string): boolean => {
   return platform.model_enabled[model] !== false;
 };
 
+/**
+ * [ENTERPRISE PATCH] Provider management.
+ *
+ * Spec: specs/002-server-controlled-capabilities/spec.md — `provider.userConfigurable`
+ *
+ * The route that reaches this page is gated by `agent.settingsVisible`, but the
+ * mutations below are gated separately and deliberately. A provider added here
+ * is a second path to a model that does not pass through the company gateway,
+ * so this is a write path, not a display: keeping the two keys apart means
+ * showing the page to an administrator later does not restore that path with it.
+ *
+ * Reads stay open. Seeing which providers exist and whether they are healthy is
+ * diagnostics; removing it would make a misconfiguration harder to explain
+ * without making it any less possible.
+ */
 const ModelModalContent: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const providerConfigurable = useCapability('provider.userConfigurable');
   const viewMode = useSettingsViewMode();
   const isPageMode = viewMode === 'page';
   const [collapseKey, setCollapseKey] = useState<Record<string, boolean>>({});
@@ -342,15 +360,17 @@ const ModelModalContent: React.FC = () => {
       <Button type='text' size='small' onClick={clearAllHealthData} className='!text-t-secondary hover:!text-t-primary'>
         {t('settings.clearStatus')}
       </Button>
-      <TalkToButlerButton
-        label={t('settings.addModel')}
-        chatLabel={t('settings.talkToButler.addViaChat', { defaultValue: 'Add via chat' })}
-        onManual={() => addPlatformModalCtrl.open()}
-        manualLabel={t('settings.talkToButler.addManually', { defaultValue: 'Add manually' })}
-        prompt={t('settings.talkToButler.prompt.addModel', {
-          defaultValue: 'Help me add a new LLM provider and API key, then set it as the default model.',
-        })}
-      />
+      {providerConfigurable && (
+        <TalkToButlerButton
+          label={t('settings.addModel')}
+          chatLabel={t('settings.talkToButler.addViaChat', { defaultValue: 'Add via chat' })}
+          onManual={() => addPlatformModalCtrl.open()}
+          manualLabel={t('settings.talkToButler.addManually', { defaultValue: 'Add manually' })}
+          prompt={t('settings.talkToButler.prompt.addModel', {
+            defaultValue: 'Help me add a new LLM provider and API key, then set it as the default model.',
+          })}
+        />
+      )}
     </>
   );
 
@@ -480,33 +500,36 @@ const ModelModalContent: React.FC = () => {
                           {/* 供应商启用开关 / Provider enable switch */}
                           <Switch
                             size='small'
+                            disabled={!providerConfigurable}
                             checked={getProviderState(platform).checked}
                             onChange={() => toggleProviderEnabled(platform)}
                           />
-                          <div className='flex items-center gap-4px'>
-                            <Button
-                              size='mini'
-                              className='model-provider-action-btn !w-28px !h-28px !min-w-28px text-t-secondary hover:text-t-primary'
-                              icon={<Plus size='14' />}
-                              onClick={() => addModelModalCtrl.open({ data: platform })}
-                            />
-                            <Popconfirm
-                              title={t('settings.deleteAllModelConfirm')}
-                              onOk={() => removePlatform(platform.id)}
-                            >
+                          {providerConfigurable && (
+                            <div className='flex items-center gap-4px'>
                               <Button
                                 size='mini'
                                 className='model-provider-action-btn !w-28px !h-28px !min-w-28px text-t-secondary hover:text-t-primary'
-                                icon={<Minus size='14' />}
+                                icon={<Plus size='14' />}
+                                onClick={() => addModelModalCtrl.open({ data: platform })}
                               />
-                            </Popconfirm>
-                            <Button
-                              size='mini'
-                              className='model-provider-action-btn !w-28px !h-28px !min-w-28px text-t-secondary hover:text-t-primary'
-                              icon={<Write size='14' />}
-                              onClick={() => editModalCtrl.open({ data: platform })}
-                            />
-                          </div>
+                              <Popconfirm
+                                title={t('settings.deleteAllModelConfirm')}
+                                onOk={() => removePlatform(platform.id)}
+                              >
+                                <Button
+                                  size='mini'
+                                  className='model-provider-action-btn !w-28px !h-28px !min-w-28px text-t-secondary hover:text-t-primary'
+                                  icon={<Minus size='14' />}
+                                />
+                              </Popconfirm>
+                              <Button
+                                size='mini'
+                                className='model-provider-action-btn !w-28px !h-28px !min-w-28px text-t-secondary hover:text-t-primary'
+                                icon={<Write size='14' />}
+                                onClick={() => editModalCtrl.open({ data: platform })}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     }

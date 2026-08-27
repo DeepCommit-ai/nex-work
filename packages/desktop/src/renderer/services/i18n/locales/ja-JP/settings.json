@@ -905,6 +905,7 @@
   "envKeyPlaceholder": "キー",
   "envValuePlaceholder": "値",
   "addEnvVar": "変数を追加",
+  "envManagedByAdmin": "環境変数は管理者が一括して配布します。ここでは変更できません。",
   "testConnectionBtn": "接続テスト",
   "testConnectionTesting": "テスト中...",
   "testConnectionSuccess": "接続成功！CLI が存在し、ACP プロトコルが正常に動作しています。",

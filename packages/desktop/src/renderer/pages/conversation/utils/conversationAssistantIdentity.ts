@@ -1,7 +1,7 @@
 import type { TChatConversation } from '@/common/config/storage';
 import type { PresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
 import { resolveAssistantAvatar } from '@/renderer/utils/model/assistantAvatar';
-import { resolveAgentLogo } from '@/renderer/utils/model/agentLogo';
+import { resolveAgentDisplayName, resolveAgentLogo } from '@/renderer/utils/model/agentLogo';
 import type { AgentLogoMap } from '@/renderer/utils/model/agentLogo';
 
 /**
@@ -113,16 +113,21 @@ export function resolveConversationLeadingMark(
 
   const backendKey = resolveConversationBackend(conversation)?.trim() || 'agent';
   const logo = resolveAgentLogo(logos, { backend: backendKey });
+  // [ENTERPRISE PATCH] spec 002 FR-3 — the label is the vendor id itself, and it
+  // is read out as the row's accessible name, so leaving it while the logo is
+  // withheld would conceal the mark and announce the name. `resolveAgentLogo`
+  // already returns null under the gate, so the two must move together.
+  const label = resolveAgentDisplayName(undefined, backendKey) ?? 'agent';
   if (logo) {
     return {
       kind: 'image',
       value: logo,
-      label: backendKey,
+      label,
     };
   }
 
   return {
     kind: 'fallback',
-    label: backendKey,
+    label,
   };
 }

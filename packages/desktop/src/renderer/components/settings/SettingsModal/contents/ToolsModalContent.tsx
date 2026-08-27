@@ -34,6 +34,8 @@ import {
 } from '@/renderer/services/clientBusinessSettings';
 import classNames from 'classnames';
 import { useSettingsTabNavigate, useSettingsViewMode } from '../settingsViewContext';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 
 type MessageInstance = ReturnType<typeof Message.useMessage>[0];
 
@@ -140,6 +142,8 @@ const ModalMcpManagementSection: React.FC<{
   );
 
   const [importMode, setImportMode] = useState<'json' | 'oneclick'>('json');
+  // [ENTERPRISE PATCH] spec 002 FR-3
+  const cliVisible = useCapability('cli.visible');
 
   useEffect(() => {
     const httpServers = mcpServers.filter(
@@ -173,14 +177,20 @@ const ModalMcpManagementSection: React.FC<{
               showAddMcpModal();
             },
           },
-          {
-            key: 'oneclick',
-            label: t('settings.mcpOneKeyImport'),
-            onClick: () => {
-              setImportMode('oneclick');
-              showAddMcpModal();
-            },
-          },
+          // [ENTERPRISE PATCH] spec 002 FR-3 — see McpManagement for why this
+          // entry is removed rather than reworded.
+          ...(cliVisible
+            ? [
+                {
+                  key: 'oneclick',
+                  label: t('settings.mcpOneKeyImport'),
+                  onClick: () => {
+                    setImportMode('oneclick');
+                    showAddMcpModal();
+                  },
+                },
+              ]
+            : []),
         ]}
       />
     );

@@ -30,6 +30,7 @@ vi.mock('@/renderer/hooks/context/FeedbackContext', () => ({
 
 import MessageAgentStatus from '@/renderer/pages/conversation/Messages/components/MessageAgentStatus';
 import type { IMessageAgentStatus } from '@/common/chat/chatLib';
+import { DEFAULT_CAPABILITIES, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 
 const buildMessage = (status: IMessageAgentStatus['content']['status']): IMessageAgentStatus =>
   ({
@@ -73,23 +74,38 @@ describe('MessageAgentStatus — FeedbackButton wiring', () => {
     });
   });
 
+  const messageWithNoName = (
+    <MessageAgentStatus
+      message={
+        {
+          id: 'm2',
+          type: 'agent_status',
+          content: {
+            backend: 'codex',
+            status: 'connected',
+          },
+        } as IMessageAgentStatus
+      }
+    />
+  );
+
   it('falls back to a capitalized backend name without consulting runtime agent catalogs', () => {
-    render(
-      <MessageAgentStatus
-        message={
-          {
-            id: 'm2',
-            type: 'agent_status',
-            content: {
-              backend: 'codex',
-              status: 'connected',
-            },
-          } as IMessageAgentStatus
-        }
-      />
-    );
+    // [ENTERPRISE PATCH] spec 002 — the capitalisation rule still holds wherever
+    // vendor identity is permitted; the gated case is the next test.
+    setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'cli.visible': true } });
+    render(messageWithNoName);
 
     expect(screen.getByText('Codex')).toBeInTheDocument();
     expect(screen.getByText('acp.status.connected:Codex')).toBeInTheDocument();
+  });
+
+  it('shows a neutral name instead of the vendor id under the shipped policy', () => {
+    // spec 002 FR-3. A status line is easy to forget precisely because it is
+    // transient — it announces the runtime once per connection and scrolls away.
+    setPolicy(STATIC_POLICY);
+    render(messageWithNoName);
+
+    expect(screen.queryByText('Codex')).not.toBeInTheDocument();
+    expect(screen.getByText('common.assistant')).toBeInTheDocument();
   });
 });

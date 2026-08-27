@@ -917,6 +917,7 @@
   "envKeyPlaceholder": "CLÉ",
   "envValuePlaceholder": "valeur",
   "addEnvVar": "Ajouter une variable",
+  "envManagedByAdmin": "Les variables d'environnement sont gérées de façon centralisée et ne peuvent pas être modifiées ici.",
   "testConnectionBtn": "Tester la connexion",
   "testConnectionTesting": "Test en cours...",
   "testConnectionSuccess": "Connexion réussie ! Le CLI existe et le protocole ACP fonctionne.",

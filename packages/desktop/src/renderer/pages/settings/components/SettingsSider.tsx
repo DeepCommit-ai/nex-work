@@ -24,6 +24,8 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Tooltip } from '@arco-design/web-react';
 import { getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 
 /** Builtin settings tab IDs in display order (must match router paths). */
 export const BUILTIN_TAB_IDS = [
@@ -84,6 +86,8 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
 
   const extensionTabs = useExtensionSettingsTabs();
   const { resolveExtTabName } = useExtI18n();
+  // [ENTERPRISE PATCH] spec 002 FR-3
+  const agentSettingsVisible = useCapability('agent.settingsVisible');
 
   const { menus, groupHeaderAt } = useMemo(() => {
     // Build builtin items
@@ -127,8 +131,14 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       about: { id: 'about', label: t('settings.about'), icon: <Info />, path: 'about' },
     };
 
-    // Start with ordered builtin IDs, hiding desktop-only tabs in browser mode
-    const result: SiderItem[] = BUILTIN_TAB_IDS.filter((id) => isDesktop || id !== 'pet').map((id) => builtinMap[id]);
+    // Start with ordered builtin IDs, hiding desktop-only tabs in browser mode.
+    // [ENTERPRISE PATCH] spec 002 FR-3 — `agent` and `model` are dropped rather
+    // than disabled: a greyed-out entry still says a CLI layer exists, which is
+    // the thing staff are not meant to think in terms of. Extension tabs anchored
+    // to a dropped entry fall through to `unanchored` by the existing check.
+    const result: SiderItem[] = BUILTIN_TAB_IDS.filter((id) => isDesktop || id !== 'pet')
+      .filter((id) => agentSettingsVisible || (id !== 'agent' && id !== 'model'))
+      .map((id) => builtinMap[id]);
 
     // Extension tabs with position anchoring
     const beforeMap = new Map<string, IExtensionSettingsTab[]>();
@@ -202,7 +212,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
     }
 
     return { menus: result, groupHeaderAt: headerAt };
-  }, [t, isDesktop, extensionTabs, resolveExtTabName]);
+  }, [t, isDesktop, extensionTabs, resolveExtTabName, agentSettingsVisible]);
 
   const siderTooltipProps = getSiderTooltipProps(tooltipEnabled);
   return (

@@ -7,7 +7,8 @@
 import type { TChatConversation } from '@/common/config/storage';
 import type { PresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
 import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/utils/conversationAssistantIdentity';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { DEFAULT_CAPABILITIES, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 
 const TEST_LOGOS = {
   claude: '/api/assets/logos/claude.svg',
@@ -15,6 +16,11 @@ const TEST_LOGOS = {
 };
 
 describe('resolveConversationLeadingMark', () => {
+  // [ENTERPRISE PATCH] spec 002 — these cases describe how a mark is resolved when
+  // vendor identity is permitted. The gated behaviour is asserted separately below.
+  beforeEach(() => setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'cli.visible': true } }));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   it('prefers the assistant image avatar when assistant info exists', () => {
     const result = resolveConversationLeadingMark(
       makeConversation(),
@@ -111,3 +117,19 @@ function makeConversation(
     ...overrides,
   } as TChatConversation;
 }
+
+describe('resolveConversationLeadingMark under cli.visible', () => {
+  afterEach(() => setPolicy(STATIC_POLICY));
+
+  it('withholds the vendor logo and its label together', () => {
+    // Withholding one and not the other would hide the mark while a screen
+    // reader still announced "gemini" — concealment that only works visually.
+    setPolicy(STATIC_POLICY);
+    const result = resolveConversationLeadingMark(
+      makeConversation({ type: 'acp', extra: { backend: 'gemini' } }),
+      undefined,
+      TEST_LOGOS
+    );
+    expect(result).toEqual({ kind: 'fallback', label: 'agent' });
+  });
+});
