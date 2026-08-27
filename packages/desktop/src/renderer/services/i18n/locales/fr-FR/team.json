@@ -151,7 +151,9 @@
     "unknownError": "n'a pas pu démarrer",
     "memberFailedHint": "Changez son modèle ci-dessus, ou retirez-le de la barre en haut, puis réessayez.",
     "leaderFailedHint": "Changez son modèle ci-dessus, puis réessayez.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "memberFailedHintManaged": "Ce membre est indisponible. Retirez-le de la barre du haut puis réessayez, ou contactez un administrateur.",
+    "leaderFailedHintManaged": "Ce membre est indisponible. Réessayez ou contactez un administrateur."
   },
   "activity": {
     "control": {

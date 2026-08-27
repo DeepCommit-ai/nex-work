@@ -45,6 +45,8 @@ import { setCurrentProject } from '@/renderer/pages/conversation/explorer/curren
 import { setCurrentConversation } from '@/renderer/pages/conversation/explorer/currentConversationStore';
 import { getSnapshotConversationProjectId } from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
 import { isBackendHttpError } from '@/common/adapter/httpBridge';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 
 type Props = {
   team: TTeam;
@@ -79,6 +81,8 @@ const AionrsHeaderModelSelector: React.FC<{ conversation_id: string; initialMode
   initialModel,
 }) => {
   const { t } = useTranslation();
+  // [ENTERPRISE PATCH] spec 002 FR-4
+  const modelSelectable = useCapability('model.userSelectable');
   const teamPermission = useTeamPermission();
   const onSelectModel = useCallback(
     async (_provider: IProvider, modelName: string) => {
@@ -108,6 +112,10 @@ const AionrsHeaderModelSelector: React.FC<{ conversation_id: string; initialMode
     },
     [runtimeConfig, t]
   );
+  // [ENTERPRISE PATCH] spec 002 FR-4 — team mode mounts its own selectors, which
+  // is exactly why the spec's inventory calls it out separately: gating the guid
+  // page alone would leave the same control one route away.
+  if (!modelSelectable) return null;
   return (
     <AionrsModelSelector
       selection={modelSelection}
@@ -389,6 +397,8 @@ const AssistantChatSlot: React.FC<{
   fallbackAvailability,
   warmupDisabled,
 }) => {
+  // [ENTERPRISE PATCH] spec 002 FR-4
+  const modelSelectable = useCapability('model.userSelectable');
   const { t } = useTranslation();
   const layout = useLayoutContext();
   const teamPermission = useTeamPermission();
@@ -449,7 +459,7 @@ const AssistantChatSlot: React.FC<{
         />
         <div className='flex items-center gap-8px shrink-0'>
           {conversation && <CronJobManager conversation_id={conversation.id} cron_job_id={cronJobId} />}
-          {!isMobile && assistant.conversation_id && !isAionrs && isAcpLike && (
+          {!isMobile && modelSelectable && assistant.conversation_id && !isAionrs && isAcpLike && (
             <div className='min-w-0 max-w-140px [&_button]:max-w-full [&_button_span]:truncate'>
               <AcpModelSelector
                 key={assistant.conversation_id}

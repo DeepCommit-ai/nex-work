@@ -797,5 +797,6 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Развернуть план",
     "collapse": "Свернуть план"
-  }
+  },
+  "assistantModelUnavailable": "{{name}} недоступен: для него ещё не настроена модель."
 }

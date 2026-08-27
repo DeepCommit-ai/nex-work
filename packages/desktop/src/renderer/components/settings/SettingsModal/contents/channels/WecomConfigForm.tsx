@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 import type { IChannelPairingRequest, IChannelPluginStatus, IChannelUser } from '@/common/types/channel/channel';
 import { assistants, channel, type IWebUIStatus } from '@/common/adapter/ipcBridge';
 import { isAionrsAssistant, type Assistant } from '@/common/types/agent/assistantTypes';
@@ -74,6 +76,8 @@ const WecomConfigForm: React.FC<WecomConfigFormProps> = ({
   webuiStatus,
 }) => {
   const { t, i18n } = useTranslation();
+  // [ENTERPRISE PATCH] spec 002 FR-4
+  const modelSelectable = useCapability('model.userSelectable');
   const localeKey = resolveLocaleKey(i18n?.language ?? 'en-US');
 
   const [botId, setBotId] = useState('');
@@ -488,19 +492,27 @@ const WecomConfigForm: React.FC<WecomConfigFormProps> = ({
       </div>
 
       {/* Default Model Selection */}
-      <PreferenceRow
-        label={t('settings.assistant.defaultModel', 'Model')}
-        description={t('settings.wecom.defaultModelDesc', 'Model used for conversations handled by this assistant')}
-      >
-        <GoogleModelSelector
-          selection={showModelSelector ? modelSelection : undefined}
-          disabled={!showModelSelector}
-          label={
-            !showModelSelector ? t('settings.assistant.autoFollowCliModel', 'Auto-follow CLI runtime model') : undefined
-          }
-          variant='settings'
-        />
-      </PreferenceRow>
+      {/* [ENTERPRISE PATCH] spec 002 FR-3 / FR-4. The whole row goes, not just the
+          control: its fallback label reads "Automatically follow the model when CLI
+          is running", so leaving the row would hide the selector and keep the
+          sentence that says a CLI exists. */}
+      {modelSelectable && (
+        <PreferenceRow
+          label={t('settings.assistant.defaultModel', 'Model')}
+          description={t('settings.wecom.defaultModelDesc', 'Model used for conversations handled by this assistant')}
+        >
+          <GoogleModelSelector
+            selection={showModelSelector ? modelSelection : undefined}
+            disabled={!showModelSelector}
+            label={
+              !showModelSelector
+                ? t('settings.assistant.autoFollowCliModel', 'Auto-follow CLI runtime model')
+                : undefined
+            }
+            variant='settings'
+          />
+        </PreferenceRow>
+      )}
 
       {/* Connection Status */}
       {pluginStatus?.enabled && authorizedUsers.length === 0 && (

@@ -118,7 +118,9 @@
     "unknownError": "failed to start",
     "memberFailedHint": "Switch its model above, or remove it from the bar on top, then retry.",
     "leaderFailedHint": "Switch its model above, then retry.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "memberFailedHintManaged": "이 멤버는 사용할 수 없습니다. 상단 바에서 제거한 뒤 다시 시도하거나 관리자에게 문의하세요.",
+    "leaderFailedHintManaged": "이 멤버는 사용할 수 없습니다. 다시 시도하거나 관리자에게 문의하세요."
   },
   "reorderMember": "드래그하여 멤버 순서 변경",
   "interruptAndSend": "중단하고 보내기",

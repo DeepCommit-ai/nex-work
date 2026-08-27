@@ -118,7 +118,9 @@
     "unknownError": "failed to start",
     "memberFailedHint": "Switch its model above, or remove it from the bar on top, then retry.",
     "leaderFailedHint": "Switch its model above, then retry.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "memberFailedHintManaged": "این عضو در دسترس نیست. آن را از نوار بالا حذف کنید و دوباره تلاش کنید، یا با مدیر تماس بگیرید.",
+    "leaderFailedHintManaged": "این عضو در دسترس نیست. دوباره تلاش کنید یا با مدیر تماس بگیرید."
   },
   "reorderMember": "برای تغییر ترتیب عضو بکشید",
   "interruptAndSend": "توقف و ارسال",

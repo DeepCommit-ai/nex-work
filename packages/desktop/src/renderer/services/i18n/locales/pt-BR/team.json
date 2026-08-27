@@ -118,7 +118,9 @@
     "unknownError": "failed to start",
     "memberFailedHint": "Switch its model above, or remove it from the bar on top, then retry.",
     "leaderFailedHint": "Switch its model above, then retry.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "memberFailedHintManaged": "Este membro está indisponível. Remova-o da barra superior e tente novamente, ou contate um administrador.",
+    "leaderFailedHintManaged": "Este membro está indisponível. Tente novamente ou contate um administrador."
   },
   "reorderMember": "Arraste para reordenar o membro",
   "interruptAndSend": "Interromper e enviar",

@@ -4,9 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// [ENTERPRISE PATCH] spec 002 — these cases reach team/conversation wiring through
+// the model selector's testid; they describe that wiring, not the gate. Run them with
+// the selector present so a policy change does not silently rewrite what they assert.
+import { DEFAULT_CAPABILITIES, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import { render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LayoutContext } from '@/renderer/hooks/context/LayoutContext';
 
 const {
@@ -301,6 +305,11 @@ const guidInputCardProps = {
 };
 
 describe('GuidPage', () => {
+  beforeEach(() =>
+    setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'model.userSelectable': true } })
+  );
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   beforeEach(() => {
     locationMock.state = null;
     locationMock.key = 'guid-location';

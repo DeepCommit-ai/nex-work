@@ -38,6 +38,8 @@ import { resolveConversationBackend } from '../utils/conversationAssistantIdenti
 import LegacyReadOnlyConversation from '../platforms/legacy/LegacyReadOnlyConversation';
 import SingleChatEmptyState from './SingleChatEmptyState';
 import { useActiveLease } from '../hooks/useActiveLease';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 // import SkillRuleGenerator from './components/SkillRuleGenerator'; // Temporarily hidden
 
 const configErrorMessageKey = (error: unknown) => {
@@ -150,6 +152,8 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
   conversation,
   sliderTitle,
 }) => {
+  // [ENTERPRISE PATCH] spec 002 FR-4
+  const modelSelectable = useCapability('model.userSelectable');
   const runtimeView = useConversationRuntimeView(conversation.id);
   const onSelectModel = useCallback(
     async (_provider: IProvider, modelName: string) => {
@@ -209,7 +213,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
     headerExtra: (
       <div className='flex items-center gap-8px'>
         <CronJobManager conversation_id={conversation.id} cron_job_id={cronJobId} />
-        {!isMobile && (
+        {!isMobile && modelSelectable && (
           <AionrsModelSelector
             selection={modelSelection}
             thoughtLevel={runtimeConfig.thoughtLevel}
@@ -284,6 +288,8 @@ const ChatConversation: React.FC<{
   const isMobile = Boolean(layout?.isMobile);
 
   const isAionrsConversation = conversation?.type === 'aionrs';
+  // [ENTERPRISE PATCH] spec 002 FR-4
+  const modelSelectable = useCapability('model.userSelectable');
   const isLegacyReadOnlyConversation = isLegacyReadOnlyConversationType(conversation?.type);
   const resolvedHideSendBox = hideSendBox || isLegacyReadOnlyConversationType(conversation?.type);
 
@@ -368,6 +374,12 @@ const ChatConversation: React.FC<{
   // header selector is suppressed to free up vertical space.
   const modelSelector = useMemo(() => {
     if (!conversation || isAionrsConversation) return undefined;
+    // [ENTERPRISE PATCH] spec 002 FR-4. The mobile branch above is the shape this
+    // follows: an absent selector is already a supported state on this surface,
+    // so gating adds no new one. Note the fall-through at the bottom returns a
+    // *disabled* GoogleModelSelector — that control announces a model choice by
+    // existing, so it has to go with the rest rather than stay as a stub.
+    if (!modelSelectable) return undefined;
     if (isMobile) return undefined;
     if (isLegacyReadOnlyConversation) return undefined;
     // Antigravity included: the backend discovers agy's model list and writes it
@@ -386,7 +398,14 @@ const ChatConversation: React.FC<{
       );
     }
     return <GoogleModelSelector disabled={true} />;
-  }, [conversation, isAionrsConversation, isMobile, isLegacyReadOnlyConversation, resolvedConversationBackend]);
+  }, [
+    conversation,
+    isAionrsConversation,
+    isMobile,
+    isLegacyReadOnlyConversation,
+    resolvedConversationBackend,
+    modelSelectable,
+  ]);
 
   if (conversation && conversation.type === 'aionrs') {
     return <AionrsConversationPanel key={conversation.id} conversation={conversation} sliderTitle={sliderTitle} />;

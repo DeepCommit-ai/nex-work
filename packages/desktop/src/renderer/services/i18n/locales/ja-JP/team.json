@@ -118,7 +118,9 @@
     "unknownError": "failed to start",
     "memberFailedHint": "Switch its model above, or remove it from the bar on top, then retry.",
     "leaderFailedHint": "Switch its model above, then retry.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "memberFailedHintManaged": "このメンバーは利用できません。上部のバーから削除して再試行するか、管理者にお問い合わせください。",
+    "leaderFailedHintManaged": "このメンバーは利用できません。再試行するか、管理者にお問い合わせください。"
   },
   "reorderMember": "ドラッグしてメンバーの順序を変更",
   "interruptAndSend": "中断して送信",

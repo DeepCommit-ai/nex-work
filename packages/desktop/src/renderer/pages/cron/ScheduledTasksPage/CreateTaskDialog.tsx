@@ -28,6 +28,8 @@ import { resolveAssistantAvatar } from '@renderer/utils/model/assistantAvatar';
 import { resolveAssistantName } from '@renderer/utils/model/assistantDisplay';
 import { resolveCronAgentConfig } from './resolveCronAgentConfig';
 import { assistantRuntimeKey, isAionrsAssistant } from '@/common/types/agent/assistantTypes';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 
 const FormItem = Form.Item;
 const TextArea = Input.TextArea;
@@ -490,7 +492,11 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
 
   const selectedExecutionModeOption =
     executionModeOptions.find((option) => option.value === execution_mode) ?? executionModeOptions[0];
-  const showModelSelector = Boolean(resolvedBackend && (isGeminiMode || acpCachedModelInfo));
+  // [ENTERPRISE PATCH] spec 002 FR-4. Gating here rather than at the JSX also
+  // keeps `advancedFieldCount` honest, so the remaining field spans the grid
+  // instead of leaving a hole where the selector was.
+  const modelSelectable = useCapability('model.userSelectable');
+  const showModelSelector = modelSelectable && Boolean(resolvedBackend && (isGeminiMode || acpCachedModelInfo));
   const advancedFieldCount = Number(showModelSelector) + 1;
   const isOriginalExistingConversationTask = isEditMode && editJob?.target.execution_mode === 'existing';
   const isCheckingTeamOwnership = teamOwnershipStatus === 'checking';

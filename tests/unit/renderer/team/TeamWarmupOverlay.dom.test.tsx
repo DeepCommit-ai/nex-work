@@ -6,7 +6,11 @@
 
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// [ENTERPRISE PATCH] spec 002 — the hints below name a control the policy can remove,
+// so which text is correct depends on the policy. These cases keep describing the
+// hint given a model picker; the managed wording is asserted separately at the end.
+import { DEFAULT_CAPABILITIES, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -46,6 +50,11 @@ function runtime(entries: Array<[string, TeamAgentRuntimeStatus, string?]>): Map
 const colorOf = () => '#7583b2';
 
 describe('TeamWarmupOverlay failure states', () => {
+  beforeEach(() =>
+    setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'model.userSelectable': true } })
+  );
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   it('renders a single-member failure with its simplified error', () => {
     render(
       <TeamWarmupOverlay
@@ -118,5 +127,41 @@ describe('TeamWarmupOverlay failure states', () => {
       <TeamWarmupOverlay phase='ready' assistants={[]} runtimeStatus={runtime([])} colorOf={colorOf} />
     );
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('TeamWarmupOverlay recovery advice under model.userSelectable', () => {
+  afterEach(() => setPolicy(STATIC_POLICY));
+
+  it('stops telling the user to switch a model that has no picker', () => {
+    // spec 002 FR-4 / FR-7. Advice pointing at a control that is not on screen
+    // reads as the app being broken, not as a policy — so the wording has to move
+    // with the control it refers to.
+    setPolicy(STATIC_POLICY);
+    render(
+      <TeamWarmupOverlay
+        phase='error'
+        assistants={[assistant('l', 'leader', 'Gemini')]}
+        runtimeStatus={runtime([['l', 'failed', 'ACP error']])}
+        colorOf={colorOf}
+        onRetry={() => {}}
+      />
+    );
+    expect(screen.queryByText(/Switch its model/i)).not.toBeInTheDocument();
+  });
+
+  it('still offers removal when the failing member can be removed', () => {
+    // Operability fails open: what remains has to stay actionable, not just quiet.
+    setPolicy(STATIC_POLICY);
+    render(
+      <TeamWarmupOverlay
+        phase='error'
+        assistants={[assistant('l', 'leader', 'Gemini'), assistant('m', 'teammate', 'Codex')]}
+        runtimeStatus={runtime([['m', 'failed', 'ACP error']])}
+        colorOf={colorOf}
+        onRetry={() => {}}
+      />
+    );
+    expect(screen.getByText(/移除/)).toBeInTheDocument();
   });
 });

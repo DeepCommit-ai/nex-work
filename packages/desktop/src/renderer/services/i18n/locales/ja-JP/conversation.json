@@ -781,5 +781,6 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "プランを展開",
     "collapse": "プランを折りたたむ"
-  }
+  },
+  "assistantModelUnavailable": "{{name}} は現在利用できません。管理者がモデルを設定していません。"
 }

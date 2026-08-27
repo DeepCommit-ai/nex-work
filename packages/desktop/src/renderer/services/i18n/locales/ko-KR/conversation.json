@@ -781,5 +781,6 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "계획 펼치기",
     "collapse": "계획 접기"
-  }
+  },
+  "assistantModelUnavailable": "{{name}}을(를) 사용할 수 없습니다. 관리자가 아직 모델을 설정하지 않았습니다."
 }

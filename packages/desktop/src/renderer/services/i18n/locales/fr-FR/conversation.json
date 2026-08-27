@@ -781,5 +781,6 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Développer le plan",
     "collapse": "Réduire le plan"
-  }
+  },
+  "assistantModelUnavailable": "{{name}} est indisponible : aucun modèle n'a encore été configuré pour lui."
 }

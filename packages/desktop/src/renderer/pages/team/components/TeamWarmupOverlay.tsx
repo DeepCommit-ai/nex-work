@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 import React from 'react';
 import { Refresh } from '@icon-park/react';
 import { useTranslation } from 'react-i18next';
@@ -53,6 +55,8 @@ export function simplifyWarmupError(raw: string | undefined): string | undefined
 
 const TeamWarmupOverlay: React.FC<Props> = ({ phase, assistants, runtimeStatus, colorOf, onRetry }) => {
   const { t } = useTranslation();
+  // [ENTERPRISE PATCH] spec 002 FR-4
+  const modelSelectable = useCapability('model.userSelectable');
   if (phase === 'ready') return null;
 
   const isFailure = phase === 'error';
@@ -186,13 +190,26 @@ const TeamWarmupOverlay: React.FC<Props> = ({ phase, assistants, runtimeStatus, 
               </div>
             ) : null}
             <div className='text-12px text-t-tertiary text-center leading-relaxed'>
-              {anyRemovable
-                ? t('team.warmup.memberFailedHint', {
-                    defaultValue: 'Switch its model above, or remove the member from the bar on top, then retry.',
-                  })
-                : t('team.warmup.leaderFailedHint', {
-                    defaultValue: 'Switch its model in the column header above, then retry.',
-                  })}
+              {/* [ENTERPRISE PATCH] spec 002 FR-4 / FR-7. Both hints point at a model
+                  picker. With that picker gated they instruct the user to do something
+                  that is not on screen, which reads as the app being broken rather than
+                  as a policy — so the recovery advice has to change with the control it
+                  refers to. What remains is still actionable: retry, or drop the member. */}
+              {!modelSelectable
+                ? anyRemovable
+                  ? t('team.warmup.memberFailedHintManaged', {
+                      defaultValue: '该成员暂时不可用。可从顶部移除后重试，或联系管理员。',
+                    })
+                  : t('team.warmup.leaderFailedHintManaged', {
+                      defaultValue: '该成员暂时不可用，请重试或联系管理员。',
+                    })
+                : anyRemovable
+                  ? t('team.warmup.memberFailedHint', {
+                      defaultValue: 'Switch its model above, or remove the member from the bar on top, then retry.',
+                    })
+                  : t('team.warmup.leaderFailedHint', {
+                      defaultValue: 'Switch its model in the column header above, then retry.',
+                    })}
             </div>
             {onRetry && (
               <button

@@ -1,7 +1,11 @@
+// [ENTERPRISE PATCH] spec 002 — these cases reach team/conversation wiring through
+// the model selector's testid; they describe that wiring, not the gate. Run them with
+// the selector present so a policy change does not silently rewrite what they assert.
+import { DEFAULT_CAPABILITIES, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import React from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import type { TChatConversation } from '@/common/config/storage';
 import type { TTeam } from '@/common/types/team/teamTypes';
@@ -196,6 +200,11 @@ import { ipcBridge } from '@/common';
 import TeamPage from '@/renderer/pages/team/TeamPage';
 
 describe('TeamPage teammate warmup wiring', () => {
+  beforeEach(() =>
+    setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'model.userSelectable': true } })
+  );
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   beforeEach(() => {
     vi.clearAllMocks();
     acpSelectorPropsBySlot.clear();

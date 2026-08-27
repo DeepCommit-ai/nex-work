@@ -118,7 +118,9 @@
     "unknownError": "啟動失敗",
     "memberFailedHint": "可在上方切換其模型，或從頂部移除後重試。",
     "leaderFailedHint": "可在上方切換其模型後重試。",
-    "retry": "重試"
+    "retry": "重試",
+    "memberFailedHintManaged": "該成員暫時無法使用。可從頂部移除後重試，或聯絡管理員。",
+    "leaderFailedHintManaged": "該成員暫時無法使用，請重試或聯絡管理員。"
   },
   "reorderMember": "拖動以調整成員順序",
   "interruptAndSend": "中斷並傳送",

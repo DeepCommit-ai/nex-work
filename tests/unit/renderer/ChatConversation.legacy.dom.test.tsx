@@ -1,6 +1,10 @@
+// [ENTERPRISE PATCH] spec 002 — these cases reach team/conversation wiring through
+// the model selector's testid; they describe that wiring, not the gate. Run them with
+// the selector present so a policy change does not silently rewrite what they assert.
+import { DEFAULT_CAPABILITIES, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TChatConversation } from '@/common/config/storage';
 import ChatConversation from '@/renderer/pages/conversation/components/ChatConversation';
@@ -81,6 +85,11 @@ function legacyConversation(type: 'gemini' | 'codex' | 'openclaw-gateway' | 'nan
 }
 
 describe('ChatConversation legacy runtime rendering', () => {
+  beforeEach(() =>
+    setPolicy({ ...STATIC_POLICY, capabilities: { ...DEFAULT_CAPABILITIES, 'model.userSelectable': true } })
+  );
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   beforeEach(() => {
     usePresetAssistantInfoMock.mockReset();
     acpChatMock.mockClear();

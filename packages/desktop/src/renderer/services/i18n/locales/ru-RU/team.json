@@ -118,7 +118,9 @@
     "unknownError": "failed to start",
     "memberFailedHint": "Switch its model above, or remove it from the bar on top, then retry.",
     "leaderFailedHint": "Switch its model above, then retry.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "memberFailedHintManaged": "Этот участник недоступен. Удалите его с верхней панели и повторите попытку либо обратитесь к администратору.",
+    "leaderFailedHintManaged": "Этот участник недоступен. Повторите попытку или обратитесь к администратору."
   },
   "reorderMember": "Перетащите, чтобы изменить порядок участников",
   "interruptAndSend": "Прервать и отправить",

@@ -16,6 +16,8 @@ import { type TFunction } from 'i18next';
 import type { NavigateFunction } from 'react-router-dom';
 import { mutate as swrMutate } from 'swr';
 import { getConversationCreateErrorMessage } from '@/renderer/pages/conversation/utils/conversationCreateError';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 
 export type GuidSendDeps = {
   // Input state
@@ -31,6 +33,12 @@ export type GuidSendDeps = {
   // Assistant state
   selectedAssistantId: string | null;
   selectedAssistantBackend: string;
+  /**
+   * [ENTERPRISE PATCH] spec 002 FR-4 — the blocked state has to name the
+   * assistant. With the model selector hidden the user has no other way to tell
+   * which of several assistants is the one that cannot run.
+   */
+  selectedAssistantName?: string;
   selectedMode: string;
   selectedAcpModel: string | null;
   selectedThoughtLevelValue?: string;
@@ -78,6 +86,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     loading,
     selectedAssistantId,
     selectedAssistantBackend,
+    selectedAssistantName,
     selectedMode,
     selectedAcpModel,
     selectedThoughtLevelValue,
@@ -98,6 +107,8 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     localeKey,
   } = deps;
   const sendingRef = useRef(false);
+  // [ENTERPRISE PATCH] spec 002 FR-4
+  const modelSelectable = useCapability('model.userSelectable');
 
   const handleSend = useCallback(async () => {
     if (!selectedAssistantId) {
@@ -172,7 +183,21 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
     if (assistantBackend === 'aionrs') {
       if (!current_model) {
-        Message.warning(t('conversation.noModelConfigured'));
+        // [ENTERPRISE PATCH] spec 002 FR-4 / FR-7. Two things change under the
+        // policy. The state names the assistant, because with the selector hidden
+        // nothing else says which one is stuck. And it stops telling the user to
+        // open a settings page that `agent.settingsVisible` has made unreachable —
+        // sending them to a door that is not there is worse than saying who can
+        // open it. Never a silent substitution: running a different model than the
+        // assistant defines is the failure this branch exists to prevent.
+        Message.warning(
+          modelSelectable
+            ? t('conversation.noModelConfigured')
+            : t('conversation.assistantModelUnavailable', {
+                defaultValue: '{{name}} 暂时无法使用：管理员尚未为它配置可用模型。',
+                name: selectedAssistantName || t('common.assistant', { defaultValue: '助手' }),
+              })
+        );
         return;
       }
       try {
@@ -287,6 +312,8 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     dir,
     selectedAssistantId,
     selectedAssistantBackend,
+    selectedAssistantName,
+    modelSelectable,
     selectedMode,
     selectedAcpModel,
     selectedThoughtLevelValue,

@@ -118,7 +118,9 @@
     "unknownError": "failed to start",
     "memberFailedHint": "Switch its model above, or remove it from the bar on top, then retry.",
     "leaderFailedHint": "Switch its model above, then retry.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "memberFailedHintManaged": "Bu üye kullanılamıyor. Üstteki çubuktan kaldırıp yeniden deneyin veya bir yöneticiye başvurun.",
+    "leaderFailedHintManaged": "Bu üye kullanılamıyor. Yeniden deneyin veya bir yöneticiye başvurun."
   },
   "reorderMember": "Üye sırasını değiştirmek için sürükleyin",
   "interruptAndSend": "Kes ve gönder",

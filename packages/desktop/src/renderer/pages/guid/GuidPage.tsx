@@ -41,6 +41,8 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import styles from './index.module.css';
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 
 type GuidNavigationState = {
   resetAssistant?: boolean;
@@ -245,6 +247,8 @@ const GuidPage: React.FC = () => {
     [slashController.filteredCommands, slashController.query]
   );
 
+  const modelSelectable = useCapability('model.userSelectable');
+
   const send = useGuidSend({
     // Input state
     input: guidInput.input,
@@ -258,6 +262,8 @@ const GuidPage: React.FC = () => {
 
     // Agent state
     selectedAssistantId: agentSelection.selectedAssistantId,
+    // [ENTERPRISE PATCH] spec 002 FR-4
+    selectedAssistantName: agentSelection.selectedAssistant?.name,
     selectedAssistantBackend: agentSelection.selectedAssistantBackend,
     selectedMode: agentSelection.selectedMode,
     selectedAcpModel: agentSelection.selectedAcpModel,
@@ -589,7 +595,10 @@ const GuidPage: React.FC = () => {
 
   // Build the mention dropdown node
   // Build the model selector node
-  const modelSelectorNode = (
+  // [ENTERPRISE PATCH] spec 002 FR-4 — null, not a disabled control: a greyed-out
+  // model picker still tells staff a model choice exists and that someone took it
+  // away, which is the thought the spec is trying to remove.
+  const modelSelectorNode = !modelSelectable ? null : (
     <GuidModelSelector
       isGeminiMode={isGeminiMode}
       modelList={modelSelection.modelList}

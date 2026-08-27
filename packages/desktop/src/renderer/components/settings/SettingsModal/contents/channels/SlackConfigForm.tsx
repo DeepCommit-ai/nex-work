@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// [ENTERPRISE PATCH] spec 002 — server-controlled capability policy
+import { useCapability } from '@/renderer/hooks/useCapability';
 import type { IChannelPairingRequest, IChannelPluginStatus, IChannelUser } from '@/common/types/channel/channel';
 import { assistants, channel } from '@/common/adapter/ipcBridge';
 import { isAionrsAssistant, type Assistant } from '@/common/types/agent/assistantTypes';
@@ -67,6 +69,8 @@ const SlackConfigForm: React.FC<SlackConfigFormProps> = ({
   onTokenChange,
 }) => {
   const { t, i18n } = useTranslation();
+  // [ENTERPRISE PATCH] spec 002 FR-4
+  const modelSelectable = useCapability('model.userSelectable');
   const localeKey = resolveLocaleKey(i18n?.language ?? 'en-US');
 
   const [botToken, setBotToken] = useState('');
@@ -507,21 +511,27 @@ const SlackConfigForm: React.FC<SlackConfigFormProps> = ({
       </div>
 
       {/* Default Model Selection */}
-      <PreferenceRow
-        label={t('settings.assistant.defaultModel', 'Default Model')}
-        description={t('settings.assistant.defaultModelDescSlack', 'Model used for Slack conversations')}
-      >
-        <GoogleModelSelector
-          selection={showModelSelector ? modelSelection : undefined}
-          disabled={!showModelSelector}
-          label={
-            !showModelSelector
-              ? t('settings.assistant.autoFollowCliModel', 'Automatically follow the model when CLI is running')
-              : undefined
-          }
-          variant='settings'
-        />
-      </PreferenceRow>
+      {/* [ENTERPRISE PATCH] spec 002 FR-3 / FR-4. The whole row goes, not just the
+          control: its fallback label reads "Automatically follow the model when CLI
+          is running", so leaving the row would hide the selector and keep the
+          sentence that says a CLI exists. */}
+      {modelSelectable && (
+        <PreferenceRow
+          label={t('settings.assistant.defaultModel', 'Default Model')}
+          description={t('settings.assistant.defaultModelDescSlack', 'Model used for Slack conversations')}
+        >
+          <GoogleModelSelector
+            selection={showModelSelector ? modelSelection : undefined}
+            disabled={!showModelSelector}
+            label={
+              !showModelSelector
+                ? t('settings.assistant.autoFollowCliModel', 'Automatically follow the model when CLI is running')
+                : undefined
+            }
+            variant='settings'
+          />
+        </PreferenceRow>
+      )}
 
       {/* Next Steps Guide - show when bot is enabled and no authorized users yet */}
       {pluginStatus?.enabled && pluginStatus?.connected && authorizedUsers.length === 0 && (

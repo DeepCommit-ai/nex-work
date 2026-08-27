@@ -783,5 +783,6 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Planı genişlet",
     "collapse": "Planı daralt"
-  }
+  },
+  "assistantModelUnavailable": "{{name}} kullanılamıyor: henüz bir model yapılandırılmadı."
 }

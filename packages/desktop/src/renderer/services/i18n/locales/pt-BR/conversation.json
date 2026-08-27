@@ -787,5 +787,6 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Expandir plano",
     "collapse": "Recolher plano"
-  }
+  },
+  "assistantModelUnavailable": "{{name}} está indisponível: ainda não há modelo configurado para ele."
 }

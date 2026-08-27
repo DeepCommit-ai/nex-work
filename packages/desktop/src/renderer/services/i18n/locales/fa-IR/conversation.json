@@ -781,5 +781,6 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "گسترش برنامه",
     "collapse": "جمع کردن برنامه"
-  }
+  },
+  "assistantModelUnavailable": "{{name}} در دسترس نیست: هنوز مدلی برای آن پیکربندی نشده است."
 }

@@ -781,5 +781,6 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "展開計劃",
     "collapse": "收合計劃"
-  }
+  },
+  "assistantModelUnavailable": "{{name}} 暫時無法使用：管理員尚未為它設定可用模型。"
 }

@@ -782,5 +782,6 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Expandir plan",
     "collapse": "Contraer plan"
-  }
+  },
+  "assistantModelUnavailable": "{{name}} no está disponible: aún no se ha configurado ningún modelo."
 }
