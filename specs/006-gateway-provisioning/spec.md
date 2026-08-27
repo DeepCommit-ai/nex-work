@@ -132,7 +132,7 @@ Every one of these passed `tsc`, `lint` and the full unit suite. None was visibl
 backend, which is the argument for the live tests rather than more unit tests.
 
 - **D1 — the provider row carried no models.** `save()` created it with `{name, platform, base_url,
-  api_key}` and nothing else. `getAvailableModels` iterates `provider.models`, so aionrs could
+api_key}` and nothing else. `getAvailableModels` iterates `provider.models`, so aionrs could
   select nothing and send nothing. Fixed: the save probes the gateway's model list first
   (`POST /api/providers/fetch-models`, anonymous) and writes it into the row. This also answers
   spec 002's **OQ-2** — the alias vocabulary is whatever the gateway advertises, and the client
@@ -155,7 +155,7 @@ The traffic arrives; the attribution does not. Measured against the live gateway
 
 - aionrs has no `acp_session` row — that table is written by the ACP path, and `aionrs` is not ACP.
   The conversation id appears nowhere in `LiteLLM_SpendLogs`.
-- `session_id` on an aionrs row is generated per call, not per session: two turns of the *same*
+- `session_id` on an aionrs row is generated per call, not per session: two turns of the _same_
   conversation produced `4820a338…` and `675ca681…`. It is not a session key.
 
 So the join chain the collector relies on — `LiteLLM_SpendLogs.session_id` → `acp_session.session_id`
