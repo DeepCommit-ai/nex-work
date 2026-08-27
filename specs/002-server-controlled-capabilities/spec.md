@@ -2,9 +2,10 @@
 
 **Feature Branch**: `nex-work`
 **Created**: 2026-08-25
-**Status**: Draft, revision 3 — awaiting approval before implementation
-**Revisions**: rev 2 fixed four defects found by adversarial review; rev 3 rewrites the architecture
-around the private LiteLLM gateway and one-way trajectory export.
+**Status**: Implemented, revision 4 — partially verified; see _Acceptance Criteria_
+**Revisions**: rev 2 fixed four defects found by adversarial review; rev 3 rewrote the architecture
+around the private LiteLLM gateway and one-way trajectory export; rev 4 records implementation and
+what rendering the app changed about it.
 
 ## Why
 
@@ -144,20 +145,70 @@ The backend cannot yet specify its endpoint. These choices make that irrelevant:
 
 - **CapabilityPolicy** — `{ version, source, ttl, etag, capabilities }`.
 - **PolicyProvider** — resolves a `CapabilityPolicy`. Static / cached / remote.
-- **Capability key** — initially `cli.visible`, `model.userSelectable`, `agent.settingsVisible`.
+- **Capability key** — `cli.visible`, `model.userSelectable`, `agent.settingsVisible`,
+  `provider.userConfigurable`.
+
+  The fourth key was added during implementation. `agent.settingsVisible` governs whether a page can
+  be **reached**; `provider.userConfigurable` governs whether the gateway can be **written around**.
+  This spec says UI gating is not a security boundary — true of hiding a CLI's name, false of the
+  env editor, which is a free-form key/value form that accepts `ANTHROPIC_BASE_URL`, the variable
+  spec 006 writes to pin every runtime at the company gateway. A row typed there routes that
+  runtime off the gateway, and traffic that never reaches the gateway leaves no record anywhere.
+  Collapsing the two means the day an administrator is shown the settings page, the write path
+  comes back with it.
 
 ## Acceptance Criteria
 
-- [ ] With the shipped default policy, a full pass surfaces zero CLI names, CLI logos and model names.
-      A "grep the rendered tree" test is **not sufficient** — it passes while lazy routes, modals,
-      mobile and error states stay unmounted. Error and recovery states must be driven into view
-- [ ] Sending works with every selector hidden, for each gated assistant type
-- [ ] An assistant whose fixed model is absent produces a named blocked state, not a substitution
-- [ ] Flipping a policy key re-renders affected surfaces without a restart
-- [ ] Unreachable source with no cache: identity stays hidden **and** a message can still be sent
-- [ ] Swapping static → remote changes no gating call site (verified by diff)
-- [ ] Every decision record carries provenance, including under the static provider
-- [ ] `tsc`, `lint`, `format:check`, `check-i18n`, full suite pass; drift accounted in `plan.md`
+Marked against what was actually exercised (constitution principle V).
+
+- [x] **Zero CLI logos, and zero CLI names once the agent rows are renamed.** Measured with a
+      headless browser over nine routes plus two mobile viewports, reading the rendered text and
+      every `<img>` src: vendor logos **0**. CLI text reaches **0** after renaming
+      `agent_metadata.name`, verified by doing exactly that against the live database and scanning
+      again. The requirement above was right that grepping is not sufficient — this pass is what
+      found three separate avatar resolvers, a vendor logo arriving through the `icon` field, a
+      literal "CLI" tag, and a crash that blanked every settings page.
+- [x] **Swapping static → remote changes no gating call site.** Verified by diff: a remote provider
+      added as a new file type-checks and `git status` shows that file and nothing else.
+- [x] **`tsc`, `lint`, `format:check`, `check-i18n`, full suite pass** — 5093 tests, 0 lint errors.
+- [~] **Sending works with every selector hidden.** The default resolves —
+  `useGuidModelSelection` picks `modelList[0]` whenever the list is non-empty, which the
+  gateway provider row now guarantees after the spec 006 fix. A send was **not** driven through
+  the gated UI end to end.
+- [~] **A named blocked state, not a substitution.** Implemented and it names the assistant; the
+  state was not driven into view, because reaching it means removing the gateway's models.
+- [~] **Flipping a key re-renders without a restart.** `useSyncExternalStore` gives this by
+  construction and the store's notify path is unit-tested; no surface was flipped live.
+- [ ] **Unreachable source with no cache** — the shipped provider is static, so there is no source
+      to make unreachable. Untestable until a remote provider exists.
+- [ ] **Provenance on every decision record (FR-8)** — not implemented. The client does not yet put
+      the assistant id, policy version and policy source on gateway requests. This is the one
+      acceptance item with a deadline attached: adding it later leaves the earliest gateway logs,
+      the data most wanted for training, unattributable.
+
+### What rendering the app changed
+
+The unit suite was green and the shipped policy still put every vendor logo on the first screen a
+clerk sees. Four things were only findable this way:
+
+- **Avatar resolution is written three times** — `resolveAssistantAvatar`, `resolveAgentAvatar`,
+  `resolveAvatarImageSrc` — and eight call sites reach the first directly, bypassing the wrapper.
+  Each had to be gated separately; each was found by looking at the page again after the last fix.
+- **A managed agent's `icon` field already _is_ a vendor logo path.** Resolution short-circuits on
+  an explicit icon, so "an explicit icon is the assistant's own identity" was wrong for exactly the
+  agents that matter. All 41 icons the backend serves sit under `/api/assets/logos/`, which is the
+  discriminator now used.
+- **Spec 006 crashed every settings page in web mode.** It added `gateway` to the id list shared by
+  two navigation builders but a row to only one of their maps, leaving an `undefined` that the next
+  loop dereferenced. Fixed here, with a regression test.
+- **The mobile and wrapper navigation is a second, independent copy** of the sider's menu. Gating
+  one left the entries a viewport away.
+
+### The half that is data, not code
+
+`agent_metadata.name` and `.icon` are backend rows. Renaming "Claude Code" needs no client change —
+and there is **no admin surface for it**: today it is a direct database write. Concealment is not
+complete until those rows are named for the customer, and nothing in the product helps do that.
 
 ## Open Questions
 
