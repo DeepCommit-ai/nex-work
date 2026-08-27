@@ -496,7 +496,9 @@ void registerPwa();
 // 下次启动会再试。
 const EnterpriseBoot: React.FC = () => {
   React.useEffect(() => {
-    void import('@/renderer/services/deptConfigService').then((m) => m.autoApplyOnBoot());
+    void import('@/renderer/services/deptConfigService')
+      .then((m) => m.autoApplyOnBoot())
+      .catch((e) => console.error('[enterprise] 启动重放模块加载失败', e));
   }, []);
   return null;
 };

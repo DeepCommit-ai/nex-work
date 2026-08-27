@@ -7,6 +7,13 @@
  * 卡死在"存 applyState"这一步，界面毫无反应（实测 2026-08-27）。
  *
  * `/api/settings/client` 是 desktop 与 web 都接的 HTTP KV（语言、字体等设置都走它）。
+ *
+ * ## 信任模型（部署时必须知道的两件事）
+ *
+ * deptKey 存在**应用级** KV：(1) 本地/auth=disabled 模式下该端点无认证，能访问端口
+ * 就能读改——包括把 serverUrl 改指到伪造的配置服务；(2) web 多用户模式下 KV 是
+ * 实例共享的，任何登录用户都读得到。前提是"一台实例 = 一个部门"的信任边界；
+ * 面向员工的部署必须启用登录，且不能把端口暴露给部门之外。
  */
 
 import { httpRequest } from '@/common/adapter/httpBridge';

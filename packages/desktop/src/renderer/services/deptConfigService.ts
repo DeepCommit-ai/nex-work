@@ -153,34 +153,52 @@ export const applyDeptConfig = async (serverUrl: string, deptKey: string): Promi
   return { status: 'applied', report, drift: posted.drift, reportDetail: posted.detail };
 };
 
-let bootApplyStarted = false;
+let bootApplyRunning = false;
+let bootApplyAttempted = false;
 
 /**
  * 启动自动重放（FR-2b）。已录入企业接入的机器每次启动全量重放；没录入的什么都不做。
  *
  * 失败不弹窗打断员工——但**必须可观测**：console.error 一条完整的原因，
  * 且 applyState 停在 applying，企业接入页会把它显示出来。
+ *
+ * ## 读设置的等待策略
+ *
+ * 读企业接入设置本身要经后端，而两种前置条件都可能晚于本函数触发：后端会话还没
+ * 握手完（冷启动），或 web 模式员工还没登录（读到 401）。**「读抛错」和「读到空」
+ * 是两个状态**：抛错 = 前置未就绪，带退避重试；读到空（2xx 且无值）= 这台机器
+ * 没录入企业接入，立即安静返回。
+ *
+ * 上一版只试 10 秒然后本会话永久放弃——在启用登录的部署里，登录前的 401 恰好把
+ * 重试烧光，启动重放从此静默跳过，且表现和"没配过"一模一样。现在：退避重试最长
+ * 5 分钟（覆盖典型登录耗时）；到点放弃时**放得响**且不锁死，后续再有触发还能跑。
  */
 export const autoApplyOnBoot = async (): Promise<void> => {
-  if (bootApplyStarted) return;
-  bootApplyStarted = true;
-
-  // 读企业接入设置本身要经后端；渲染进程刚加载时后端会话可能还没握手完，首次
-  // 读会 fetch 失败。重试几次而不是一次就放弃——否则"配置过的机器重启后没同步"
-  // 会静默发生，且看起来和"没配过"一样。
-  let serverUrl: string | undefined;
-  let deptKey: string | undefined;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      [serverUrl, deptKey] = await Promise.all([enterpriseStore.getServerUrl(), enterpriseStore.getDeptKey()]);
-      break;
-    } catch {
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-  }
-  if (!serverUrl || !deptKey) return; // 没录入企业接入，或后端始终读不到——后者下次启动再试
-
+  if (bootApplyRunning || bootApplyAttempted) return;
+  bootApplyRunning = true;
   try {
+    let serverUrl: string | undefined;
+    let deptKey: string | undefined;
+    let readable = false;
+    let delay = 2000;
+    const deadline = Date.now() + 5 * 60 * 1000;
+    while (Date.now() < deadline) {
+      try {
+        [serverUrl, deptKey] = await Promise.all([enterpriseStore.getServerUrl(), enterpriseStore.getDeptKey()]);
+        readable = true;
+        break;
+      } catch {
+        await new Promise((r) => setTimeout(r, delay));
+        delay = Math.min(delay * 1.5, 15_000);
+      }
+    }
+    if (!readable) {
+      console.error('[enterprise] 启动重放放弃：5 分钟内始终读不到企业接入设置（未登录或后端异常）。本次不再自动同步，可在企业接入页手动应用');
+      return; // 不置 attempted：后续若再被触发，允许重来
+    }
+    bootApplyAttempted = true;
+    if (!serverUrl || !deptKey) return; // 没录入企业接入
+
     const outcome = await applyDeptConfig(serverUrl, deptKey);
     if (outcome.status === 'failed') {
       console.error(`[enterprise] 启动重放失败：${outcome.detail}`);
@@ -191,5 +209,7 @@ export const autoApplyOnBoot = async (): Promise<void> => {
     }
   } catch (e) {
     console.error('[enterprise] 启动重放异常', e);
+  } finally {
+    bootApplyRunning = false;
   }
 };
