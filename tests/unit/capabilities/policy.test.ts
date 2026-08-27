@@ -70,6 +70,25 @@ describe('resolvePolicy', () => {
     expect(p.capabilities['cli.visible']).toBe(false);
     expect(p.version).toBe('fallback');
   });
+
+  it('never reports the provider name as the source when the provider failed', async () => {
+    // The first version returned `source: provider.name`, so a remote source that
+    // answered 401 still recorded `source: 'remote'` — provenance claiming the
+    // server decided something it never said. FR-8 exists to split a corpus into
+    // "server routed this" and "a local default did"; that split is only possible
+    // if a failure is not indistinguishable from an answer.
+    const broken: PolicyProvider = { name: 'remote', resolve: () => Promise.reject(new Error('401')) };
+    const p = await resolvePolicy(broken);
+    expect(p.source).toBe('fallback');
+    expect(p.source).not.toBe('remote');
+    expect(p.failedProvider).toBe('remote');
+  });
+
+  it('reports the real source when the provider answered', async () => {
+    const p = await resolvePolicy(staticPolicyProvider);
+    expect(p.source).toBe('static');
+    expect(p.failedProvider).toBeUndefined();
+  });
 });
 
 describe('the read store', () => {

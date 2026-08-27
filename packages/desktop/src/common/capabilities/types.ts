@@ -32,8 +32,18 @@ export type CapabilityKey =
 
 export type CapabilityMap = Record<CapabilityKey, boolean>;
 
-/** Where a policy came from. Recorded on every gateway request as provenance (FR-8). */
-export type PolicySource = 'static' | 'cached' | 'remote';
+/**
+ * Where a policy came from. Recorded on every gateway request as provenance (FR-8).
+ *
+ * `fallback` is not a provider — it is what `resolvePolicy` reports when a
+ * provider could not be reached or answered with nonsense. It exists because the
+ * first version reported the *provider's* name in that case, so a remote source
+ * that returned 401 still logged `source: 'remote'`: the record said the server
+ * decided this, when the server had said nothing at all. Provenance that cannot
+ * distinguish "the server said so" from "the server never answered" is worse
+ * than no provenance, because it is believed.
+ */
+export type PolicySource = 'static' | 'cached' | 'remote' | 'fallback';
 
 /**
  * Shaped for remote delivery from the start (FR-2, forward compatibility).
@@ -46,6 +56,8 @@ export type PolicySource = 'static' | 'cached' | 'remote';
 export type CapabilityPolicy = {
   version: string;
   source: PolicySource;
+  /** Which provider failed, when `source` is `fallback`. Diagnostics only. */
+  failedProvider?: PolicySource;
   ttl: number;
   etag: string;
   capabilities: CapabilityMap;

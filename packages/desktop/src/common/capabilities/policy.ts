@@ -90,7 +90,18 @@ export const resolvePolicy = async (provider: PolicyProvider): Promise<Capabilit
   try {
     return normalizePolicy(await provider.resolve(), provider.name);
   } catch {
-    return { version: 'fallback', source: provider.name, ttl: 0, etag: '', capabilities: FALLBACK_CAPABILITIES };
+    // `source: 'fallback'`, never the provider's name. Reporting `'remote'` here
+    // would record "the server decided this" for a request the server never
+    // answered — and FR-8 exists precisely so that a corpus can later be split
+    // into "server routed this" and "a local default did".
+    return {
+      version: 'fallback',
+      source: 'fallback',
+      failedProvider: provider.name,
+      ttl: 0,
+      etag: '',
+      capabilities: FALLBACK_CAPABILITIES,
+    };
   }
 };
 
