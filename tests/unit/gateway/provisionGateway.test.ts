@@ -3,10 +3,16 @@ import {
   buildEnvOverride,
   classifyRuntime,
   isFullyProvisioned,
+  isIsolated,
   parseGatewayModels,
   planProvisioning,
 } from '@/common/gateway/provisionGateway';
-import { GATEWAY_ENV_AUTH_TOKEN, GATEWAY_ENV_BASE_URL, type EnvEntry } from '@/common/gateway/types';
+import {
+  GATEWAY_ENV_AUTH_TOKEN,
+  GATEWAY_ENV_BASE_URL,
+  GATEWAY_ENV_CONFIG_DIR,
+  type EnvEntry,
+} from '@/common/gateway/types';
 
 const GW = 'http://litellm.internal:4000';
 const cfg = (apiKey = 'sk-test') => ({ baseUrl: GW, apiKey });
@@ -154,5 +160,64 @@ describe('parseGatewayModels', () => {
     // whole save down instead, which FR-7 forbids.
     expect(parseGatewayModels(undefined)).toEqual([]);
     expect(parseGatewayModels({ models: ['glm-5'] })).toEqual([]);
+  });
+});
+
+describe('CLAUDE_CONFIG_DIR', () => {
+  const DIR = '/opt/nexwork/claude';
+
+  it('is written by the same call that writes the gateway vars', () => {
+    // `env_override` is one store. Two independent writers would each see the
+    // other's variable as an unmanaged entry and fight over it — spec 002's
+    // design doc calls this out as the conflict to avoid.
+    const out = buildEnvOverride([], { baseUrl: GW, apiKey: 'sk-x', configDir: DIR });
+    expect(out).toContainEqual({ name: GATEWAY_ENV_CONFIG_DIR, value: DIR });
+    expect(out).toContainEqual({ name: GATEWAY_ENV_BASE_URL, value: GW });
+    expect(out).toContainEqual({ name: GATEWAY_ENV_AUTH_TOKEN, value: 'sk-x' });
+  });
+
+  it('keeps an existing directory when the field is left blank', () => {
+    // Same rule as the key: a save that did not re-enter the value must not
+    // clear an isolation that is already in place.
+    const existing: EnvEntry[] = [{ name: GATEWAY_ENV_CONFIG_DIR, value: DIR }];
+    const out = buildEnvOverride(existing, { baseUrl: GW, apiKey: '' });
+    expect(out).toContainEqual({ name: GATEWAY_ENV_CONFIG_DIR, value: DIR });
+  });
+
+  it('leaves unrelated entries alone', () => {
+    const existing: EnvEntry[] = [{ name: 'HTTPS_PROXY', value: 'http://p:8080' }];
+    const out = buildEnvOverride(existing, { baseUrl: GW, apiKey: 'k', configDir: DIR });
+    expect(out).toContainEqual({ name: 'HTTPS_PROXY', value: 'http://p:8080' });
+  });
+
+  it('does not invent a directory when none is configured anywhere', () => {
+    const names = buildEnvOverride([], { baseUrl: GW, apiKey: 'k' }).map((e) => e.name);
+    expect(names).not.toContain(GATEWAY_ENV_CONFIG_DIR);
+  });
+
+  it('is reported beside the gateway state, not folded into it', () => {
+    // Reaching the gateway and being isolated are different properties. An
+    // un-isolated runtime still reaches the gateway and still bills correctly —
+    // what it loses is that its transcripts land where the collector never looks.
+    const { statuses } = planProvisioning(
+      [
+        { runtimeId: 'a', runtimeName: 'A', env: [{ name: GATEWAY_ENV_BASE_URL, value: GW }] },
+        {
+          runtimeId: 'b',
+          runtimeName: 'B',
+          env: [
+            { name: GATEWAY_ENV_BASE_URL, value: GW },
+            { name: GATEWAY_ENV_CONFIG_DIR, value: DIR },
+          ],
+        },
+      ],
+      cfg()
+    );
+    expect(statuses[0]).toMatchObject({ state: 'gateway', isolated: false });
+    expect(statuses[1]).toMatchObject({ state: 'gateway', isolated: true });
+  });
+
+  it('treats a blank value as not isolated', () => {
+    expect(isIsolated([{ name: GATEWAY_ENV_CONFIG_DIR, value: '   ' }])).toBe(false);
   });
 });

@@ -8,7 +8,7 @@
  */
 
 import type { EnvEntry, GatewayConfig, GatewayState, RuntimeGatewayStatus } from './types';
-import { GATEWAY_ENV_AUTH_TOKEN, GATEWAY_ENV_BASE_URL, GATEWAY_WILDCARD_MODEL } from './types';
+import { GATEWAY_ENV_AUTH_TOKEN, GATEWAY_ENV_BASE_URL, GATEWAY_ENV_CONFIG_DIR, GATEWAY_WILDCARD_MODEL } from './types';
 
 const findEntry = (entries: readonly EnvEntry[], name: string): EnvEntry | undefined =>
   entries.find((e) => e.name === name);
@@ -42,16 +42,31 @@ export const classifyRuntime = (
  * never reads the key back, so a save that did not re-enter it must not wipe it.
  */
 export const buildEnvOverride = (existing: readonly EnvEntry[], config: GatewayConfig): EnvEntry[] => {
-  const managed = new Set<string>([GATEWAY_ENV_BASE_URL, GATEWAY_ENV_AUTH_TOKEN]);
+  const managed = new Set<string>([GATEWAY_ENV_BASE_URL, GATEWAY_ENV_AUTH_TOKEN, GATEWAY_ENV_CONFIG_DIR]);
   const preserved = existing.filter((e) => !managed.has(e.name));
   const token = config.apiKey.trim()
     ? config.apiKey.trim()
     : (findEntry(existing, GATEWAY_ENV_AUTH_TOKEN)?.value ?? '');
+  // Same "empty means unchanged" rule as the key: a save that did not re-enter
+  // the directory must not clear an isolation that is already in place.
+  const configDir = config.configDir?.trim() || findEntry(existing, GATEWAY_ENV_CONFIG_DIR)?.value || '';
 
   const next: EnvEntry[] = [...preserved, { name: GATEWAY_ENV_BASE_URL, value: normalizeUrl(config.baseUrl) }];
   if (token) next.push({ name: GATEWAY_ENV_AUTH_TOKEN, value: token });
+  if (configDir) next.push({ name: GATEWAY_ENV_CONFIG_DIR, value: configDir });
   return next;
 };
+
+/**
+ * Whether a runtime keeps its Claude Code config apart from the employee's own.
+ *
+ * Deliberately not part of `classifyRuntime`: reaching the gateway and being
+ * isolated are different properties. An un-isolated runtime still reaches the
+ * gateway and still bills correctly — what it loses is that its transcripts land
+ * in the employee's personal directory, where the collector does not look.
+ */
+export const isIsolated = (entries: readonly EnvEntry[]): boolean =>
+  Boolean(findEntry(entries, GATEWAY_ENV_CONFIG_DIR)?.value?.trim());
 
 /**
  * Decide which runtimes a save should write to (FR-4).
@@ -71,7 +86,13 @@ export const planProvisioning = (
 
   for (const r of runtimes) {
     const { state, currentValue } = classifyRuntime(r.env, config.baseUrl);
-    statuses.push({ runtimeId: r.runtimeId, runtimeName: r.runtimeName, state, currentValue });
+    statuses.push({
+      runtimeId: r.runtimeId,
+      runtimeName: r.runtimeName,
+      state,
+      currentValue,
+      isolated: isIsolated(r.env),
+    });
     const blockedByConflict = state === 'overridden' && !resolved.has(r.runtimeId);
     if (!blockedByConflict) toWrite.push({ runtimeId: r.runtimeId, env: buildEnvOverride(r.env, config) });
   }
