@@ -490,6 +490,17 @@ const BackendStartupFailureDialog: React.FC<{ failure: BackendStartupFailureInfo
 
 void registerPwa();
 
+// [ENTERPRISE PATCH] 启动即全量重放部门配置（cynapse spec FR-2b）。
+// 放在 BackendStartupGate 之后：重放要调后端 API。没录入企业接入时它什么都不做；
+// 失败不打断员工（console + 企业接入页可见），且 applyState 停在 applying，
+// 下次启动会再试。
+const EnterpriseBoot: React.FC = () => {
+  React.useEffect(() => {
+    void import('@/renderer/services/deptConfigService').then((m) => m.autoApplyOnBoot());
+  }, []);
+  return null;
+};
+
 const root = createRoot(document.getElementById('root')!);
 root.render(
   <BackendStartupGate
@@ -505,6 +516,7 @@ root.render(
     )}
     renderApp={() => (
       <AppProviders>
+        <EnterpriseBoot />
         <App />
       </AppProviders>
     )}

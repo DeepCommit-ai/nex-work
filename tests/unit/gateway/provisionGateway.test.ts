@@ -7,7 +7,7 @@ import {
   parseGatewayModels,
   planProvisioning,
 } from '@/common/gateway/provisionGateway';
-import {
+import { GATEWAY_ENV_CUSTOM_HEADERS,
   GATEWAY_ENV_AUTH_TOKEN,
   GATEWAY_ENV_BASE_URL,
   GATEWAY_ENV_CONFIG_DIR,
@@ -219,5 +219,31 @@ describe('CLAUDE_CONFIG_DIR', () => {
 
   it('treats a blank value as not isolated', () => {
     expect(isIsolated([{ name: GATEWAY_ENV_CONFIG_DIR, value: '   ' }])).toBe(false);
+  });
+});
+
+describe('buildEnvOverride — provenance header env (ANTHROPIC_CUSTOM_HEADERS)', () => {
+  const dept = { baseUrl: 'http://gw:54000', apiKey: 'sk-1', customHeadersValue: 'x-litellm-spend-logs-metadata: {"dept":"finance"}' };
+
+  it('writes the provenance header env as a managed variable', () => {
+    expect(buildEnvOverride([], dept)).toContainEqual({
+      name: GATEWAY_ENV_CUSTOM_HEADERS,
+      value: 'x-litellm-spend-logs-metadata: {"dept":"finance"}',
+    });
+  });
+
+  it('a manual save without a value keeps what dept-config wrote', () => {
+    // 手动网关页从不计算 provenance；一次手动保存不得悄悄抹掉埋点头——
+    // 抹掉之后一切照常工作，只是从那一刻起的记录再也答不了"哪个部门"。
+    const existing = [{ name: GATEWAY_ENV_CUSTOM_HEADERS, value: 'x-litellm-spend-logs-metadata: {"dept":"hr"}' }];
+    expect(buildEnvOverride(existing, { baseUrl: 'http://gw:54000', apiKey: '' })).toContainEqual(existing[0]);
+  });
+
+  it('a new dept value replaces the old one instead of duplicating', () => {
+    const existing = [{ name: GATEWAY_ENV_CUSTOM_HEADERS, value: 'x-litellm-spend-logs-metadata: {"dept":"hr"}' }];
+    const out = buildEnvOverride(existing, dept);
+    expect(out.filter((e) => e.name === GATEWAY_ENV_CUSTOM_HEADERS)).toEqual([
+      { name: GATEWAY_ENV_CUSTOM_HEADERS, value: dept.customHeadersValue },
+    ]);
   });
 });

@@ -11,6 +11,7 @@ import { isElectronDesktop, resolveExtensionAssetUrl } from '@/renderer/utils/pl
 import { type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
 import { useExtensionSettingsTabs } from '@/renderer/hooks/system/useExtensionSettingsTabs';
 import {
+  Key,
   Cat,
   Communication,
   Computer,
@@ -106,6 +107,14 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn, a
       label: t('settings.gateway.title'),
       icon: <Router theme='outline' size='16' />,
       path: 'gateway',
+    },
+    // [ENTERPRISE PATCH] 企业接入。两张 builtinMap 都要有行——006 在这少了一行，
+    // 每个设置页在 web 模式下都白屏。
+    enterprise: {
+      id: 'enterprise',
+      label: t('settings.enterprise.title', { defaultValue: '企业接入' }),
+      icon: <Key theme='outline' size='16' />,
+      path: 'enterprise',
     },
     about: { id: 'about', label: t('settings.about'), icon: <Info theme='outline' size='16' />, path: 'about' },
   };

@@ -63,6 +63,11 @@ export const validateConfig = (cfg: DeptConfig): string[] => {
   if (unknown.length) {
     problems.push(`助手 ${unknown.join(', ')} 改指到不在启用清单里的 agent——界面上会是报错卡片且不会自行恢复`);
   }
+  if (!cfg.gateway?.base_url?.trim() || !cfg.gateway?.api_key?.trim()) {
+    // 半份网关配置（有地址没 token，或全都没有）会让流量绕过网关或每次 401，
+    // 且两种失败此刻都表现成"配置成功"。服务端已保证带全，缺了就是响应坏了。
+    problems.push('配置没有可用的网关段（base_url/api_key）——流量将不经网关，既不计费也不采集');
+  }
   return problems;
 };
 

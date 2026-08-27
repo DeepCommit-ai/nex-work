@@ -34,6 +34,17 @@ export const GATEWAY_ENV_AUTH_TOKEN = 'ANTHROPIC_AUTH_TOKEN';
  */
 export const GATEWAY_ENV_CONFIG_DIR = 'CLAUDE_CONFIG_DIR';
 
+/**
+ * Claude Code 的自定义请求头（换行分隔的 `Name: Value`）。
+ *
+ * provenance（002 FR-8）的注入点：实测 `ANTHROPIC_CUSTOM_HEADERS` 里的
+ * `x-litellm-spend-logs-metadata` 会被 Claude Code 原样发给网关，落进
+ * `SpendLogs.metadata.spend_logs_metadata` 与 Langfuse 事件元数据。
+ * 由同一个 buildEnvOverride 管理，理由同 CONFIG_DIR：env_override 是单一存储，
+ * 两个写入方会把对方的变量当成无主条目互相覆盖。
+ */
+export const GATEWAY_ENV_CUSTOM_HEADERS = 'ANTHROPIC_CUSTOM_HEADERS';
+
 /** The single gateway configuration for this install. */
 export type GatewayConfig = {
   baseUrl: string;
@@ -44,6 +55,12 @@ export type GatewayConfig = {
    * — an existing value on a runtime is then left alone rather than cleared.
    */
   configDir?: string;
+  /**
+   * Value for ANTHROPIC_CUSTOM_HEADERS (provenance). Empty means "keep what is
+   * there": the manual gateway settings page never computes provenance, and a
+   * manual save must not silently strip what the dept-config apply wrote.
+   */
+  customHeadersValue?: string;
 };
 
 /**

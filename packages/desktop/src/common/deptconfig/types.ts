@@ -21,6 +21,20 @@ export type AssistantSpec = {
   agent_id?: string | null;
 };
 
+/**
+ * /config 的网关段。
+ *
+ * 员工只输入一个部门 key；访问网关的虚拟 key（带 team_id，部门归因靠它）、
+ * Claude Code 的隔离目录，都由服务端在这里下发。没有它的配置会被 validateConfig
+ * 拒绝：半份网关配置（写了 base_url、token 落空）比没有更难排查。
+ */
+export type GatewaySection = {
+  base_url: string;
+  api_key: string;
+  /** Claude Code 的隔离目录（FR-5）。空 = 不隔离，transcript 落员工个人目录，采集器不看那里。 */
+  config_dir?: string;
+};
+
 /** 服务端返回的一份部门配置。 */
 export type DeptConfig = {
   version: string;
@@ -36,6 +50,10 @@ export type DeptConfig = {
   assistants: AssistantSpec[];
   /** LiteLLM 别名。客户端不用它做决定，仅供展示与排错。 */
   model_aliases: string[];
+  /** 网关凭据（见 GatewaySection）。旧服务端可能没有——validateConfig 会把缺失报成问题。 */
+  gateway?: GatewaySection;
+  /** 002 的能力开关。落实成功后喂给 policy store（normalizePolicy 会兜住缺键与未知键）。 */
+  capabilities?: Record<string, boolean>;
 };
 
 /**

@@ -4,6 +4,7 @@ import { type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
 import { useExtI18n } from '@/renderer/hooks/system/useExtI18n';
 import { useExtensionSettingsTabs } from '@/renderer/hooks/system/useExtensionSettingsTabs';
 import {
+  Key,
   Cat,
   Communication,
   Computer,
@@ -33,6 +34,9 @@ export const BUILTIN_TAB_IDS = [
   'model',
   // [ENTERPRISE PATCH] spec 006
   'gateway',
+  // [ENTERPRISE PATCH] 企业接入（部门配置下发）。不受 agent.settingsVisible 控制：
+  // 员工被锁掉的是自助配置，而这页是配置的入口。
+  'enterprise',
   'skills',
   'tools',
   'appearance',
@@ -114,6 +118,13 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       appearance: { id: 'appearance', label: t('settings.appearancePanel'), icon: <Computer />, path: 'appearance' },
       // [ENTERPRISE PATCH] spec 006 — gateway provisioning
       gateway: { id: 'gateway', label: t('settings.gateway.title'), icon: <Router />, path: 'gateway' },
+      // [ENTERPRISE PATCH] 企业接入
+      enterprise: {
+        id: 'enterprise',
+        label: t('settings.enterprise.title', { defaultValue: '企业接入' }),
+        icon: <Key />,
+        path: 'enterprise',
+      },
       webui: {
         id: 'webui',
         label: t('settings.webui'),

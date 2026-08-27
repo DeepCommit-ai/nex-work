@@ -8,6 +8,7 @@ const cfg = (over: Partial<DeptConfig> = {}): DeptConfig => ({
   agents: ['claude', 'aionrs'],
   assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler' }],
   model_aliases: [],
+  gateway: { base_url: 'http://gw:54000', api_key: 'sk-gw-dept', config_dir: '~/.nexwork-claude' },
   ...over,
 });
 
@@ -43,6 +44,13 @@ describe('validateConfig', () => {
 
   it('accepts a well-formed config', () => {
     expect(validateConfig(cfg())).toEqual([]);
+  });
+
+  it('rejects a config without usable gateway credentials', () => {
+    // 半份网关配置（有地址没 token）会让流量绕过网关或每次 401，且两种失败
+    // 此刻都表现成"配置成功"。
+    expect(validateConfig(cfg({ gateway: undefined }))).toContainEqual(expect.stringContaining('不经网关'));
+    expect(validateConfig(cfg({ gateway: { base_url: 'http://gw', api_key: '' } }))).toContainEqual(expect.stringContaining('不经网关'));
   });
 });
 

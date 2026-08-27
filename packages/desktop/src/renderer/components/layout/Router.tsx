@@ -21,6 +21,8 @@ const SystemSettings = React.lazy(() => import('@renderer/pages/settings/SystemS
 const WebuiSettings = React.lazy(() => import('@renderer/pages/settings/WebuiSettings'));
 // [ENTERPRISE PATCH] spec 006 — gateway provisioning
 const GatewaySettings = React.lazy(() => import('@renderer/pages/settings/GatewaySettings'));
+// [ENTERPRISE PATCH] 企业接入 —— 部门配置下发的入口，对员工始终可见
+const EnterpriseSettings = React.lazy(() => import('@renderer/pages/settings/EnterpriseSettings'));
 const PetSettings = React.lazy(() => import('@renderer/pages/settings/PetSettings'));
 const ArchivedSettings = React.lazy(() => import('@renderer/pages/settings/ArchivedSettings'));
 const ExtensionSettingsPage = React.lazy(() => import('@renderer/pages/settings/ExtensionSettingsPage'));
@@ -127,6 +129,7 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
             path='/settings/gateway'
             element={agentSettingsVisible ? withRouteFallback(GatewaySettings) : <Navigate to='/guid' replace />}
           />
+          <Route path='/settings/enterprise' element={withRouteFallback(EnterpriseSettings)} />
           <Route path='/settings/pet' element={withRouteFallback(PetSettings)} />
           <Route path='/settings/archived' element={withRouteFallback(ArchivedSettings)} />
           <Route path='/settings/system' element={withRouteFallback(SystemSettings)} />
