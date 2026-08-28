@@ -5,6 +5,8 @@
  */
 
 import type { AssistantListItem } from '../types';
+import { groupMyAssistants } from '../assistantUtils';
+import { selectableAssistants } from '@/renderer/utils/model/assistantSelection';
 import EnabledAssistantsList from './EnabledAssistantsList';
 import MyAssistantsList from './MyAssistantsList';
 import OfficialAssistantsGrid from './OfficialAssistantsGrid';
@@ -62,15 +64,16 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
   };
 
   const counts = useMemo(() => {
-    let enabled = 0;
-    let mine = 0;
-    let official = 0;
-    for (const assistant of assistants) {
-      if (assistant.enabled !== false) enabled += 1;
-      if (assistant.source === 'builtin') official += 1;
-      else mine += 1;
-    }
-    return { enabled, mine, official };
+    // [ENTERPRISE PATCH] spec 002 — count what the tab bodies actually render,
+    // through the same concealment-aware helpers, or the header contradicts the
+    // page (fresh install: "My Assistants (6)" over an empty list of hidden
+    // bare CLIs).
+    const groups = groupMyAssistants(assistants);
+    return {
+      enabled: selectableAssistants(assistants).length,
+      mine: groups.cliAssistants.length + groups.createdAssistants.length,
+      official: assistants.filter((assistant) => assistant.source === 'builtin').length,
+    };
   }, [assistants]);
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
