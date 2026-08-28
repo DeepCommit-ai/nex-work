@@ -2,11 +2,12 @@
 
 **Feature Branch**: `nex-work`
 **Created**: 2026-08-25
-**Status**: Implemented, revision 5 — partially verified; see _Acceptance Criteria_
+**Status**: Implemented, revision 6 — partially verified; see _Acceptance Criteria_
 **Revisions**: rev 2 fixed four defects found by adversarial review; rev 3 rewrote the architecture
 around the private LiteLLM gateway and one-way trajectory export; rev 4 records implementation and
 what rendering the app changed about it; rev 5 conceals bare-CLI assistants from selection lists —
-the fresh-install home pill bar was a CLI roster.
+the fresh-install home pill bar was a CLI roster; rev 6 makes CLI version-drift notices dev-only
+and re-pins the bundled Claude to the version aioncore verifies.
 
 ## Why
 
@@ -221,6 +222,19 @@ clerk sees. Four things were only findable this way:
   (home, conversation switcher, team create, scheduled tasks, settings list) inherits the filter.
   Surfaces other than the guid pill that render the fallback's own name still say "Aion CLI" — the
   name-side fix stays data-side (renaming rows needs an admin surface; see _The half that is data_).
+- **(rev 6) The CLI version-drift notice re-introduced the CLI by name into a concealed
+  conversation** — "已安装的 claude 高于 NexWork 验证过的版本 …（本地 2.1.247 (Claude Code) /
+  NexWork 验证过 2.1.235）". The verified-version table is baked into the aioncore binary
+  (`crates/aionui-session/src/backend/cli_version.rs`: claude → 2.1.235), so the client cannot
+  change what is verified — it can only change what runs. Two-sided fix: (a) `claudeCodeVersion`
+  in the root `package.json` is re-pinned from 2.1.250 to 2.1.235 so the bundled binary matches
+  what aioncore verifies and the notice never fires on a healthy install; (b) `MessageTips` drops
+  `CLI_VERSION_OLDER` / `CLI_VERSION_NEWER` tips in production builds (`shouldRenderTip`) — the
+  employee neither manages the CLI version nor should learn its vendor from a warning box. Dev
+  builds keep the notice: there it is real signal (PATH fallback when the bundle is absent, stale
+  bundle after a version bump). Rule going forward: **bumping `claudeCodeVersion` and upgrading
+  aioncore travel together**, or every production conversation opens with a drift warning only
+  dev machines will ever see again.
 
 ### The half that is data, not code
 

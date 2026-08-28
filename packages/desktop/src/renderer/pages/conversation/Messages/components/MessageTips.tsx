@@ -48,6 +48,18 @@ const ownershipColor = {
   unknown_upstream: 'gray',
 };
 
+// [ENTERPRISE PATCH] spec 002 (rev 6). Version drift is a build-governance
+// fact — the bundled CLI vs the build aioncore verified — that an employee can
+// neither act on nor should be told about: the body names the concealed CLI
+// ("claude … (Claude Code)"). Dev builds keep the notice because there it is
+// real signal (PATH fallback, stale bundle after a version bump).
+const DEV_ONLY_TIP_CODES = new Set(['CLI_VERSION_OLDER', 'CLI_VERSION_NEWER']);
+
+export const shouldRenderTip = (
+  code: string | undefined,
+  nodeEnv: string | undefined = process.env.NODE_ENV
+): boolean => !(code && DEV_ONLY_TIP_CODES.has(code) && nodeEnv === 'production');
+
 const resolveAgentTipBody = (
   content: string,
   code: IMessageTips['content']['code'],
@@ -67,6 +79,9 @@ const MessageTips: React.FC<{ message: IMessageTips }> = ({ message }) => {
   const structuredError = type === 'error' ? message.content.error : undefined;
   const localizedTipBody = resolveAgentTipBody(content, code, params, t);
   const { json, data } = useFormatContent(localizedTipBody);
+
+  // After the hooks so the hook order stays unconditional.
+  if (!shouldRenderTip(code)) return null;
 
   const displayContent = json ? '' : localizedTipBody;
   // The report chip stays hidden for errors that opt out via
