@@ -5,7 +5,13 @@
  * 上报体的字段名是与 cynapse 服务端的双向契约，改一边等于都改。
  */
 import { describe, expect, it } from 'vitest';
-import { buildProvenanceEnvValue, CYNAPSE_KEY_HEADER, fetchDeptConfig, postReport, toReportBody } from '@/common/deptconfig/client';
+import {
+  buildProvenanceEnvValue,
+  CYNAPSE_KEY_HEADER,
+  fetchDeptConfig,
+  postReport,
+  toReportBody,
+} from '@/common/deptconfig/client';
 import type { ApplyReport } from '@/common/deptconfig/types';
 
 const res = (status: number, body: unknown, etag?: string) => ({
@@ -20,7 +26,9 @@ describe('fetchDeptConfig', () => {
     let seen: { url?: string; headers?: Record<string, string> } = {};
     const out = await fetchDeptConfig('http://cy:54001/', 'cyk-abc', (url, init) => {
       seen = { url, headers: init?.headers };
-      return Promise.resolve(res(200, { version: 'v1', dept: 'f', agents: [], assistants: [], model_aliases: [] }, '"e1"'));
+      return Promise.resolve(
+        res(200, { version: 'v1', dept: 'f', agents: [], assistants: [], model_aliases: [] }, '"e1"')
+      );
     });
     expect(seen.url).toBe('http://cy:54001/config'); // 末尾斜杠不产生 //config
     expect(seen.headers?.[CYNAPSE_KEY_HEADER]).toBe('cyk-abc');
@@ -51,7 +59,12 @@ describe('buildProvenanceEnvValue', () => {
     const v = buildProvenanceEnvValue({ dept: 'finance', configVersion: 'v3', clientId: 'm-1' });
     const [name, ...rest] = v.split(': ');
     expect(name).toBe('x-litellm-spend-logs-metadata');
-    expect(JSON.parse(rest.join(': '))).toEqual({ dept: 'finance', config_version: 'v3', client_id: 'm-1', client: 'nexwork' });
+    expect(JSON.parse(rest.join(': '))).toEqual({
+      dept: 'finance',
+      config_version: 'v3',
+      client_id: 'm-1',
+      client: 'nexwork',
+    });
     expect(v).not.toContain('\n'); // ANTHROPIC_CUSTOM_HEADERS 以换行分隔多个头
   });
 });
@@ -62,9 +75,16 @@ describe('toReportBody', () => {
     // 实际状态的话，幂等重放的第二次会上报空集，服务端读成"全部缺失"。
     const rep: ApplyReport = {
       version: 'v2',
-      agentsEnabled: ['a'], agentsDisabled: [], assistantsEnabled: ['w'], assistantsDisabled: [],
-      repointed: ['w'], imported: [], modelPinned: [], failures: ['x 失败'],
-      finalAgents: ['a', 'b'], finalAssistants: ['w', 'z'],
+      agentsEnabled: ['a'],
+      agentsDisabled: [],
+      assistantsEnabled: ['w'],
+      assistantsDisabled: [],
+      repointed: ['w'],
+      imported: [],
+      modelPinned: [],
+      failures: ['x 失败'],
+      finalAgents: ['a', 'b'],
+      finalAssistants: ['w', 'z'],
     };
     expect(toReportBody(rep, 'm-1')).toEqual({
       client_id: 'm-1',
@@ -78,7 +98,9 @@ describe('toReportBody', () => {
 
 describe('postReport', () => {
   it('returns drift from the server verbatim', async () => {
-    const out = await postReport('http://cy', 'k', {}, () => Promise.resolve(res(200, { ok: false, drift: ['版本不一致'] })));
+    const out = await postReport('http://cy', 'k', {}, () =>
+      Promise.resolve(res(200, { ok: false, drift: ['版本不一致'] }))
+    );
     expect(out).toEqual({ ok: false, drift: ['版本不一致'] });
   });
 

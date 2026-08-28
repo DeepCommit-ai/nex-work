@@ -17,7 +17,13 @@
 import { acpConversation, assistants as assistantsBridge, mode } from '@/common/adapter/ipcBridge';
 import { normalizePolicy, setPolicy } from '@/common/capabilities/policy';
 import { enterpriseStore } from './enterpriseStore';
-import { buildReport, planWrites, validateConfig, type CurrentState, type PlannedWrite } from '@/common/deptconfig/applyConfig';
+import {
+  buildReport,
+  planWrites,
+  validateConfig,
+  type CurrentState,
+  type PlannedWrite,
+} from '@/common/deptconfig/applyConfig';
 import { buildProvenanceEnvValue, fetchDeptConfig, postReport, toReportBody } from '@/common/deptconfig/client';
 import type { ApplyReport, DeptConfig } from '@/common/deptconfig/types';
 import { buildEnvOverride } from '@/common/gateway/provisionGateway';
@@ -106,7 +112,12 @@ const executeWrite = (w: PlannedWrite): Promise<unknown> => {
  * aionrs 例外：它读 provider 行。行内 models 用服务端下发的别名——网关页靠探测
  * 拿模型列表，这里不必：别名就是服务端的答案，探测失败不该让 aionrs 断粮。
  */
-const provisionGatewayFor = async (cfg: DeptConfig, agentTypes: Map<string, string>, clientId: string, failures: string[]): Promise<void> => {
+const provisionGatewayFor = async (
+  cfg: DeptConfig,
+  agentTypes: Map<string, string>,
+  clientId: string,
+  failures: string[]
+): Promise<void> => {
   const gw = cfg.gateway!;
   const provenance = buildProvenanceEnvValue({ dept: cfg.dept, configVersion: cfg.version, clientId });
 
@@ -121,9 +132,22 @@ const provisionGatewayFor = async (cfg: DeptConfig, agentTypes: Map<string, stri
         const providers = ((await mode.listProviders.invoke()) as { id: string; name: string }[] | undefined) ?? [];
         const row = providers.find((p) => p.name === GATEWAY_PROVIDER_NAME);
         if (row) {
-          await mode.updateProvider.invoke({ id: row.id, platform: 'custom', name: GATEWAY_PROVIDER_NAME, base_url: gw.base_url, api_key: gw.api_key, models: cfg.model_aliases });
+          await mode.updateProvider.invoke({
+            id: row.id,
+            platform: 'custom',
+            name: GATEWAY_PROVIDER_NAME,
+            base_url: gw.base_url,
+            api_key: gw.api_key,
+            models: cfg.model_aliases,
+          });
         } else {
-          await mode.createProvider.invoke({ name: GATEWAY_PROVIDER_NAME, platform: 'custom', base_url: gw.base_url, api_key: gw.api_key, models: cfg.model_aliases });
+          await mode.createProvider.invoke({
+            name: GATEWAY_PROVIDER_NAME,
+            platform: 'custom',
+            base_url: gw.base_url,
+            api_key: gw.api_key,
+            models: cfg.model_aliases,
+          });
         }
         continue;
       }
@@ -182,7 +206,9 @@ export const applyDeptConfig = async (serverUrl: string, deptKey: string): Promi
   console.info('[enterprise] 落实完成', { version: cfg.version, drift: posted.drift, reportOk: posted.ok });
 
   // 002：能力开关喂给 policy store。normalizePolicy 兜住缺键/未知键，坏值只会更收紧。
-  setPolicy(normalizePolicy({ version: cfg.version, etag: fetched.etag ?? '', capabilities: cfg.capabilities }, 'remote'));
+  setPolicy(
+    normalizePolicy({ version: cfg.version, etag: fetched.etag ?? '', capabilities: cfg.capabilities }, 'remote')
+  );
 
   if (!failures.length) {
     await enterpriseStore.setApplyState({ phase: 'applied', version: cfg.version, at: Date.now() });
@@ -230,7 +256,9 @@ export const autoApplyOnBoot = async (): Promise<void> => {
       }
     }
     if (!readable) {
-      console.error('[enterprise] 启动重放放弃：5 分钟内始终读不到企业接入设置（未登录或后端异常）。本次不再自动同步，可在企业接入页手动应用');
+      console.error(
+        '[enterprise] 启动重放放弃：5 分钟内始终读不到企业接入设置（未登录或后端异常）。本次不再自动同步，可在企业接入页手动应用'
+      );
       return; // 不置 attempted：后续若再被触发，允许重来
     }
     bootApplyAttempted = true;

@@ -21,7 +21,10 @@ import { httpRequest } from '@/common/adapter/httpBridge';
 export type EnterpriseApplyState = { phase: 'applying' | 'applied'; version: string; at: number };
 
 const get = async <T>(key: string): Promise<T | undefined> => {
-  const data = await httpRequest<Record<string, T | undefined>>('GET', `/api/settings/client?keys=${encodeURIComponent(key)}`);
+  const data = await httpRequest<Record<string, T | undefined>>(
+    'GET',
+    `/api/settings/client?keys=${encodeURIComponent(key)}`
+  );
   return data?.[key];
 };
 const set = async (key: string, value: unknown): Promise<void> => {

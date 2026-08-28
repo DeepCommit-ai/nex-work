@@ -8,7 +8,13 @@
  */
 
 import type { EnvEntry, GatewayConfig, GatewayState, RuntimeGatewayStatus } from './types';
-import { GATEWAY_ENV_AUTH_TOKEN, GATEWAY_ENV_BASE_URL, GATEWAY_ENV_CONFIG_DIR, GATEWAY_ENV_CUSTOM_HEADERS, GATEWAY_WILDCARD_MODEL } from './types';
+import {
+  GATEWAY_ENV_AUTH_TOKEN,
+  GATEWAY_ENV_BASE_URL,
+  GATEWAY_ENV_CONFIG_DIR,
+  GATEWAY_ENV_CUSTOM_HEADERS,
+  GATEWAY_WILDCARD_MODEL,
+} from './types';
 
 const findEntry = (entries: readonly EnvEntry[], name: string): EnvEntry | undefined =>
   entries.find((e) => e.name === name);
@@ -42,7 +48,12 @@ export const classifyRuntime = (
  * never reads the key back, so a save that did not re-enter it must not wipe it.
  */
 export const buildEnvOverride = (existing: readonly EnvEntry[], config: GatewayConfig): EnvEntry[] => {
-  const managed = new Set<string>([GATEWAY_ENV_BASE_URL, GATEWAY_ENV_AUTH_TOKEN, GATEWAY_ENV_CONFIG_DIR, GATEWAY_ENV_CUSTOM_HEADERS]);
+  const managed = new Set<string>([
+    GATEWAY_ENV_BASE_URL,
+    GATEWAY_ENV_AUTH_TOKEN,
+    GATEWAY_ENV_CONFIG_DIR,
+    GATEWAY_ENV_CUSTOM_HEADERS,
+  ]);
   const preserved = existing.filter((e) => !managed.has(e.name));
   const token = config.apiKey.trim()
     ? config.apiKey.trim()
@@ -53,7 +64,8 @@ export const buildEnvOverride = (existing: readonly EnvEntry[], config: GatewayC
 
   // provenance 同样适用"空即保留"：手动网关页从不计算 provenance，
   // 一次手动保存不得悄悄抹掉部门配置写进去的埋点头。
-  const customHeaders = config.customHeadersValue?.trim() || findEntry(existing, GATEWAY_ENV_CUSTOM_HEADERS)?.value || '';
+  const customHeaders =
+    config.customHeadersValue?.trim() || findEntry(existing, GATEWAY_ENV_CUSTOM_HEADERS)?.value || '';
 
   const next: EnvEntry[] = [...preserved, { name: GATEWAY_ENV_BASE_URL, value: normalizeUrl(config.baseUrl) }];
   if (token) next.push({ name: GATEWAY_ENV_AUTH_TOKEN, value: token });

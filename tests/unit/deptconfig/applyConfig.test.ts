@@ -50,7 +50,9 @@ describe('validateConfig', () => {
     // 半份网关配置（有地址没 token）会让流量绕过网关或每次 401，且两种失败
     // 此刻都表现成"配置成功"。
     expect(validateConfig(cfg({ gateway: undefined }))).toContainEqual(expect.stringContaining('不经网关'));
-    expect(validateConfig(cfg({ gateway: { base_url: 'http://gw', api_key: '' } }))).toContainEqual(expect.stringContaining('不经网关'));
+    expect(validateConfig(cfg({ gateway: { base_url: 'http://gw', api_key: '' } }))).toContainEqual(
+      expect.stringContaining('不经网关')
+    );
   });
 });
 
@@ -163,7 +165,13 @@ describe('planWrites — 服务端定义的 import 与钉模型（issue #7 / #6�
   });
 
   it('pins the default model when the current pin differs, and stays quiet when it matches', () => {
-    const c = cfg({ model_aliases: ['glm-4.7'], assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler', fixed_model: 'glm-4.7' }] });
+    const c = cfg({
+      model_aliases: ['glm-4.7'],
+      assistants: [
+        { id: 'word', agent_id: 'claude' },
+        { id: 'butler', fixed_model: 'glm-4.7' },
+      ],
+    });
     const drifted = world();
     expect(planWrites(c, drifted)).toContainEqual({ kind: 'assistant.pin_model', id: 'butler', model: 'glm-4.7' });
 
@@ -175,7 +183,13 @@ describe('planWrites — 服务端定义的 import 与钉模型（issue #7 / #6�
   it('pins even when the current pin is unreadable — silence must not pass for done', () => {
     // detail 取失败时 fixed_model 是 undefined：宁可多写一次幂等 PUT，
     // 也不能把"读不到现状"当成"已经钉好"。
-    const c = cfg({ model_aliases: ['glm-4.7'], assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler', fixed_model: 'glm-4.7' }] });
+    const c = cfg({
+      model_aliases: ['glm-4.7'],
+      assistants: [
+        { id: 'word', agent_id: 'claude' },
+        { id: 'butler', fixed_model: 'glm-4.7' },
+      ],
+    });
     const w = world(); // butler.fixed_model 未设置 = undefined
     expect(planWrites(c, w)).toContainEqual({ kind: 'assistant.pin_model', id: 'butler', model: 'glm-4.7' });
   });
@@ -183,12 +197,24 @@ describe('planWrites — 服务端定义的 import 与钉模型（issue #7 / #6�
 
 describe('validateConfig — fixed_model', () => {
   it('rejects a pin outside model_aliases', () => {
-    const c = cfg({ model_aliases: ['glm-4.7'], assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler', fixed_model: 'glm-9' }] });
+    const c = cfg({
+      model_aliases: ['glm-4.7'],
+      assistants: [
+        { id: 'word', agent_id: 'claude' },
+        { id: 'butler', fixed_model: 'glm-9' },
+      ],
+    });
     expect(validateConfig(c)).toContainEqual(expect.stringContaining('fixed_model'));
   });
 
   it('accepts a pin that is in model_aliases', () => {
-    const c = cfg({ model_aliases: ['glm-4.7'], assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler', fixed_model: 'glm-4.7' }] });
+    const c = cfg({
+      model_aliases: ['glm-4.7'],
+      assistants: [
+        { id: 'word', agent_id: 'claude' },
+        { id: 'butler', fixed_model: 'glm-4.7' },
+      ],
+    });
     expect(validateConfig(c)).toEqual([]);
   });
 });

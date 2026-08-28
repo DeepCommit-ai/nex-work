@@ -7,7 +7,8 @@ import {
   parseGatewayModels,
   planProvisioning,
 } from '@/common/gateway/provisionGateway';
-import { GATEWAY_ENV_CUSTOM_HEADERS,
+import {
+  GATEWAY_ENV_CUSTOM_HEADERS,
   GATEWAY_ENV_AUTH_TOKEN,
   GATEWAY_ENV_BASE_URL,
   GATEWAY_ENV_CONFIG_DIR,
@@ -223,7 +224,11 @@ describe('CLAUDE_CONFIG_DIR', () => {
 });
 
 describe('buildEnvOverride — provenance header env (ANTHROPIC_CUSTOM_HEADERS)', () => {
-  const dept = { baseUrl: 'http://gw:54000', apiKey: 'sk-1', customHeadersValue: 'x-litellm-spend-logs-metadata: {"dept":"finance"}' };
+  const dept = {
+    baseUrl: 'http://gw:54000',
+    apiKey: 'sk-1',
+    customHeadersValue: 'x-litellm-spend-logs-metadata: {"dept":"finance"}',
+  };
 
   it('writes the provenance header env as a managed variable', () => {
     expect(buildEnvOverride([], dept)).toContainEqual({

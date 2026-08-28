@@ -66,7 +66,9 @@ const EnterpriseSettings: React.FC = () => {
             })
           );
         } else {
-          Message.success(t('settings.enterprise.applied', { defaultValue: '配置 {{v}} 已应用', v: result.report.version }));
+          Message.success(
+            t('settings.enterprise.applied', { defaultValue: '配置 {{v}} 已应用', v: result.report.version })
+          );
         }
       }
     } catch (e) {
@@ -86,7 +88,8 @@ const EnterpriseSettings: React.FC = () => {
       <div className='flex flex-col gap-16px max-w-640px'>
         <Typography.Paragraph className='text-13px text-[var(--color-text-3)] m-0'>
           {t('settings.enterprise.intro', {
-            defaultValue: '输入公司配置服务地址与部门密钥。助手清单、模型路由与采集配置由服务端统一下发，之后每次启动自动同步。',
+            defaultValue:
+              '输入公司配置服务地址与部门密钥。助手清单、模型路由与采集配置由服务端统一下发，之后每次启动自动同步。',
           })}
         </Typography.Paragraph>
 
@@ -94,7 +97,12 @@ const EnterpriseSettings: React.FC = () => {
           <Form.Item
             field='serverUrl'
             label={t('settings.enterprise.serverUrl', { defaultValue: '配置服务地址' })}
-            rules={[{ required: true, message: t('settings.enterprise.serverUrlRequired', { defaultValue: '请填写配置服务地址' }) }]}
+            rules={[
+              {
+                required: true,
+                message: t('settings.enterprise.serverUrlRequired', { defaultValue: '请填写配置服务地址' }),
+              },
+            ]}
           >
             <Input placeholder='http://cynapse.internal:54001' allowClear />
           </Form.Item>
@@ -136,7 +144,8 @@ const EnterpriseSettings: React.FC = () => {
           <div className='flex flex-col gap-8px text-13px'>
             <div>
               {t('settings.enterprise.summary', {
-                defaultValue: '本轮：新建 {{imp}} 个，钉模型 {{pin}} 项，改指 {{re}} 项，启用助手 {{on}} 个，停用 {{off}} 个；当前可见助手 {{final}} 个',
+                defaultValue:
+                  '本轮：新建 {{imp}} 个，钉模型 {{pin}} 项，改指 {{re}} 项，启用助手 {{on}} 个，停用 {{off}} 个；当前可见助手 {{final}} 个',
                 imp: outcome.report.imported.length,
                 pin: outcome.report.modelPinned.length,
                 re: outcome.report.repointed.length,
@@ -149,7 +158,11 @@ const EnterpriseSettings: React.FC = () => {
               <Alert key={f} type='error' content={f} />
             ))}
             {outcome.drift.map((d) => (
-              <Alert key={d} type='warning' content={t('settings.enterprise.drift', { defaultValue: '服务端比对：{{d}}', d })} />
+              <Alert
+                key={d}
+                type='warning'
+                content={t('settings.enterprise.drift', { defaultValue: '服务端比对：{{d}}', d })}
+              />
             ))}
             {outcome.reportDetail && <Alert type='warning' content={outcome.reportDetail} />}
           </div>

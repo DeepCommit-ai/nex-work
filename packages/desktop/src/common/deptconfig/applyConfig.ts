@@ -82,7 +82,9 @@ export const validateConfig = (cfg: DeptConfig): string[] => {
   if (badPin.length) {
     // 钉一个别名表里没有的模型，新会话在网关拿到 404——员工看到"发不出消息"。
     // 服务端也拦，这里是客户端执行前的最后防线（同一坏响应可能只坏一半）。
-    problems.push(`助手 ${badPin.map((a) => a.id).join(', ')} 钉的 fixed_model 不在 model_aliases 里——新会话会在网关得到 404`);
+    problems.push(
+      `助手 ${badPin.map((a) => a.id).join(', ')} 钉的 fixed_model 不在 model_aliases 里——新会话会在网关得到 404`
+    );
   }
   if (!cfg.gateway?.base_url?.trim() || !cfg.gateway?.api_key?.trim()) {
     // 半份网关配置（有地址没 token，或全都没有）会让流量绕过网关或每次 401，

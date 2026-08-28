@@ -13,7 +13,10 @@ import type { ApplyReport, DeptConfig, FetchResult } from './types';
 
 export const CYNAPSE_KEY_HEADER = 'X-Cynapse-Key';
 
-type FetchLike = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{
+type FetchLike = (
+  url: string,
+  init?: { method?: string; headers?: Record<string, string>; body?: string }
+) => Promise<{
   ok: boolean;
   status: number;
   headers: { get(name: string): string | null };
@@ -23,7 +26,11 @@ type FetchLike = (url: string, init?: { method?: string; headers?: Record<string
 const normalizeServerUrl = (serverUrl: string): string => serverUrl.trim().replace(/\/+$/, '');
 
 /** 拉取本部门的配置。失败绝不降级成一份"看起来正常"的配置（服务端契约同款）。 */
-export const fetchDeptConfig = async (serverUrl: string, deptKey: string, fetchFn: FetchLike = fetch): Promise<FetchResult> => {
+export const fetchDeptConfig = async (
+  serverUrl: string,
+  deptKey: string,
+  fetchFn: FetchLike = fetch
+): Promise<FetchResult> => {
   let res: Awaited<ReturnType<FetchLike>>;
   try {
     res = await fetchFn(`${normalizeServerUrl(serverUrl)}/config`, {
