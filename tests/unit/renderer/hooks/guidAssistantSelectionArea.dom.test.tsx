@@ -349,7 +349,7 @@ describe('AssistantSelectionArea under the concealing default policy (spec 002)'
     render(
       <AssistantSelectionArea
         selectedAssistantId='bare-aionrs'
-        assistants={[bareAionrs]}
+        assistants={[{ ...bareAionrs, avatar: '🤵' }]}
         localeKey='en-US'
         onSelectAssistant={vi.fn()}
       />
@@ -360,6 +360,9 @@ describe('AssistantSelectionArea under the concealing default policy (spec 002)'
     // The CLI's own name must not appear; the pill is labelled neutrally.
     expect(pill.textContent).not.toContain('Aion CLI');
     expect(pill.textContent).toContain('Assistant');
+    // Neutral identity extends to the mark: the assistant's own avatar is not
+    // rendered — the generic robot fallback is.
+    expect(pill.textContent).not.toContain('🤵');
     expect(screen.queryByTestId('assistant-more-btn')).not.toBeInTheDocument();
   });
 });

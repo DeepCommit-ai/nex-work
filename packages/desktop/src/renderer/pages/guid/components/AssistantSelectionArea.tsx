@@ -15,7 +15,7 @@ import { applyBrandToTranslations } from '@/branding/translations';
 import { useManagedAgentRuntimeCatalog } from '@/renderer/hooks/agent/useManagedAgents';
 import { managedAgentSearchText } from '@/renderer/utils/model/agentTypes';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { resolveAssistantAvatar } from '@/renderer/utils/model/assistantAvatar';
+import { resolveAssistantAvatar, type AssistantAvatar } from '@/renderer/utils/model/assistantAvatar';
 import ThemedLogo from '@/renderer/components/agent/ThemedLogo';
 import { selectableAssistants } from '@/renderer/utils/model/assistantSelection';
 import { useTranslation } from 'react-i18next';
@@ -228,19 +228,21 @@ const AssistantSelectionArea: React.FC<AssistantSelectionAreaProps> = ({
   if (enabledAssistants.length === 0) return null;
 
   const renderAssistantPill = (assistant: Assistant, testId: string, fullWidth = false) => {
-    const avatar = resolveAssistantAvatar(assistant.avatar);
     const isSelected = selectedId === assistant.id;
-    // [ENTERPRISE PATCH] spec 002 — two cases get the neutral "default
-    // assistant" label instead of a name: a `generated` assistant (its name IS
-    // the CLI's name), and the single-pill state (one visible assistant means
-    // there is no choice to communicate — the factory state before enterprise
-    // provisioning pushes named assistants). Named assistants otherwise come
-    // from backend data the i18n rewrite never sees ("AionUi Butler"), so their
-    // labels go through the same brand rewrite.
-    const label =
-      !cliVisible && (assistant.source === 'generated' || enabledAssistants.length === 1)
-        ? t('conversation.welcome.defaultAssistant', { defaultValue: 'Default Assistant' })
-        : applyBrandToTranslations(assistant.name_i18n?.[localeKey] || assistant.name);
+    // [ENTERPRISE PATCH] spec 002 — two cases present as the neutral "default
+    // assistant" instead of a named identity: a `generated` assistant (its name
+    // IS the CLI's name), and the single-pill state (one visible assistant
+    // means there is no choice to communicate — the factory state before
+    // enterprise provisioning pushes named assistants). Neutral means the whole
+    // identity: generic label AND the fallback robot mark, never the
+    // assistant's own logo. Named assistants otherwise come from backend data
+    // the i18n rewrite never sees ("AionUi Butler"), so their labels go through
+    // the same brand rewrite.
+    const neutralDefault = !cliVisible && (assistant.source === 'generated' || enabledAssistants.length === 1);
+    const avatar: AssistantAvatar = neutralDefault ? { kind: 'fallback' } : resolveAssistantAvatar(assistant.avatar);
+    const label = neutralDefault
+      ? t('conversation.welcome.defaultAssistant', { defaultValue: 'Default Assistant' })
+      : applyBrandToTranslations(assistant.name_i18n?.[localeKey] || assistant.name);
 
     return (
       <Button
