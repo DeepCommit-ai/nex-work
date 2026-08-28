@@ -27,6 +27,7 @@ import {
 import { buildProvenanceEnvValue, fetchDeptConfig, postReport, toReportBody } from '@/common/deptconfig/client';
 import type { ApplyReport, DeptConfig } from '@/common/deptconfig/types';
 import { buildEnvOverride } from '@/common/gateway/provisionGateway';
+import { GATEWAY_ENV_CONFIG_DIR } from '@/common/gateway/types';
 import type { EnvEntry } from '@/common/gateway/types';
 
 /** aionrs 走 provider 行而非 env——与 006 的网关页共用同一行，避免两处各插一条。 */
@@ -216,6 +217,35 @@ export const applyDeptConfig = async (serverUrl: string, deptKey: string): Promi
   return { status: 'applied', report, drift: posted.drift, reportDetail: posted.detail };
 };
 
+/** Claude Code 的内置 agent id(跨安装稳定,实测过全新实例)。 */
+const CLAUDE_AGENT_ID = '2d23ff1c';
+const DEFAULT_CONFIG_DIR = '~/.nexwork-claude';
+
+/**
+ * 基线隔离:没录入企业接入的机器,也不许 Claude Code 用员工个人的 ~/.claude。
+ *
+ * 不隔离的后果不是"少个功能"而是双向泄漏:员工个人的 skills/CLAUDE.md/MCP 配置
+ * 会注入公司会话,公司会话的 transcript 又落进个人目录(采集器不看那里)。
+ * 企业接入后 CLAUDE_CONFIG_DIR 由服务端 config_dir 下发、全量重放收敛;
+ * 这里只兜"接入前"的窗口:缺了就补默认值,已有(不管是谁设的)绝不动。
+ */
+const ensureBaselineIsolation = async (): Promise<void> => {
+  try {
+    const overrides = await acpConversation.getAgentOverrides.invoke({ id: CLAUDE_AGENT_ID });
+    const env: EnvEntry[] = overrides?.env_override ?? [];
+    if (env.some((e) => e.name === GATEWAY_ENV_CONFIG_DIR && e.value?.trim())) return;
+    await acpConversation.setAgentOverrides.invoke({
+      id: CLAUDE_AGENT_ID,
+      env_override: [...env, { name: GATEWAY_ENV_CONFIG_DIR, value: DEFAULT_CONFIG_DIR }],
+    });
+    console.info('[enterprise] 基线隔离:已为 Claude Code 设置 CLAUDE_CONFIG_DIR(未接入状态)');
+  } catch (e) {
+    // 拿不到 agent(比如这台机器根本没有 claude agent)不算错;真错也只损失隔离,
+    // 不能挡启动——但要留痕。
+    console.warn('[enterprise] 基线隔离未生效', e);
+  }
+};
+
 let bootApplyRunning = false;
 let bootApplyAttempted = false;
 
@@ -262,7 +292,11 @@ export const autoApplyOnBoot = async (): Promise<void> => {
       return; // 不置 attempted：后续若再被触发，允许重来
     }
     bootApplyAttempted = true;
-    if (!serverUrl || !deptKey) return; // 没录入企业接入
+    if (!serverUrl || !deptKey) {
+      // 没录入企业接入——但隔离不等录入(见 ensureBaselineIsolation)。
+      await ensureBaselineIsolation();
+      return;
+    }
 
     const outcome = await applyDeptConfig(serverUrl, deptKey);
     if (outcome.status === 'failed') {

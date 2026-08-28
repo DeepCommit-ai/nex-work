@@ -23,6 +23,7 @@ import ModelModalContent from './contents/ModelModalContent';
 import SystemModalContent from './contents/SystemModalContent';
 import ToolsModalContent from './contents/ToolsModalContent';
 import WebuiModalContent from './contents/WebuiModalContent';
+import FeatureNotAvailable from '@/renderer/pages/settings/FeatureNotAvailable';
 import { SettingsTabNavigateProvider, SettingsViewModeProvider } from './settingsViewContext';
 import { LEGACY_ANCHOR_REMAP } from '@/renderer/pages/settings/components/SettingsSider';
 
@@ -307,7 +308,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onCancel, defaul
       case 'tools':
         return <ToolsModalContent />;
       case 'webui':
-        return <WebuiModalContent />;
+        // [ENTERPRISE PATCH] WebUI 远程访问暂未开通。恢复时换回 <WebuiModalContent />。
+        return <FeatureNotAvailable />;
       case 'system':
         return <SystemModalContent />;
       case 'about':

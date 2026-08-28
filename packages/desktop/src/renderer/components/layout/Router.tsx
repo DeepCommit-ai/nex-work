@@ -19,6 +19,7 @@ const AppearanceSettings = React.lazy(() => import('@renderer/pages/settings/App
 const ModeSettings = React.lazy(() => import('@renderer/pages/settings/ModeSettings'));
 const SystemSettings = React.lazy(() => import('@renderer/pages/settings/SystemSettings'));
 const WebuiSettings = React.lazy(() => import('@renderer/pages/settings/WebuiSettings'));
+const FeatureNotAvailable = React.lazy(() => import('@renderer/pages/settings/FeatureNotAvailable'));
 // [ENTERPRISE PATCH] spec 006 — gateway provisioning
 const GatewaySettings = React.lazy(() => import('@renderer/pages/settings/GatewaySettings'));
 // [ENTERPRISE PATCH] 企业接入 —— 部门配置下发的入口，对员工始终可见
@@ -120,7 +121,8 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/settings/skills-hub' element={<Navigate to='/settings/skills' replace />} />
           <Route path='/settings/appearance' element={withRouteFallback(AppearanceSettings)} />
           <Route path='/settings/display' element={<Navigate to='/settings/appearance' replace />} />
-          <Route path='/settings/webui' element={withRouteFallback(WebuiSettings)} />
+          {/* [ENTERPRISE PATCH] WebUI 远程访问暂未开通——入口保留,页面占位。恢复时换回 withRouteFallback(WebuiSettings)。 */}
+          <Route path='/settings/webui' element={withRouteFallback(FeatureNotAvailable)} />
           {/* [ENTERPRISE PATCH] spec 006 */}
           {/* [ENTERPRISE PATCH] spec 002 FR-3 — the gateway page lists every runtime
               by name, so it is an administrator surface by the same argument as the
