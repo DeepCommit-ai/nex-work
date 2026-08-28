@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { groupMyAssistants } from '@/renderer/pages/settings/AssistantSettings/assistantUtils';
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import {
   isEmoji,
   resolveAvatarImageSrc,
@@ -226,6 +228,27 @@ describe('groupAssistantsByEnabled', () => {
     const { enabledAssistants, disabledAssistants } = groupAssistantsByEnabled(assistants);
     expect(enabledAssistants).toEqual([]);
     expect(disabledAssistants.map((a) => a.id)).toEqual(['a1', 'a2']);
+  });
+});
+
+describe('groupMyAssistants (spec 002)', () => {
+  afterEach(() => setPolicy(STATIC_POLICY));
+
+  const items = [
+    { id: 'cli-a', source: 'generated', sort_order: 2 },
+    { id: 'user-a', source: 'user', sort_order: 1 },
+  ] as AssistantListItem[];
+
+  it('hides the whole CLI group under the concealing default policy', () => {
+    const groups = groupMyAssistants(items);
+    expect(groups.cliAssistants).toEqual([]);
+    expect(groups.createdAssistants.map((a) => a.id)).toEqual(['user-a']);
+  });
+
+  it('keeps the CLI group when the policy reveals CLIs', () => {
+    setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static'));
+    const groups = groupMyAssistants(items);
+    expect(groups.cliAssistants.map((a) => a.id)).toEqual(['cli-a']);
   });
 });
 

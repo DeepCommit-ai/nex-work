@@ -67,6 +67,8 @@ describe('AssistantSelectionArea', () => {
   });
 
   it('prefers localized assistant names for the active locale', () => {
+    // Two assistants: a lone pill is deliberately labelled with the neutral
+    // default-assistant string under the concealing policy (spec 002).
     render(
       <ConfigProvider>
         <AssistantSelectionArea
@@ -91,6 +93,26 @@ describe('AssistantSelectionArea', () => {
               prompts_i18n: {
                 'zh-CN': ['中文提示词'],
               },
+              models: [],
+              agent_status: 'online',
+              team_selectable: true,
+              deletable: false,
+            },
+            {
+              id: 'second-writer',
+              source: 'builtin',
+              name: 'Writer',
+              name_i18n: {},
+              description_i18n: {},
+              enabled: true,
+              sort_order: 2,
+              preset_agent_type: 'claude',
+              enabled_skills: [],
+              custom_skill_names: [],
+              disabled_builtin_skills: [],
+              context_i18n: {},
+              prompts: [],
+              prompts_i18n: {},
               models: [],
               agent_status: 'online',
               team_selectable: true,

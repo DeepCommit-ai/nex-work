@@ -311,11 +311,15 @@ describe('AssistantSelectionArea under the concealing default policy (spec 002)'
   afterEach(() => setPolicy(STATIC_POLICY));
 
   it('rebrands upstream product names in assistant labels', () => {
+    // Two named assistants: a lone pill would take the neutral default label.
     const [, builtinWriter] = assistants();
     render(
       <AssistantSelectionArea
         selectedAssistantId='builtin-writer'
-        assistants={[{ ...builtinWriter, name: 'AionUi Butler' }]}
+        assistants={[
+          { ...builtinWriter, name: 'AionUi Butler' },
+          { ...builtinWriter, id: 'builtin-second', name: 'Second' },
+        ]}
         localeKey='en-US'
         onSelectAssistant={vi.fn()}
       />

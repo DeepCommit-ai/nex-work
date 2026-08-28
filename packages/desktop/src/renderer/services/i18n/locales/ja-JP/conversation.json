@@ -1,7 +1,7 @@
 {
   "welcome": {
     "title": "Hi、今日の予定は何ですか？",
-    "defaultAssistant": "アシスタント",
+    "defaultAssistant": "デフォルトアシスタント",
     "placeholder": "メッセージの送信、ファイルの追加、フォルダーの追加、スケジュールタスクの作成、または / でコマンド呼び出し...",
     "linkFolder": "フォルダを追加",
     "newConversation": "新しいチャット",

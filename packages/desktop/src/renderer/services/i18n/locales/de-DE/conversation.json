@@ -1,7 +1,7 @@
 {
   "welcome": {
     "title": "Hallo, was hast du heute vor?",
-    "defaultAssistant": "Assistent",
+    "defaultAssistant": "Standard-Assistent",
     "placeholder": "Nachricht senden, Dateien hochladen, Ordner öffnen, eine geplante Aufgabe erstellen oder / für Befehle eingeben...",
     "linkFolder": "Ordner öffnen",
     "newConversation": "Neuer Chat",

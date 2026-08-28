@@ -230,13 +230,16 @@ const AssistantSelectionArea: React.FC<AssistantSelectionAreaProps> = ({
   const renderAssistantPill = (assistant: Assistant, testId: string, fullWidth = false) => {
     const avatar = resolveAssistantAvatar(assistant.avatar);
     const isSelected = selectedId === assistant.id;
-    // [ENTERPRISE PATCH] spec 002 — a `generated` assistant's name IS the CLI's
-    // name; the concealment fallback keeps one such pill, so label it neutrally.
-    // Named assistants come from backend data the i18n rewrite never sees
-    // ("AionUi Butler"), so their labels go through the same brand rewrite.
+    // [ENTERPRISE PATCH] spec 002 — two cases get the neutral "default
+    // assistant" label instead of a name: a `generated` assistant (its name IS
+    // the CLI's name), and the single-pill state (one visible assistant means
+    // there is no choice to communicate — the factory state before enterprise
+    // provisioning pushes named assistants). Named assistants otherwise come
+    // from backend data the i18n rewrite never sees ("AionUi Butler"), so their
+    // labels go through the same brand rewrite.
     const label =
-      !cliVisible && assistant.source === 'generated'
-        ? t('conversation.welcome.defaultAssistant', { defaultValue: 'Assistant' })
+      !cliVisible && (assistant.source === 'generated' || enabledAssistants.length === 1)
+        ? t('conversation.welcome.defaultAssistant', { defaultValue: 'Default Assistant' })
         : applyBrandToTranslations(assistant.name_i18n?.[localeKey] || assistant.name);
 
     return (

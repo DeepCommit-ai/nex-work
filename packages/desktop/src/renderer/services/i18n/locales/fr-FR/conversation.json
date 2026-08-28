@@ -1,7 +1,7 @@
 {
   "welcome": {
     "title": "Bonjour, quel est votre plan pour aujourd'hui ?",
-    "defaultAssistant": "Assistant",
+    "defaultAssistant": "Assistant par défaut",
     "placeholder": "Envoyez un message, téléversez des fichiers, ouvrez un dossier, créez une tâche planifiée ou tapez / pour les commandes...",
     "linkFolder": "Ouvrir un dossier",
     "newConversation": "Nouveau chat",

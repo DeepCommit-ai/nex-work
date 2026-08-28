@@ -7,6 +7,7 @@ import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { useLayoutContext } from '@renderer/hooks/context/LayoutContext';
 import { blurActiveElement } from '@renderer/utils/ui/focus';
 import { useThemeContext } from '@renderer/hooks/context/ThemeContext';
+import { useCapability } from '@renderer/hooks/useCapability';
 import { SiderToolbar, SiderSearchEntry, SiderScheduledEntry, SiderAssistantEntry } from './SiderNav';
 import SiderFooter from './SiderFooter';
 import TeamSiderSection from './TeamSiderSection';
@@ -32,6 +33,8 @@ const Sider: React.FC<SiderProps> = ({ onSessionClick, collapsed = false }) => {
   const { theme, setTheme } = useThemeContext();
   const [isBatchMode, setIsBatchMode] = useState(false);
   const isSettings = pathname.startsWith('/settings');
+  // [ENTERPRISE PATCH] spec 002 FR-3
+  const agentSettingsVisible = useCapability('agent.settingsVisible');
   const lastNonSettingsPathRef = useRef('/guid');
   const showLogout =
     typeof window !== 'undefined' && !(window as { electronAPI?: unknown }).electronAPI && status === 'authenticated';
@@ -64,7 +67,11 @@ const Sider: React.FC<SiderProps> = ({ onSessionClick, collapsed = false }) => {
         console.error('Navigation failed:', error);
       });
     } else {
-      Promise.resolve(navigate('/settings/agent')).catch((error) => {
+      // [ENTERPRISE PATCH] spec 002 FR-3 — the agent tab is gated; landing on a
+      // gated route bounces straight back to /guid, which reads as "settings
+      // won't open". Land on the first tab the sider actually shows.
+      const landing = agentSettingsVisible ? '/settings/agent' : '/settings/enterprise';
+      Promise.resolve(navigate(landing)).catch((error) => {
         console.error('Navigation failed:', error);
       });
     }

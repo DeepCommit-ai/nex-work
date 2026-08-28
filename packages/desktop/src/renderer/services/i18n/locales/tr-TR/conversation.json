@@ -1,7 +1,7 @@
 {
   "welcome": {
     "title": "Merhaba, bugünkü planın nedir?",
-    "defaultAssistant": "Asistan",
+    "defaultAssistant": "Varsayılan Asistan",
     "placeholder": "Mesaj gönder, dosya yükle, klasör aç veya komutlar için / yaz...",
     "linkFolder": "Klasör Aç",
     "newConversation": "Yeni Sohbet",

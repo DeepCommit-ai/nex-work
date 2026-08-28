@@ -181,7 +181,11 @@ const isAssistantEditorAgent = (agent: ManagedAgent): boolean => ASSISTANT_EDITO
 export const groupMyAssistants = (assistants: AssistantListItem[]) => {
   return {
     // 'generated' == a bare CLI assistant auto-created from a local CLI tool.
-    cliAssistants: assistants.filter((a) => a.source === 'generated').toSorted(byAssistantSortOrder),
+    // [ENTERPRISE PATCH] spec 002 — with CLI identity concealed the whole
+    // "Your CLI" group vanishes: every entry in it is a CLI name.
+    cliAssistants: can('cli.visible')
+      ? assistants.filter((a) => a.source === 'generated').toSorted(byAssistantSortOrder)
+      : [],
     createdAssistants: assistants.filter((a) => a.source === 'user').toSorted(byAssistantSortOrder),
   };
 };
