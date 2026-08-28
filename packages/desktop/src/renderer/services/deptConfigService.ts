@@ -14,7 +14,7 @@
  * - 上报失败：不阻塞使用，但结果里带回 detail，不静默。
  */
 
-import { acpConversation, assistants as assistantsBridge, mode } from '@/common/adapter/ipcBridge';
+import { acpConversation, application, assistants as assistantsBridge, mode } from '@/common/adapter/ipcBridge';
 import { normalizePolicy, setPolicy } from '@/common/capabilities/policy';
 import { enterpriseStore } from './enterpriseStore';
 import {
@@ -26,8 +26,9 @@ import {
 } from '@/common/deptconfig/applyConfig';
 import { buildProvenanceEnvValue, fetchDeptConfig, postReport, toReportBody } from '@/common/deptconfig/client';
 import type { ApplyReport, DeptConfig } from '@/common/deptconfig/types';
-import { buildEnvOverride } from '@/common/gateway/provisionGateway';
+import { buildEnvOverride, expandLeadingTilde } from '@/common/gateway/provisionGateway';
 import { GATEWAY_ENV_CONFIG_DIR } from '@/common/gateway/types';
+import { isElectronDesktop } from '@/renderer/utils/platform';
 import type { EnvEntry } from '@/common/gateway/types';
 
 /** aionrs 走 provider 行而非 env——与 006 的网关页共用同一行，避免两处各插一条。 */
@@ -108,6 +109,38 @@ const executeWrite = (w: PlannedWrite): Promise<unknown> => {
 };
 
 /**
+ * 后端宿主机的 home 目录——`~` 展开的基准。
+ *
+ * 波浪号展开是 shell 的功能;env 原样传给被 spawn 的 CLI,`~/.nexwork-claude`
+ * 会被当作 cwd 相对路径,在每个 workspace 里长出字面量 `~/` 目录(实测)。
+ * agent 由后端 spawn,所以基准必须是**后端宿主机**的 home:
+ * - 桌面模式:Electron 主进程的 app.getPath('home'),权威。
+ *   (web 模式绝不能调它——in-process bridge 无 handler,invoke 永远 pending,
+ *   正是 enterpriseStore 注释里踩过的那个坑。)
+ * - web 模式:后端 work_dir 的父目录。默认布局 work_dir = <home>/.aionui[-dev],
+ *   这是后端暴露的最接近 home 的锚点。
+ * - 都拿不到:返回 ''——调用方保留原值并把失败报出来,不静默写错路径。
+ */
+const resolveBackendHome = async (): Promise<string> => {
+  if (isElectronDesktop()) {
+    try {
+      const home = await application.getPath.invoke({ name: 'home' });
+      if (home?.trim()) return home.trim();
+    } catch {
+      /* fall through to work_dir */
+    }
+  }
+  try {
+    const info = await application.systemInfo.invoke();
+    const workDir = info?.workDir?.trim().replace(/\/+$/, '');
+    if (workDir && workDir.includes('/')) return workDir.slice(0, workDir.lastIndexOf('/'));
+  } catch {
+    /* unresolvable */
+  }
+  return '';
+};
+
+/**
  * 给清单内的 agent 落网关 env（BASE_URL / AUTH_TOKEN / CONFIG_DIR / 自定义头）。
  *
  * aionrs 例外：它读 provider 行。行内 models 用服务端下发的别名——网关页靠探测
@@ -121,6 +154,12 @@ const provisionGatewayFor = async (
 ): Promise<void> => {
   const gw = cfg.gateway!;
   const provenance = buildProvenanceEnvValue({ dept: cfg.dept, configVersion: cfg.version, clientId });
+  // `~` 在这里展开,不在 buildEnvOverride 里:展开需要 IPC 问 home,纯逻辑层不做 IPC。
+  const home = await resolveBackendHome();
+  const configDir = expandLeadingTilde(gw.config_dir ?? '', home);
+  if ((gw.config_dir ?? '').trim().startsWith('~') && configDir.startsWith('~')) {
+    failures.push('CLAUDE_CONFIG_DIR 展开失败:拿不到后端宿主机 home,`~` 前缀按原样写入(隔离目录会落在 workspace 里)');
+  }
 
   for (const agentId of cfg.agents) {
     const type = agentTypes.get(agentId);
@@ -157,7 +196,7 @@ const provisionGatewayFor = async (
       const env = buildEnvOverride(existing, {
         baseUrl: gw.base_url,
         apiKey: gw.api_key,
-        configDir: gw.config_dir ?? '',
+        configDir,
         customHeadersValue: provenance,
       });
       // PUT 是整体替换（实测：漏掉 command_override 会把它清成 null）。这里只管
@@ -247,12 +286,22 @@ const ensureBaselineIsolation = async (): Promise<void> => {
   try {
     const overrides = await acpConversation.getAgentOverrides.invoke({ id: CLAUDE_AGENT_ID });
     const env: EnvEntry[] = overrides?.env_override ?? [];
-    if (env.some((e) => e.name === GATEWAY_ENV_CONFIG_DIR && e.value?.trim())) return;
+    const existing = env.find((e) => e.name === GATEWAY_ENV_CONFIG_DIR)?.value?.trim() ?? '';
+    // 已有绝对路径(不管谁设的)绝不动;但残留的 `~` 前缀值是本函数旧版写坏的,
+    // 留着它每个 workspace 都会长出字面量 `~/` 目录——必须迁移。
+    if (existing && !existing.startsWith('~')) return;
+    const home = await resolveBackendHome();
+    const value = expandLeadingTilde(existing || DEFAULT_CONFIG_DIR, home);
+    if (value.startsWith('~')) {
+      console.warn('[enterprise] 基线隔离跳过:拿不到后端宿主机 home,不写 `~` 前缀路径');
+      return;
+    }
+    if (value === existing) return;
     await acpConversation.setAgentOverrides.invoke({
       id: CLAUDE_AGENT_ID,
       // 同上：整体替换语义，command_override 带过，别把受管 claude 的钉子抹了。
       command_override: overrides?.command_override ?? null,
-      env_override: [...env, { name: GATEWAY_ENV_CONFIG_DIR, value: DEFAULT_CONFIG_DIR }],
+      env_override: [...env.filter((e) => e.name !== GATEWAY_ENV_CONFIG_DIR), { name: GATEWAY_ENV_CONFIG_DIR, value }],
     });
     console.info('[enterprise] 基线隔离:已为 Claude Code 设置 CLAUDE_CONFIG_DIR(未接入状态)');
   } catch (e) {

@@ -163,6 +163,23 @@ So the join chain the collector relies on — `LiteLLM_SpendLogs.session_id` →
 un-attributable. Closing this needs the client to put a stable conversation id on the
 OpenAI-compatible request, which is out of scope here and is filed rather than hidden.
 
+### Field defect — `~` in `config_dir` is not shell-expanded
+
+Found on the first desktop end-to-end run (2026-08-28): the dept config hands
+`config_dir: "~/.nexwork-claude"`, the client wrote it into `CLAUDE_CONFIG_DIR`
+verbatim, and the spawned CLI treated it as a **cwd-relative** path — tilde
+expansion is a shell feature and no shell is involved. Every workspace grew a
+literal `~/` directory holding a full Claude config dir, which silently split
+the isolation per-workspace and dropped transcripts where no collector looks.
+
+Fixed client-side: `expandLeadingTilde` (pure, tested) expands against the
+backend host's home — Electron `app.getPath('home')` on desktop, the parent of
+the backend `work_dir` in web mode, and if neither resolves the value is left
+alone and the failure is reported rather than a wrong absolute path written.
+The baseline-isolation writer also migrates a previously-written `~` value.
+The server may keep sending `~/…`: the client owns expansion because only it
+knows the host the agent actually spawns on.
+
 ## Open Questions
 
 - **OQ-1** Do non-Anthropic CLI agents (Codex, Gemini) need their own variable names

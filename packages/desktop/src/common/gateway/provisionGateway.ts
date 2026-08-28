@@ -19,6 +19,27 @@ import {
 const findEntry = (entries: readonly EnvEntry[], name: string): EnvEntry | undefined =>
   entries.find((e) => e.name === name);
 
+/**
+ * Expand a leading `~` against the backend host's home directory.
+ *
+ * Tilde expansion is a *shell* feature. Env overrides are handed to the spawned
+ * CLI verbatim, and Claude Code treats an unexpanded `~/.nexwork-claude` as a
+ * path relative to its cwd — measured in the field: every workspace grew a
+ * literal `~/` directory holding a full config dir, so the isolation split
+ * per-workspace and transcripts landed where no collector looks.
+ *
+ * `home` comes from the caller (it needs IPC to learn it); an empty `home`
+ * returns the path unchanged so the caller can surface the failure instead of
+ * silently writing a wrong absolute path.
+ */
+export const expandLeadingTilde = (path: string, home: string): string => {
+  const trimmed = path.trim();
+  if (trimmed !== '~' && !trimmed.startsWith('~/')) return trimmed;
+  const base = home.trim().replace(/\/+$/, '');
+  if (!base) return trimmed;
+  return trimmed === '~' ? base : `${base}${trimmed.slice(1)}`;
+};
+
 /** Normalise for comparison: trailing slashes and surrounding space are not meaningful. */
 const normalizeUrl = (url: string): string => url.trim().replace(/\/+$/, '');
 

@@ -6,6 +6,7 @@ import {
   isIsolated,
   parseGatewayModels,
   planProvisioning,
+  expandLeadingTilde,
 } from '@/common/gateway/provisionGateway';
 import {
   GATEWAY_ENV_CUSTOM_HEADERS,
@@ -250,5 +251,25 @@ describe('buildEnvOverride — provenance header env (ANTHROPIC_CUSTOM_HEADERS)'
     expect(out.filter((e) => e.name === GATEWAY_ENV_CUSTOM_HEADERS)).toEqual([
       { name: GATEWAY_ENV_CUSTOM_HEADERS, value: dept.customHeadersValue },
     ]);
+  });
+});
+
+describe('expandLeadingTilde', () => {
+  it('expands ~ and ~/ against the given home', () => {
+    expect(expandLeadingTilde('~/.nexwork-claude', '/Users/staff')).toBe('/Users/staff/.nexwork-claude');
+    expect(expandLeadingTilde('~', '/Users/staff')).toBe('/Users/staff');
+    expect(expandLeadingTilde('~/.x', '/Users/staff/')).toBe('/Users/staff/.x');
+  });
+
+  it('returns absolute and relative paths unchanged', () => {
+    expect(expandLeadingTilde('/opt/claude', '/Users/staff')).toBe('/opt/claude');
+    expect(expandLeadingTilde('nexwork', '/Users/staff')).toBe('nexwork');
+    // `~x` is a valid (odd) relative name, not a home reference.
+    expect(expandLeadingTilde('~x/dir', '/Users/staff')).toBe('~x/dir');
+  });
+
+  it('keeps the tilde when home is unknown so the caller can surface it', () => {
+    expect(expandLeadingTilde('~/.nexwork-claude', '')).toBe('~/.nexwork-claude');
+    expect(expandLeadingTilde('~/.nexwork-claude', '  ')).toBe('~/.nexwork-claude');
   });
 });
