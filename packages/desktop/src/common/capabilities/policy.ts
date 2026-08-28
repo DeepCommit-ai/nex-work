@@ -71,12 +71,22 @@ export const normalizePolicy = (raw: unknown, source: PolicySource): CapabilityP
   for (const key of Object.keys(DEFAULT_CAPABILITIES) as CapabilityKey[]) {
     if (typeof incoming[key] === 'boolean') capabilities[key] = incoming[key];
   }
+  // agent 显示名(issue #9):只收"字符串→非空字符串",其余丢弃——
+  // 一份坏映射的表现应当是"没改名",而不是界面渲染出 undefined。
+  const rawNames = (r as { agentNames?: unknown }).agentNames;
+  const agentNames: Record<string, string> = {};
+  if (rawNames && typeof rawNames === 'object') {
+    for (const [id, name] of Object.entries(rawNames as Record<string, unknown>)) {
+      if (typeof name === 'string' && name.trim()) agentNames[id] = name.trim();
+    }
+  }
   return {
     version: typeof r.version === 'string' && r.version ? r.version : 'unknown',
     source,
     ttl: typeof r.ttl === 'number' && Number.isFinite(r.ttl) ? r.ttl : 0,
     etag: typeof r.etag === 'string' ? r.etag : '',
     capabilities,
+    ...(Object.keys(agentNames).length ? { agentNames } : {}),
   };
 };
 

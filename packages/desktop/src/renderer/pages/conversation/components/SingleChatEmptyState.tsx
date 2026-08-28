@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import { resolveAgentDisplayName } from '@/renderer/utils/model/agentDisplayName';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import type { TChatConversation } from '@/common/config/storage';
@@ -36,7 +37,9 @@ const resolveAssistantName = (
   if (presetName) return presetName;
   const trimmedExplicitName = explicitAssistantName?.trim();
   if (trimmedExplicitName) return trimmedExplicitName;
-  const extraAgentName = (conversation.extra as { agent_name?: string } | undefined)?.agent_name;
+  const extra = conversation.extra as { agent_name?: string; agent_id?: string } | undefined;
+  // issue #9:agent 行名经显示层出口
+  const extraAgentName = extra?.agent_name ? resolveAgentDisplayName(extra.agent_id, extra.agent_name) : undefined;
   if (extraAgentName && extraAgentName.trim()) return extraAgentName.trim();
   return fallback;
 };

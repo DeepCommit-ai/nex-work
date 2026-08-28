@@ -1,4 +1,5 @@
 import { AgentLogoIcon } from '@/renderer/components/agent/AgentBadge';
+import { resolveAgentDisplayName } from '@/renderer/utils/model/agentDisplayName';
 import type { PresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
 import FlexFullContainer from '@/renderer/components/layout/FlexFullContainer';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
@@ -115,7 +116,8 @@ const ChatLayout: React.FC<{
   const capitalizedBackend = backend ? backend.charAt(0).toUpperCase() + backend.slice(1) : backend;
 
   // Compute display name with fallback chain
-  const display_name = presetAssistant?.name || agent_name || capitalizedBackend;
+  // issue #9:链末端的 backend 名(如 "Claude")经显示层出口,锁定形态下不漏 vendor 名
+  const display_name = presetAssistant?.name || agent_name || resolveAgentDisplayName(undefined, capitalizedBackend);
 
   const {
     splitRatio: workspaceWidthPxPref,

@@ -61,6 +61,12 @@ export type CapabilityPolicy = {
   ttl: number;
   etag: string;
   capabilities: CapabilityMap;
+  /**
+   * [cynapse issue #9] 服务端下发的 agent 显示名(id → 名)。builtin agent 没有
+   * 改名 API(实测 PUT/PATCH 均 404,服务器实例只能手改 DB),所以改名走显示层:
+   * /config 携带 → 存进 policy → resolveAgentDisplayName() 在渲染时替换。
+   */
+  agentNames?: Record<string, string>;
 };
 
 /** Resolves a policy. Implementations: static (ships now), cached, remote. */

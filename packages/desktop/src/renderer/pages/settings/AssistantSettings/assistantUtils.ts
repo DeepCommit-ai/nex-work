@@ -1,4 +1,5 @@
 import { resolveExtensionAssetUrl } from '@/renderer/utils/platform';
+import { resolveAgentDisplayName } from '@/renderer/utils/model/agentDisplayName';
 import { can } from '@/common/capabilities/policy';
 import {
   isBackendRelativeAssetPath,
@@ -231,7 +232,8 @@ export const buildAssistantEditorBackends = (
 
     backendMap.set(agentId, {
       id: agentId,
-      name: agent.name_i18n?.[localeKey] || agent.name,
+      // issue #9:agent 名经显示层出口(服务端下发名 > 中性兜底 > 本地名)
+      name: resolveAgentDisplayName(agentId, agent.name_i18n?.[localeKey] || agent.name),
       runtimeKey,
       isExtension: agent.isExtension,
       // Prefer the agent's own avatar/icon; the dropdown falls back to the logo

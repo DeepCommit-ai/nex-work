@@ -210,7 +210,7 @@ export const applyDeptConfig = async (serverUrl: string, deptKey: string): Promi
 
   // 002：能力开关喂给 policy store。normalizePolicy 兜住缺键/未知键，坏值只会更收紧。
   setPolicy(
-    normalizePolicy({ version: cfg.version, etag: fetched.etag ?? '', capabilities: cfg.capabilities }, 'remote')
+    normalizePolicy({ version: cfg.version, etag: fetched.etag ?? '', capabilities: cfg.capabilities, agentNames: cfg.agent_names ?? undefined }, 'remote')
   );
 
   if (!failures.length) {

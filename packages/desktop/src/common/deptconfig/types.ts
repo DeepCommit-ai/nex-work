@@ -71,6 +71,11 @@ export type DeptConfig = {
   gateway?: GatewaySection;
   /** 002 的能力开关。落实成功后喂给 policy store（normalizePolicy 会兜住缺键与未知键）。 */
   capabilities?: Record<string, boolean>;
+  /**
+   * agent 显示名(id → 名),issue #9。builtin agent 没有改名 API,
+   * 改名在渲染层生效(policy.agentNames → resolveAgentDisplayName)。
+   */
+  agent_names?: Record<string, string> | null;
 };
 
 /**

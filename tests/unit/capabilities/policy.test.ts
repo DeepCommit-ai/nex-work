@@ -110,3 +110,18 @@ describe('the read store', () => {
     expect(can('model.userSelectable')).toBe(getPolicy().capabilities['model.userSelectable']);
   });
 });
+
+describe('normalizePolicy — agentNames（issue #9）', () => {
+  it('carries sane entries through and drops garbage — a bad map must mean "no rename", never a broken UI', () => {
+    const p = normalizePolicy(
+      { version: 'v6', capabilities: {}, agentNames: { a1: ' 通用引擎 ', a2: '', a3: 42 as unknown as string } },
+      'remote'
+    );
+    expect(p.agentNames).toEqual({ a1: '通用引擎' });
+  });
+
+  it('omits the field entirely when nothing survives', () => {
+    const p = normalizePolicy({ version: 'v6', capabilities: {}, agentNames: { a: '' } }, 'remote');
+    expect(p.agentNames).toBeUndefined();
+  });
+});
