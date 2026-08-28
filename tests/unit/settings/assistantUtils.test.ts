@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { groupMyAssistants } from '@/renderer/pages/settings/AssistantSettings/assistantUtils';
 import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import {
@@ -267,6 +267,10 @@ describe('resolveAssistantSourceTag', () => {
 });
 
 describe('buildAssistantEditorBackends', () => {
+  // Display-name mechanics need CLI identity revealed (spec 002 default conceals).
+  beforeEach(() => setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   const agent = (over: Partial<ManagedAgent>): ManagedAgent =>
     ({
       id: 'agent-1',

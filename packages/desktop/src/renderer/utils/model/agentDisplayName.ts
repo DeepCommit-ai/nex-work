@@ -17,7 +17,11 @@ import { can, getPolicy } from '@/common/capabilities/policy';
 
 type TranslateFn = (key: string, options?: { defaultValue?: string }) => string;
 
-export const resolveAgentDisplayName = (agentId: string | undefined, localName: string | undefined, t?: TranslateFn): string => {
+export const resolveAgentDisplayName = (
+  agentId: string | undefined,
+  localName: string | undefined,
+  t?: TranslateFn
+): string => {
   const fallback = localName ?? '';
   try {
     if (agentId) {

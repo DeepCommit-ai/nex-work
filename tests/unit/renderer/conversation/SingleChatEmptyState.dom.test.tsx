@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const useSWRMock = vi.fn();
 const usePresetAssistantInfoMock = vi.fn();
@@ -41,9 +41,15 @@ vi.mock('@renderer/utils/model/agentLogo', () => ({
   resolveAgentAvatar: () => ({ kind: 'fallback' }),
 }));
 
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import SingleChatEmptyState from '@/renderer/pages/conversation/components/SingleChatEmptyState';
 
 describe('SingleChatEmptyState', () => {
+  // The shipped policy conceals CLI identity (spec 002); these tests exercise
+  // display-name mechanics with it revealed.
+  beforeEach(() => setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   beforeEach(() => {
     useSWRMock.mockReset();
     usePresetAssistantInfoMock.mockReset();

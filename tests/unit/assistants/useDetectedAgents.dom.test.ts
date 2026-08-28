@@ -4,12 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import { buildAssistantEditorBackends } from '@/renderer/pages/settings/AssistantSettings/assistantUtils';
 import type { ManagedAgent } from '@/renderer/utils/model/agentTypes';
 
 describe('buildAssistantEditorBackends', () => {
+  // The shipped policy conceals CLI identity (spec 002); these tests exercise
+  // display-name mechanics with it revealed.
+  beforeEach(() => setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   it('derives editor backends from supported management agents and allows unchecked agents', () => {
     const agents: ManagedAgent[] = [
       managedAgent({ id: 'agent-cursor', backend: 'cursor', name: 'Cursor', status: 'unchecked' }),

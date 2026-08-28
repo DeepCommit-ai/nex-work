@@ -304,7 +304,9 @@ const ChatConversation: React.FC<{
   // issue #9:extra.agent_name 是 aioncore 写入的 agent 行名(如 "Claude Code"),
   // 经显示层出口替换;extra.agent_id 用于查服务端下发名。
   const conversationExtra = conversation?.extra as { agent_name?: string; agent_id?: string } | undefined;
-  const conversationAgentName = conversationExtra?.agent_name ? resolveAgentDisplayName(conversationExtra.agent_id, conversationExtra.agent_name) : undefined;
+  const conversationAgentName = conversationExtra?.agent_name
+    ? resolveAgentDisplayName(conversationExtra.agent_id, conversationExtra.agent_name)
+    : undefined;
   const assistantDisplayName = presetAssistantInfo?.name || conversationAgentName;
 
   const conversationNode = useMemo(() => {

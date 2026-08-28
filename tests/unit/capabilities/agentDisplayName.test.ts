@@ -6,7 +6,12 @@ afterEach(() => setPolicy(STATIC_POLICY));
 
 describe('resolveAgentDisplayName（issue #9）', () => {
   it('prefers the server-delivered name', () => {
-    setPolicy(normalizePolicy({ version: 'v6', capabilities: { 'cli.visible': false }, agentNames: { '2d23ff1c': '通用引擎' } }, 'remote'));
+    setPolicy(
+      normalizePolicy(
+        { version: 'v6', capabilities: { 'cli.visible': false }, agentNames: { '2d23ff1c': '通用引擎' } },
+        'remote'
+      )
+    );
     expect(resolveAgentDisplayName('2d23ff1c', 'Claude Code')).toBe('通用引擎');
   });
 
