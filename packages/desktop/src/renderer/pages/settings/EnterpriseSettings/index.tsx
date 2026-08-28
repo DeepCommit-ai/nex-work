@@ -136,7 +136,9 @@ const EnterpriseSettings: React.FC = () => {
           <div className='flex flex-col gap-8px text-13px'>
             <div>
               {t('settings.enterprise.summary', {
-                defaultValue: '本轮：改指 {{re}} 项，启用助手 {{on}} 个，停用 {{off}} 个；当前可见助手 {{final}} 个',
+                defaultValue: '本轮：新建 {{imp}} 个，钉模型 {{pin}} 项，改指 {{re}} 项，启用助手 {{on}} 个，停用 {{off}} 个；当前可见助手 {{final}} 个',
+                imp: outcome.report.imported.length,
+                pin: outcome.report.modelPinned.length,
                 re: outcome.report.repointed.length,
                 on: outcome.report.assistantsEnabled.length,
                 off: outcome.report.assistantsDisabled.length,

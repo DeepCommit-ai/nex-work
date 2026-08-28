@@ -49,14 +49,50 @@ const readCurrentState = async (): Promise<{ state: CurrentState; agentTypes: Ma
   };
 };
 
+/**
+ * 给"配置里带 fixed_model 的助手"补上当前钉着的模型（issue #6 的幂等前提）。
+ *
+ * 列表 API 不带 defaults，逐个取 detail 又太贵——所以只取需要比对的那几个
+ * （现实中就一个 Butler）。取失败不抛：fixed_model 留 undefined，planWrites
+ * 会照样下钉（幂等 PUT），"读不到现状"绝不能静默当成"已经钉好"。
+ */
+const enrichPinnedModels = async (cfg: DeptConfig, state: CurrentState): Promise<void> => {
+  const wantPin = cfg.assistants.filter((a) => a.fixed_model);
+  for (const spec of wantPin) {
+    const cur = state.assistants.find((a) => a.id === spec.id);
+    if (!cur) continue;
+    try {
+      const detail = await assistantsBridge.get.invoke({ id: spec.id });
+      if (detail?.defaults?.model?.mode === 'fixed') cur.fixed_model = detail.defaults.model.value ?? null;
+      else if (detail) cur.fixed_model = null;
+    } catch {
+      /* 留 undefined → 下钉 */
+    }
+  }
+};
+
 const executeWrite = (w: PlannedWrite): Promise<unknown> => {
   switch (w.kind) {
     case 'agent.enable':
       return acpConversation.setAgentEnabled.invoke({ id: w.id, enabled: true });
     case 'agent.disable':
       return acpConversation.setAgentEnabled.invoke({ id: w.id, enabled: false });
+    case 'assistant.import':
+      // 服务端定义 → 本地 custom 助手（issue #7）。agent_id / fixed_model 随创建
+      // 载荷一并落地，planWrites 不再为它补 repoint/pin。
+      return assistantsBridge.create.invoke({
+        id: w.spec.id,
+        name: w.spec.name!.trim(),
+        ...(w.spec.description ? { description: w.spec.description } : {}),
+        ...(w.spec.avatar ? { avatar: w.spec.avatar } : {}),
+        ...(w.spec.agent_id ? { agent_id: w.spec.agent_id } : {}),
+        ...(w.spec.fixed_model ? { defaults: { model: { mode: 'fixed', value: w.spec.fixed_model } } } : {}),
+      });
     case 'assistant.repoint':
       return assistantsBridge.update.invoke({ id: w.id, agent_id: w.agentId });
+    case 'assistant.pin_model':
+      // 只动 defaults.model，别的字段不带——update 是 partial，带了才会改。
+      return assistantsBridge.update.invoke({ id: w.id, defaults: { model: { mode: 'fixed', value: w.model } } });
     case 'assistant.enable':
       return assistantsBridge.setState.invoke({ id: w.id, enabled: true });
     case 'assistant.disable':
@@ -125,6 +161,7 @@ export const applyDeptConfig = async (serverUrl: string, deptKey: string): Promi
 
   const failures: string[] = [];
   const { state: before, agentTypes } = await readCurrentState();
+  await enrichPinnedModels(cfg, before);
   const writes = planWrites(cfg, before);
   console.info('[enterprise] 落实中', { version: cfg.version, dept: cfg.dept, writes: writes.length });
   for (const w of writes) {

@@ -136,3 +136,78 @@ describe('buildReport', () => {
     expect(rep.failures).toHaveLength(1);
   });
 });
+
+describe('planWrites — 服务端定义的 import 与钉模型（issue #7 / #6）', () => {
+  it('imports a missing assistant that carries a definition, then enables it', () => {
+    const c = cfg({
+      assistants: [
+        { id: 'word', agent_id: 'claude' },
+        { id: 'da', agent_id: 'claude', name: '默认助手', description: '通用助手，无预设指令' },
+      ],
+    });
+    const writes = planWrites(c, world());
+    const kinds = writes.filter((w) => 'id' in w && w.id === 'da').map((w) => w.kind);
+    // import 在 enable 之前：反过来 enable 一个不存在的 id 会如实失败。
+    expect(kinds).toEqual(['assistant.import', 'assistant.enable']);
+    // import 自带 agent_id，不再补 repoint。
+    expect(writes.some((w) => w.kind === 'assistant.repoint' && w.id === 'da')).toBe(false);
+  });
+
+  it('does NOT invent an import for a missing assistant without a definition', () => {
+    // 维持旧行为：enable 在执行时如实失败进 failures。静默跳过会把
+    // "这台机器少一个助手"表现成"配置成功"。
+    const c = cfg({ assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'ghost' }] });
+    const writes = planWrites(c, world());
+    expect(writes.some((w) => w.kind === 'assistant.import')).toBe(false);
+    expect(writes).toContainEqual({ kind: 'assistant.enable', id: 'ghost' });
+  });
+
+  it('pins the default model when the current pin differs, and stays quiet when it matches', () => {
+    const c = cfg({ model_aliases: ['glm-4.7'], assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler', fixed_model: 'glm-4.7' }] });
+    const drifted = world();
+    expect(planWrites(c, drifted)).toContainEqual({ kind: 'assistant.pin_model', id: 'butler', model: 'glm-4.7' });
+
+    const pinned = world();
+    pinned.assistants.find((a) => a.id === 'butler')!.fixed_model = 'glm-4.7';
+    expect(planWrites(c, pinned).some((w) => w.kind === 'assistant.pin_model')).toBe(false);
+  });
+
+  it('pins even when the current pin is unreadable — silence must not pass for done', () => {
+    // detail 取失败时 fixed_model 是 undefined：宁可多写一次幂等 PUT，
+    // 也不能把"读不到现状"当成"已经钉好"。
+    const c = cfg({ model_aliases: ['glm-4.7'], assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler', fixed_model: 'glm-4.7' }] });
+    const w = world(); // butler.fixed_model 未设置 = undefined
+    expect(planWrites(c, w)).toContainEqual({ kind: 'assistant.pin_model', id: 'butler', model: 'glm-4.7' });
+  });
+});
+
+describe('validateConfig — fixed_model', () => {
+  it('rejects a pin outside model_aliases', () => {
+    const c = cfg({ model_aliases: ['glm-4.7'], assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler', fixed_model: 'glm-9' }] });
+    expect(validateConfig(c)).toContainEqual(expect.stringContaining('fixed_model'));
+  });
+
+  it('accepts a pin that is in model_aliases', () => {
+    const c = cfg({ model_aliases: ['glm-4.7'], assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler', fixed_model: 'glm-4.7' }] });
+    expect(validateConfig(c)).toEqual([]);
+  });
+});
+
+describe('buildReport — import/pin 计入报告', () => {
+  it('reports imported and pinned ids', () => {
+    const writes = planWrites(
+      cfg({
+        model_aliases: ['glm-4.7'],
+        assistants: [
+          { id: 'word', agent_id: 'claude' },
+          { id: 'da', agent_id: 'claude', name: '默认助手' },
+          { id: 'butler', fixed_model: 'glm-4.7' },
+        ],
+      }),
+      world()
+    );
+    const rep = buildReport('v4', writes, world(), []);
+    expect(rep.imported).toEqual(['da']);
+    expect(rep.modelPinned).toEqual(['butler']);
+  });
+});

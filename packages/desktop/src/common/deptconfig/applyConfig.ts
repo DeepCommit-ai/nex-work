@@ -28,14 +28,29 @@ import type { ApplyReport, AssistantSpec, DeptConfig } from './types';
 /** 落实需要知道的当前状态。 */
 export type CurrentState = {
   agents: { id: string; enabled: boolean }[];
-  assistants: { id: string; enabled: boolean; agent_id?: string | null }[];
+  assistants: {
+    id: string;
+    enabled: boolean;
+    agent_id?: string | null;
+    /**
+     * 当前钉着的默认模型（`defaults.model.mode === 'fixed'` 时的 value）。
+     * 列表 API 不带 defaults，这个字段由编排层对"配置里带 fixed_model 的助手"
+     * 单独取 detail 填入；undefined = 没取到。**没取到时照样下钉**（幂等 PUT），
+     * 宁可多写一次也不能把"读不到现状"静默当成"已经钉好"。
+     */
+    fixed_model?: string | null;
+  }[];
 };
 
 /** 一个待执行的写操作。按数组顺序执行。 */
 export type PlannedWrite =
   | { kind: 'agent.enable'; id: string }
   | { kind: 'agent.disable'; id: string }
+  /** 本地没有这个 id 且配置带 name（完整定义）：按定义创建（issue #7）。 */
+  | { kind: 'assistant.import'; id: string; spec: AssistantSpec }
   | { kind: 'assistant.repoint'; id: string; agentId: string }
+  /** 把 defaults.model 钉成 fixed（issue #6）。 */
+  | { kind: 'assistant.pin_model'; id: string; model: string }
   | { kind: 'assistant.enable'; id: string }
   | { kind: 'assistant.disable'; id: string };
 
@@ -63,6 +78,12 @@ export const validateConfig = (cfg: DeptConfig): string[] => {
   if (unknown.length) {
     problems.push(`助手 ${unknown.join(', ')} 改指到不在启用清单里的 agent——界面上会是报错卡片且不会自行恢复`);
   }
+  const badPin = (cfg.assistants ?? []).filter((a) => a.fixed_model && !cfg.model_aliases?.includes(a.fixed_model));
+  if (badPin.length) {
+    // 钉一个别名表里没有的模型，新会话在网关拿到 404——员工看到"发不出消息"。
+    // 服务端也拦，这里是客户端执行前的最后防线（同一坏响应可能只坏一半）。
+    problems.push(`助手 ${badPin.map((a) => a.id).join(', ')} 钉的 fixed_model 不在 model_aliases 里——新会话会在网关得到 404`);
+  }
   if (!cfg.gateway?.base_url?.trim() || !cfg.gateway?.api_key?.trim()) {
     // 半份网关配置（有地址没 token，或全都没有）会让流量绕过网关或每次 401，
     // 且两种失败此刻都表现成"配置成功"。服务端已保证带全，缺了就是响应坏了。
@@ -88,8 +109,20 @@ export const planWrites = (cfg: DeptConfig, current: CurrentState): PlannedWrite
   const assistantWrites: PlannedWrite[] = [];
   for (const spec of cfg.assistants) {
     const cur = byId.get(spec.id);
+    if (!cur && spec.name?.trim()) {
+      // 本地缺这个 id 且配置带定义：先 import 再 enable。import 自带
+      // agent_id / fixed_model（创建载荷里就有），不再补 repoint/pin。
+      assistantWrites.push({ kind: 'assistant.import', id: spec.id, spec });
+      assistantWrites.push({ kind: 'assistant.enable', id: spec.id });
+      continue;
+    }
+    // 本地缺、又没带定义：维持旧行为——enable 会在执行时如实失败进 failures。
+    // 静默跳过会把"这台机器少一个助手"表现成"配置成功"。
     if (spec.agent_id && cur?.agent_id !== spec.agent_id) {
       assistantWrites.push({ kind: 'assistant.repoint', id: spec.id, agentId: spec.agent_id });
+    }
+    if (spec.fixed_model && cur && cur.fixed_model !== spec.fixed_model) {
+      assistantWrites.push({ kind: 'assistant.pin_model', id: spec.id, model: spec.fixed_model });
     }
     if (!cur?.enabled) assistantWrites.push({ kind: 'assistant.enable', id: spec.id });
   }
@@ -125,6 +158,8 @@ export const buildReport = (
   assistantsEnabled: writes.filter((w) => w.kind === 'assistant.enable').map((w) => w.id),
   assistantsDisabled: writes.filter((w) => w.kind === 'assistant.disable').map((w) => w.id),
   repointed: writes.filter((w) => w.kind === 'assistant.repoint').map((w) => w.id),
+  imported: writes.filter((w) => w.kind === 'assistant.import').map((w) => w.id),
+  modelPinned: writes.filter((w) => w.kind === 'assistant.pin_model').map((w) => w.id),
   failures,
   finalAgents: after.agents
     .filter((a) => a.enabled)

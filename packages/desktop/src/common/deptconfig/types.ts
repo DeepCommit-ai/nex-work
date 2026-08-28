@@ -7,7 +7,13 @@
  * NexWork 的本地 API 落实（方案 A）。这样零 Rust 改动，改动落在我们自己维护的那一层。
  */
 
-/** 一个要对员工可见的助手。 */
+/**
+ * 一个要对员工可见的助手。
+ *
+ * 只有 id（+ agent_id）时是"引用"：本地必须已有这个助手，缺了就是落实失败。
+ * 带 name 时是"定义"（cynapse issue #7）：本地没有这个 id 就按它创建——
+ * 新装机器长出与服务器一致的助手，而不是依赖某台机器的手工记录。
+ */
 export type AssistantSpec = {
   id: string;
   /**
@@ -19,6 +25,17 @@ export type AssistantSpec = {
    * 正常回答。
    */
   agent_id?: string | null;
+  /** 显示名。有值 = 这条是可 import 的完整定义。 */
+  name?: string | null;
+  description?: string | null;
+  /** 头像。留空 = 首字头像，不带厂商 logo。 */
+  avatar?: string | null;
+  /**
+   * 钉死该助手新会话的默认模型（落成 `defaults.model = {mode:'fixed'}`）。
+   * 用途见 cynapse issue #6：glm-5.3 在 aionrs 工具协议下"工具失明"，
+   * Butler 必须钉回 glm-4.7。不写 = 不碰本地的 defaults。
+   */
+  fixed_model?: string | null;
 };
 
 /**
@@ -75,6 +92,10 @@ export type ApplyReport = {
   assistantsEnabled: string[];
   assistantsDisabled: string[];
   repointed: string[];
+  /** 本轮按服务端定义新建的助手（issue #7 的 import 路径）。 */
+  imported: string[];
+  /** 本轮被钉了默认模型的助手（issue #6）。 */
+  modelPinned: string[];
   failures: string[];
   /**
    * 落实后实际处于启用状态的集合（FR-8 回读）。

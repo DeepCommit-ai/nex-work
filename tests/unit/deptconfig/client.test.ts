@@ -63,7 +63,7 @@ describe('toReportBody', () => {
     const rep: ApplyReport = {
       version: 'v2',
       agentsEnabled: ['a'], agentsDisabled: [], assistantsEnabled: ['w'], assistantsDisabled: [],
-      repointed: ['w'], failures: ['x 失败'],
+      repointed: ['w'], imported: [], modelPinned: [], failures: ['x 失败'],
       finalAgents: ['a', 'b'], finalAssistants: ['w', 'z'],
     };
     expect(toReportBody(rep, 'm-1')).toEqual({
