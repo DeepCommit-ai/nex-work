@@ -15,6 +15,7 @@ export {
   stopBackend,
 } from './backend-launcher.js';
 export type { BackendDirConfig, BackendLaunchOptions, BackendHandle, BackendStartOptions } from './backend-launcher.js';
+export { provisionManagedClaude, deriveClaudeBinaryPath, CLAUDE_AGENT_ID } from './managed-claude.js';
 
 /**
  * Start WebHost (main entry point).

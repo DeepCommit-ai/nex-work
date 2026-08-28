@@ -104,10 +104,13 @@ const GatewaySettings: React.FC = () => {
 
       const { toWrite } = planProvisioning(runtimes, config, resolved);
 
-      const provisionOne = (w: { runtimeId: string; env: (typeof toWrite)[number]['env'] }) => {
+      const provisionOne = async (w: { runtimeId: string; env: (typeof toWrite)[number]['env'] }) => {
         const rt = runtimes.find((r) => r.runtimeId === w.runtimeId);
         if (rt?.agentType !== 'aionrs') {
-          return acpConversation.setAgentOverrides.invoke({ id: w.runtimeId, env_override: w.env });
+          // PUT 是整体替换：command_override（受管 claude 的钉子，issue #8）必须
+          // 先读出来原样带过，否则每次保存网关配置都会把它清掉。
+          const cur = await acpConversation.getAgentOverrides.invoke({ id: w.runtimeId });
+          return acpConversation.setAgentOverrides.invoke({ id: w.runtimeId, command_override: cur?.command_override ?? null, env_override: w.env });
         }
         // aionrs reaches the gateway through a provider row, not env. The row
         // carries the model list, without which nothing can be sent, and it is

@@ -160,7 +160,9 @@ const provisionGatewayFor = async (
         configDir: gw.config_dir ?? '',
         customHeadersValue: provenance,
       });
-      await acpConversation.setAgentOverrides.invoke({ id: agentId, env_override: env });
+      // PUT 是整体替换（实测：漏掉 command_override 会把它清成 null）。这里只管
+      // env，command_override（受管 claude 的钉子，issue #8）必须原样带过。
+      await acpConversation.setAgentOverrides.invoke({ id: agentId, command_override: overrides?.command_override ?? null, env_override: env });
     } catch (e) {
       failures.push(`网关下发 ${agentId}：${e instanceof Error ? e.message : String(e)}`);
     }
@@ -236,6 +238,8 @@ const ensureBaselineIsolation = async (): Promise<void> => {
     if (env.some((e) => e.name === GATEWAY_ENV_CONFIG_DIR && e.value?.trim())) return;
     await acpConversation.setAgentOverrides.invoke({
       id: CLAUDE_AGENT_ID,
+      // 同上：整体替换语义，command_override 带过，别把受管 claude 的钉子抹了。
+      command_override: overrides?.command_override ?? null,
       env_override: [...env, { name: GATEWAY_ENV_CONFIG_DIR, value: DEFAULT_CONFIG_DIR }],
     });
     console.info('[enterprise] 基线隔离:已为 Claude Code 设置 CLAUDE_CONFIG_DIR(未接入状态)');

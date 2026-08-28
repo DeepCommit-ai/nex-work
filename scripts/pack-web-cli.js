@@ -32,6 +32,10 @@ prepareAioncore({
   version: resolveAioncoreVersion(projectRoot),
 });
 
+// 1b. Prepare bundled-claude（cynapse issue #8：客户离线环境的 claude 只能来自安装包）
+console.log('1b. Preparing pinned claude...');
+execSync(`node ${path.join(__dirname, 'prepareClaude.js')} --platform ${platform} --arch ${arch}`, { stdio: 'inherit' });
+
 // 2. Create staging dir
 console.log('3. Creating staging dir...');
 const stagingDir = path.join(distDir, 'staging');
@@ -85,6 +89,16 @@ if (!fs.existsSync(backendSrc)) {
 }
 fs.mkdirSync(path.dirname(backendDest), { recursive: true });
 fs.cpSync(backendSrc, backendDest, { recursive: true });
+
+// 7b. Copy bundled-claude（与 bundled-aioncore 同级；web-host 按此相对布局推导）
+const claudeSrc = path.join(projectRoot, 'resources/bundled-claude');
+const claudeDest = path.join(tarballContentDir, 'bundled-claude');
+const claudeBin = platform === 'win32' ? 'claude.exe' : 'claude';
+if (!fs.existsSync(path.join(claudeSrc, `${platform}-${arch}`, claudeBin))) {
+  // 硬失败：静默缺载荷的产物在客户离线环境里 = Claude 整个不可用且没有报错。
+  throw new Error(`bundled-claude missing at ${claudeSrc}. Ensure prepareClaude succeeded.`);
+}
+fs.cpSync(claudeSrc, claudeDest, { recursive: true });
 
 // 8. Create tarball
 fs.mkdirSync(distDir, { recursive: true });

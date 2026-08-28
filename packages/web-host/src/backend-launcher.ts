@@ -561,7 +561,17 @@ export class BackendLifecycleManager {
     let lastPeerError: unknown;
     for (let attempt = 0; attempt < PEER_RETRY_MAX_ATTEMPTS; attempt += 1) {
       try {
-        return await this.attemptStart(dbPath, logDir, dirs, options, preferredPort, launchFlags);
+        const port = await this.attemptStart(dbPath, logDir, dirs, options, preferredPort, launchFlags);
+        // [ENTERPRISE PATCH] cynapse issue #8：后端就绪后把 Claude Code 钉到捆绑
+        // 载荷（受管 node + pinned cli.js），不再用员工 PATH 上自己的 claude。
+        // 内部永不 throw；找不到载荷会响亮跳过并回落旧行为。
+        try {
+          const { provisionManagedClaude } = await import('./managed-claude.js');
+          await provisionManagedClaude({ aioncoreBinaryPath: this.resolveBackend(), backendPort: port });
+        } catch (e) {
+          console.warn('[managed-claude] 加载失败（不影响后端启动）', e);
+        }
+        return port;
       } catch (error) {
         if (!this.isPeerAlreadyRunningError(error) || attempt >= PEER_RETRY_MAX_ATTEMPTS - 1) {
           throw error;

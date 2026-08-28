@@ -117,6 +117,9 @@ extraResources:
   # aioncore binary (pre-compiled per platform/arch, ships its own bun runtime)
   - from: resources/bundled-aioncore
     to: bundled-aioncore
+  # pinned Claude Code（cynapse issue #8：不用员工本地 claude；受管 node 运行）
+  - from: resources/bundled-claude
+    to: bundled-claude
   - from: resources/hub
     to: hub
 win:

@@ -262,6 +262,7 @@
     "node": ">=22 <25"
   },
   "aioncoreVersion": "v0.1.72",
+  "claudeCodeVersion": "2.1.250",
   "electronRebuild": {
     "electronVersion": "^37.3.1"
   },

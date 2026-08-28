@@ -29,6 +29,15 @@ function verifyBundledResources(resourcesDir, electronPlatformName, targetArch) 
     targetArch,
   });
 
+  // cynapse issue #8：受管 claude 载荷也硬校验——静默缺载荷的桌面包在客户
+  // 离线环境里 = Claude 回落员工本地 PATH，恰是这个 issue 要消灭的行为。
+  const claudePlat = electronPlatformName === 'darwin' ? 'darwin' : electronPlatformName === 'win32' ? 'win32' : 'linux';
+  const claudeExe = claudePlat === 'win32' ? 'claude.exe' : 'claude';
+  const bundledClaudeBin = path.join(resourcesDir, 'bundled-claude', `${claudePlat}-${targetArch}`, claudeExe);
+  if (!fs.existsSync(bundledClaudeBin)) {
+    result.missing.push(`bundled-claude/${claudePlat}-${targetArch}/${claudeExe}（先跑 node scripts/prepareClaude.js --platform ${claudePlat} --arch ${targetArch}）`);
+  }
+
   if (result.missing.length > 0) {
     console.error(`   Missing bundled resources: ${result.missing.join(', ')}`);
     throw new Error(`Packaged app is missing required bundled resource(s): ${result.missing.join(', ')}`);
