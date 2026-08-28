@@ -18,6 +18,7 @@ import {
 } from '@/renderer/utils/model/agentRuntimeCatalog';
 import type { SlashCommandItem } from '@/common/chat/slash/types';
 import { useManagedAgentRuntimeCatalog } from '@/renderer/hooks/agent/useManagedAgents';
+import { selectableAssistants } from '@/renderer/utils/model/assistantSelection';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useCustomAgentsLoader } from './useCustomAgentsLoader';
 
@@ -91,8 +92,10 @@ export function resolveAssistantSelectionKey(
 
 function readPersistedGuidAssistantSelectionKey(assistants: Assistant[]): string | undefined {
   const savedKey = configService.get('guid.lastAssistantId');
-  const enabledAssistants = assistants.filter((assistant) => assistant.enabled !== false);
-  return resolveAssistantSelectionKey(savedKey, enabledAssistants);
+  // [ENTERPRISE PATCH] spec 002 — resolve against the *selectable* list, not the
+  // raw enabled one: a saved key pointing at a concealed bare CLI must fall
+  // through to the default rather than silently select an invisible assistant.
+  return resolveAssistantSelectionKey(savedKey, selectableAssistants(assistants));
 }
 
 function persistGuidAssistantSelectionKey(assistantId: string): void {
@@ -102,7 +105,11 @@ function persistGuidAssistantSelectionKey(assistantId: string): void {
 }
 
 export function pickDefaultAssistantSelectionKey(assistants: Assistant[]): string | null {
-  const enabledAssistants = assistants.filter((assistant) => assistant.enabled !== false);
+  // [ENTERPRISE PATCH] spec 002 — pick from the *selectable* list so the default
+  // is an assistant the pill bar actually shows. With CLIs concealed that is the
+  // enabled builtin (e.g. the Butler); with them revealed the generated-aionrs
+  // preference below behaves exactly as before.
+  const enabledAssistants = selectableAssistants(assistants);
   const preferred =
     enabledAssistants.find((assistant) => assistant.source === 'generated' && isAionrsAssistant(assistant)) ??
     enabledAssistants.find((assistant) => isAionrsAssistant(assistant)) ??

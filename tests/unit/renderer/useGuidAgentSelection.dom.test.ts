@@ -5,7 +5,8 @@
  */
 
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import type { ManagedAgent } from '@/renderer/utils/model/agentTypes';
 import {
@@ -43,6 +44,11 @@ vi.mock('@/renderer/hooks/agent/useManagedAgents', () => ({
 }));
 
 describe('useGuidAssistantSelection', () => {
+  // The shipped policy conceals bare-CLI (`generated`) assistants; these tests
+  // exercise selection/persistence mechanics with them visible.
+  beforeEach(() => setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   beforeEach(() => {
     configGetMock.mockReturnValue(undefined);
     configSetMock.mockResolvedValue(undefined);

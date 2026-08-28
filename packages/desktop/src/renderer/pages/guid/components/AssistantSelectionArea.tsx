@@ -11,6 +11,7 @@ import { Button } from '@arco-design/web-react';
 import { AionSearchInput } from '@/renderer/components/base';
 import { useAssistantOrder } from '@/renderer/hooks/assistant/useAssistantOrder';
 import { useCapability } from '@/renderer/hooks/useCapability';
+import { applyBrandToTranslations } from '@/branding/translations';
 import { useManagedAgentRuntimeCatalog } from '@/renderer/hooks/agent/useManagedAgents';
 import { managedAgentSearchText } from '@/renderer/utils/model/agentTypes';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -231,10 +232,12 @@ const AssistantSelectionArea: React.FC<AssistantSelectionAreaProps> = ({
     const isSelected = selectedId === assistant.id;
     // [ENTERPRISE PATCH] spec 002 — a `generated` assistant's name IS the CLI's
     // name; the concealment fallback keeps one such pill, so label it neutrally.
+    // Named assistants come from backend data the i18n rewrite never sees
+    // ("AionUi Butler"), so their labels go through the same brand rewrite.
     const label =
       !cliVisible && assistant.source === 'generated'
         ? t('conversation.welcome.defaultAssistant', { defaultValue: 'Assistant' })
-        : assistant.name_i18n?.[localeKey] || assistant.name;
+        : applyBrandToTranslations(assistant.name_i18n?.[localeKey] || assistant.name);
 
     return (
       <Button

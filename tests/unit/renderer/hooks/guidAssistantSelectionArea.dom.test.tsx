@@ -310,6 +310,22 @@ describe('AssistantSelectionArea under the concealing default policy (spec 002)'
   // No setPolicy here: STATIC_POLICY ships with `cli.visible: false`.
   afterEach(() => setPolicy(STATIC_POLICY));
 
+  it('rebrands upstream product names in assistant labels', () => {
+    const [, builtinWriter] = assistants();
+    render(
+      <AssistantSelectionArea
+        selectedAssistantId='builtin-writer'
+        assistants={[{ ...builtinWriter, name: 'AionUi Butler' }]}
+        localeKey='en-US'
+        onSelectAssistant={vi.fn()}
+      />
+    );
+
+    const pill = screen.getByTestId('preset-pill-builtin-writer');
+    expect(pill.textContent).toContain('NexWork Butler');
+    expect(pill.textContent).not.toContain('AionUi');
+  });
+
   it('hides bare-CLI pills when named assistants exist', () => {
     render(
       <AssistantSelectionArea
