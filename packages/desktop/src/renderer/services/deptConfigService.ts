@@ -162,7 +162,11 @@ const provisionGatewayFor = async (
       });
       // PUT 是整体替换（实测：漏掉 command_override 会把它清成 null）。这里只管
       // env，command_override（受管 claude 的钉子，issue #8）必须原样带过。
-      await acpConversation.setAgentOverrides.invoke({ id: agentId, command_override: overrides?.command_override ?? null, env_override: env });
+      await acpConversation.setAgentOverrides.invoke({
+        id: agentId,
+        command_override: overrides?.command_override ?? null,
+        env_override: env,
+      });
     } catch (e) {
       failures.push(`网关下发 ${agentId}：${e instanceof Error ? e.message : String(e)}`);
     }

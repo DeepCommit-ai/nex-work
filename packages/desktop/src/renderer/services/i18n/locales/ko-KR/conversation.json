@@ -1,6 +1,7 @@
 {
   "welcome": {
     "title": "안녕하세요, 오늘의 계획은 무엇인가요?",
+    "defaultAssistant": "어시스턴트",
     "placeholder": "메시지 전송, 파일 업로드, 폴더 열기, 예약 작업 만들기 또는 / 로 명령 호출...",
     "linkFolder": "폴더 열기",
     "newConversation": "새 채팅",

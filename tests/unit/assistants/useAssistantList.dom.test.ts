@@ -7,7 +7,7 @@
  * Tests useAssistantList hook: load, sort, and active selection behavior.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 const assistantOrderConfigMock = vi.hoisted(() => {
@@ -59,12 +59,19 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import { useAssistantList } from '@/renderer/hooks/assistant/useAssistantList';
 import { normalizeAssistantOrder } from '@/renderer/hooks/assistant/useAssistantOrder';
 import { ipcBridge } from '@/common';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 
 describe('useAssistantList', () => {
+  // The shipped policy conceals bare-CLI (`generated`) assistants; these tests
+  // exercise list mechanics with them visible (concealment is covered by
+  // tests/unit/renderer/assistantSelection.test.ts).
+  beforeEach(() => setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   beforeEach(() => {
     vi.clearAllMocks();
     assistantOrderConfigMock.state.value = undefined;

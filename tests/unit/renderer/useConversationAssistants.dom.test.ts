@@ -5,8 +5,9 @@
  */
 
 import { renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import { ipcBridge } from '@/common';
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import { useConversationAssistants } from '@/renderer/pages/conversation/hooks/useConversationAssistants';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 
@@ -19,6 +20,12 @@ vi.mock('@/common', () => ({
 }));
 
 describe('useConversationAssistants', () => {
+  // The shipped policy conceals bare-CLI (`generated`) assistants; these tests
+  // exercise list mechanics with them visible (concealment is covered by
+  // tests/unit/renderer/assistantSelection.test.ts).
+  beforeEach(() => setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

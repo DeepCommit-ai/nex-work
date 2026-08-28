@@ -1,6 +1,7 @@
 {
   "welcome": {
     "title": "Hi, what's your plan for today?",
+    "defaultAssistant": "Assistant",
     "placeholder": "Send a message, upload files, open a folder, create a scheduled task, or type / for commands...",
     "linkFolder": "Open Folder",
     "newConversation": "New Chat",

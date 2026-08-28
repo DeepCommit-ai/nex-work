@@ -57,7 +57,9 @@ function prepareClaude({ platform, arch, version } = {}) {
   try {
     console.log(`[prepare-claude] npm pack ${pkgName}@${ver} ...`);
     const out = execSync(`npm pack ${pkgName}@${ver} --silent`, { cwd: tmp, encoding: 'utf-8', timeout: 600_000 })
-      .trim().split(/\r?\n/).pop();
+      .trim()
+      .split(/\r?\n/)
+      .pop();
     const tarball = path.join(tmp, out);
     execSync(`tar -xzf "${tarball}"`, { cwd: tmp, timeout: 300_000 });
     const staged = path.join(tmp, 'package', bin);

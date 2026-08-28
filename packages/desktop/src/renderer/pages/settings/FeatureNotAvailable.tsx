@@ -9,7 +9,11 @@ import { useTranslation } from 'react-i18next';
  */
 const FeatureNotAvailable: React.FC = () => {
   const { t } = useTranslation();
-  return <div className='flex flex-col items-center justify-center h-full min-h-200px text-14px text-[var(--color-text-3)]'>{t('settings.featureNotAvailable', { defaultValue: '暂未开通' })}</div>;
+  return (
+    <div className='flex flex-col items-center justify-center h-full min-h-200px text-14px text-[var(--color-text-3)]'>
+      {t('settings.featureNotAvailable', { defaultValue: '暂未开通' })}
+    </div>
+  );
 };
 
 export default FeatureNotAvailable;

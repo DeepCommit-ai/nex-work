@@ -38,7 +38,11 @@ import path from 'path';
 export const CLAUDE_AGENT_ID = '2d23ff1c';
 
 /** 从 aioncore 二进制路径推导捆绑 claude：`<bin目录>/../../bundled-claude/<plat>-<arch>/claude`。 */
-export function deriveClaudeBinaryPath(aioncoreBinaryPath: string, platform: NodeJS.Platform = process.platform, arch: string = process.arch): string {
+export function deriveClaudeBinaryPath(
+  aioncoreBinaryPath: string,
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch
+): string {
   const exe = platform === 'win32' ? 'claude.exe' : 'claude';
   return path.resolve(path.dirname(aioncoreBinaryPath), '..', '..', 'bundled-claude', `${platform}-${arch}`, exe);
 }
@@ -64,9 +68,13 @@ export async function provisionManagedClaude(opts: ProvisionManagedClaudeOptions
       log('AIONUI_MANAGED_CLAUDE=0——停用，Claude Code 回落 PATH 解析');
       return;
     }
-    const claudeBin = process.env.AIONUI_CLAUDE_BIN?.trim() || deriveClaudeBinaryPath(opts.aioncoreBinaryPath, opts.platform, opts.arch);
+    const claudeBin =
+      process.env.AIONUI_CLAUDE_BIN?.trim() ||
+      deriveClaudeBinaryPath(opts.aioncoreBinaryPath, opts.platform, opts.arch);
     if (!fs.existsSync(claudeBin)) {
-      log(`没有捆绑载荷（${claudeBin} 不存在）——跳过，Claude Code 回落 PATH 解析。发布构建必须先跑 scripts/prepareClaude.js`);
+      log(
+        `没有捆绑载荷（${claudeBin} 不存在）——跳过，Claude Code 回落 PATH 解析。发布构建必须先跑 scripts/prepareClaude.js`
+      );
       return;
     }
 

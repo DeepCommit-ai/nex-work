@@ -2,10 +2,11 @@
 
 **Feature Branch**: `nex-work`
 **Created**: 2026-08-25
-**Status**: Implemented, revision 4 — partially verified; see _Acceptance Criteria_
+**Status**: Implemented, revision 5 — partially verified; see _Acceptance Criteria_
 **Revisions**: rev 2 fixed four defects found by adversarial review; rev 3 rewrote the architecture
 around the private LiteLLM gateway and one-way trajectory export; rev 4 records implementation and
-what rendering the app changed about it.
+what rendering the app changed about it; rev 5 conceals bare-CLI assistants from selection lists —
+the fresh-install home pill bar was a CLI roster.
 
 ## Why
 
@@ -209,6 +210,17 @@ clerk sees. Four things were only findable this way:
   loop dereferenced. Fixed here, with a regression test.
 - **The mobile and wrapper navigation is a second, independent copy** of the sider's menu. Gating
   one left the entries a viewport away.
+- **(rev 5) A `generated` assistant _is_ a CLI, and on a fresh install they are the only enabled
+  assistants** — the six bare-CLI assistants (Claude Code, Codex CLI, …) rendered the home pill bar
+  as a CLI roster. The rev-4 pass measured against the live server, whose `agent_metadata` rows had
+  been renamed by hand; a fresh local install has factory rows, so the leak only shows there.
+  Fixed at the single source of truth: `selectableAssistants` now drops `generated` assistants when
+  `cli.visible` is false, keeping exactly one aionrs-preferred fallback when the list would empty
+  (operability fails open, FR-7) — the guid pill labels that survivor neutrally
+  (`conversation.welcome.defaultAssistant`, translated in all 13 locales). Every selection surface
+  (home, conversation switcher, team create, scheduled tasks, settings list) inherits the filter.
+  Surfaces other than the guid pill that render the fallback's own name still say "Aion CLI" — the
+  name-side fix stays data-side (renaming rows needs an admin surface; see _The half that is data_).
 
 ### The half that is data, not code
 

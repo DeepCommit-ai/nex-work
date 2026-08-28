@@ -6,8 +6,9 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import AssistantSelectionArea, {
   hasTruncatedAssistantLabels,
   resolveAssistantVisibleLimit,
@@ -34,6 +35,12 @@ vi.mock('@arco-design/web-react', async () => {
 });
 
 describe('AssistantSelectionArea', () => {
+  // The shipped policy conceals bare-CLI (`generated`) assistants; these tests
+  // exercise ordering/overflow mechanics with them visible. Concealment has its
+  // own describe below.
+  beforeEach(() => setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   it('maps available width to 4, 3, 2, then 1 visible assistant slots', () => {
     expect(resolveAssistantVisibleLimit(800)).toBe(4);
     expect(resolveAssistantVisibleLimit(680)).toBe(3);
@@ -296,6 +303,44 @@ describe('AssistantSelectionArea', () => {
     ).not.toThrow();
 
     expect(screen.getByTestId('preset-pill-bare-aionrs')).toBeInTheDocument();
+  });
+});
+
+describe('AssistantSelectionArea under the concealing default policy (spec 002)', () => {
+  // No setPolicy here: STATIC_POLICY ships with `cli.visible: false`.
+  afterEach(() => setPolicy(STATIC_POLICY));
+
+  it('hides bare-CLI pills when named assistants exist', () => {
+    render(
+      <AssistantSelectionArea
+        selectedAssistantId='builtin-writer'
+        assistants={assistants()}
+        localeKey='en-US'
+        onSelectAssistant={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId('preset-pill-bare-aionrs')).not.toBeInTheDocument();
+    expect(screen.getByTestId('preset-pill-builtin-writer')).toBeInTheDocument();
+  });
+
+  it('shows a single neutrally-labelled pill when only bare CLIs are enabled (fresh install)', () => {
+    const [bareAionrs] = assistants();
+    render(
+      <AssistantSelectionArea
+        selectedAssistantId='bare-aionrs'
+        assistants={[bareAionrs]}
+        localeKey='en-US'
+        onSelectAssistant={vi.fn()}
+      />
+    );
+
+    const pill = screen.getByTestId('preset-pill-bare-aionrs');
+    expect(pill).toBeInTheDocument();
+    // The CLI's own name must not appear; the pill is labelled neutrally.
+    expect(pill.textContent).not.toContain('Aion CLI');
+    expect(pill.textContent).toContain('Assistant');
+    expect(screen.queryByTestId('assistant-more-btn')).not.toBeInTheDocument();
   });
 });
 

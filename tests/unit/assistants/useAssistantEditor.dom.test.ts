@@ -7,7 +7,7 @@
  * Tests useAssistantEditor hook: core form state management and save/create/delete flows.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 // Mock @/common
@@ -53,12 +53,19 @@ vi.mock('@/renderer/hooks/mcp/catalog', () => ({
   })),
 }));
 
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import { useAssistantEditor } from '@/renderer/hooks/assistant/useAssistantEditor';
 import { ipcBridge } from '@/common';
 import type { AssistantListItem } from '@/renderer/pages/settings/AssistantSettings/types';
 import { mutate as swrMutate } from 'swr';
 
 describe('useAssistantEditor', () => {
+  // The shipped policy conceals bare-CLI (`generated`) assistants; these tests
+  // exercise list mechanics with them visible (concealment is covered by
+  // tests/unit/renderer/assistantSelection.test.ts).
+  beforeEach(() => setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   const mockAssistantDetail = {
     id: 'a1',
     source: 'user',

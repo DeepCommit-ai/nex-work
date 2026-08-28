@@ -34,7 +34,9 @@ prepareAioncore({
 
 // 1b. Prepare bundled-claude（cynapse issue #8：客户离线环境的 claude 只能来自安装包）
 console.log('1b. Preparing pinned claude...');
-execSync(`node ${path.join(__dirname, 'prepareClaude.js')} --platform ${platform} --arch ${arch}`, { stdio: 'inherit' });
+execSync(`node ${path.join(__dirname, 'prepareClaude.js')} --platform ${platform} --arch ${arch}`, {
+  stdio: 'inherit',
+});
 
 // 2. Create staging dir
 console.log('3. Creating staging dir...');

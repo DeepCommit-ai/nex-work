@@ -195,7 +195,7 @@ describe('Windows .ico', () => {
 
   it('carries the sizes Windows selects between, including 256 px for high-DPI', () => {
     const count = ico.readUInt16LE(4);
-    const sizes = Array.from({ length: count }, (_, i) => ico[6 + i * 16] || 256).sort((a, b) => a - b);
+    const sizes = Array.from({ length: count }, (_, i) => ico[6 + i * 16] || 256).toSorted((a, b) => a - b);
     for (const required of [16, 24, 32, 48, 64, 128, 256]) {
       expect(sizes, `missing ${required}px entry`).toContain(required);
     }

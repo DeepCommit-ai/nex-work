@@ -10,6 +10,7 @@ import { Down, Robot } from '@icon-park/react';
 import { Button } from '@arco-design/web-react';
 import { AionSearchInput } from '@/renderer/components/base';
 import { useAssistantOrder } from '@/renderer/hooks/assistant/useAssistantOrder';
+import { useCapability } from '@/renderer/hooks/useCapability';
 import { useManagedAgentRuntimeCatalog } from '@/renderer/hooks/agent/useManagedAgents';
 import { managedAgentSearchText } from '@/renderer/utils/model/agentTypes';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -84,9 +85,13 @@ const AssistantSelectionArea: React.FC<AssistantSelectionAreaProps> = ({
   const widthVisibleLimit = Math.min(Math.max(1, maxVisibleAssistants), resolveAssistantVisibleLimit(availableWidth));
   const [adaptiveVisibleLimit, setAdaptiveVisibleLimit] = useState(widthVisibleLimit);
   const visibleLimit = Math.min(widthVisibleLimit, adaptiveVisibleLimit);
+  // [ENTERPRISE PATCH] spec 002 — `selectableAssistants` reads the policy, so a
+  // flipped key must recompute this memo, not just re-render.
+  const cliVisible = useCapability('cli.visible');
   const enabledAssistants = useMemo(
     () => selectableAssistants(assistants, assistantOrder),
-    [assistantOrder, assistants]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cliVisible feeds selectableAssistants via the policy store
+    [assistantOrder, assistants, cliVisible]
   );
 
   useEffect(() => {
@@ -224,7 +229,12 @@ const AssistantSelectionArea: React.FC<AssistantSelectionAreaProps> = ({
   const renderAssistantPill = (assistant: Assistant, testId: string, fullWidth = false) => {
     const avatar = resolveAssistantAvatar(assistant.avatar);
     const isSelected = selectedId === assistant.id;
-    const label = assistant.name_i18n?.[localeKey] || assistant.name;
+    // [ENTERPRISE PATCH] spec 002 — a `generated` assistant's name IS the CLI's
+    // name; the concealment fallback keeps one such pill, so label it neutrally.
+    const label =
+      !cliVisible && assistant.source === 'generated'
+        ? t('conversation.welcome.defaultAssistant', { defaultValue: 'Assistant' })
+        : assistant.name_i18n?.[localeKey] || assistant.name;
 
     return (
       <Button

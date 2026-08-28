@@ -28,8 +28,12 @@ afterEach(() => {
 
 describe('layout derivation', () => {
   it('derives bundled-claude as a sibling of bundled-aioncore — the one layout all three distributions share', () => {
-    expect(deriveClaudeBinaryPath('/app/resources/bundled-aioncore/linux-x64/aioncore', 'linux', 'x64')).toBe('/app/resources/bundled-claude/linux-x64/claude');
-    expect(deriveClaudeBinaryPath('/app/resources/bundled-aioncore/win32-x64/aioncore.exe', 'win32', 'x64')).toBe(path.resolve('/app/resources/bundled-claude/win32-x64/claude.exe'));
+    expect(deriveClaudeBinaryPath('/app/resources/bundled-aioncore/linux-x64/aioncore', 'linux', 'x64')).toBe(
+      '/app/resources/bundled-claude/linux-x64/claude'
+    );
+    expect(deriveClaudeBinaryPath('/app/resources/bundled-aioncore/win32-x64/aioncore.exe', 'win32', 'x64')).toBe(
+      path.resolve('/app/resources/bundled-claude/win32-x64/claude.exe')
+    );
   });
 });
 
@@ -45,7 +49,13 @@ describe('provisionManagedClaude', () => {
       return { ok: true, json: async () => ({}) };
     }) as unknown as typeof fetch;
 
-    await provisionManagedClaude({ aioncoreBinaryPath: aioncore, backendPort: 1234, fetchImpl, platform: 'linux', arch: 'x64' });
+    await provisionManagedClaude({
+      aioncoreBinaryPath: aioncore,
+      backendPort: 1234,
+      fetchImpl,
+      platform: 'linux',
+      arch: 'x64',
+    });
 
     const put = calls.find((c) => c.init?.method === 'PUT');
     expect(put).toBeTruthy();
@@ -65,7 +75,13 @@ describe('provisionManagedClaude', () => {
       return { ok: true, json: async () => ({ data: { command_override: pinned, env_override: [] } }) };
     }) as unknown as typeof fetch;
 
-    await provisionManagedClaude({ aioncoreBinaryPath: aioncore, backendPort: 1234, fetchImpl, platform: 'linux', arch: 'x64' });
+    await provisionManagedClaude({
+      aioncoreBinaryPath: aioncore,
+      backendPort: 1234,
+      fetchImpl,
+      platform: 'linux',
+      arch: 'x64',
+    });
     expect(puts.filter((c) => c.method === 'PUT')).toHaveLength(0);
   });
 
@@ -73,7 +89,13 @@ describe('provisionManagedClaude', () => {
     const root = tmp();
     const aioncore = makeLayout(root, { withPayload: false });
     const fetchImpl = vi.fn() as unknown as typeof fetch;
-    await provisionManagedClaude({ aioncoreBinaryPath: aioncore, backendPort: 1, fetchImpl, platform: 'linux', arch: 'x64' });
+    await provisionManagedClaude({
+      aioncoreBinaryPath: aioncore,
+      backendPort: 1,
+      fetchImpl,
+      platform: 'linux',
+      arch: 'x64',
+    });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -82,7 +104,13 @@ describe('provisionManagedClaude', () => {
     const root = tmp();
     const aioncore = makeLayout(root);
     const fetchImpl = vi.fn() as unknown as typeof fetch;
-    await provisionManagedClaude({ aioncoreBinaryPath: aioncore, backendPort: 1, fetchImpl, platform: 'linux', arch: 'x64' });
+    await provisionManagedClaude({
+      aioncoreBinaryPath: aioncore,
+      backendPort: 1,
+      fetchImpl,
+      platform: 'linux',
+      arch: 'x64',
+    });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -98,7 +126,13 @@ describe('provisionManagedClaude', () => {
       if (!init) return { ok: true, json: async () => ({ data: { command_override: null, env_override: [] } }) };
       return { ok: true, json: async () => ({}) };
     }) as unknown as typeof fetch;
-    await provisionManagedClaude({ aioncoreBinaryPath: aioncore, backendPort: 1, fetchImpl, platform: 'linux', arch: 'x64' });
+    await provisionManagedClaude({
+      aioncoreBinaryPath: aioncore,
+      backendPort: 1,
+      fetchImpl,
+      platform: 'linux',
+      arch: 'x64',
+    });
     const put = calls.find((c) => c.init?.method === 'PUT');
     expect(JSON.parse(String(put!.init!.body)).command_override).toBe(custom);
   });

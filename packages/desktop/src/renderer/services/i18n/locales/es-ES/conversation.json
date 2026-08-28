@@ -1,6 +1,7 @@
 {
   "welcome": {
     "title": "Hola, ¿qué tienes planeado hoy?",
+    "defaultAssistant": "Asistente",
     "placeholder": "Envía un mensaje, sube archivos, abre una carpeta, crea una tarea programada o escribe / para ver los comandos...",
     "linkFolder": "Abrir carpeta",
     "newConversation": "Nuevo chat",

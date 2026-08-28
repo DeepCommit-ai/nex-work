@@ -524,6 +524,9 @@ export class BackendLifecycleManager {
   private restartWindowStart = 0;
   private readonly maxRestarts = 3;
   private readonly restartWindowMs = 60_000;
+  // [ENTERPRISE PATCH] cynapse issue #8 — attemptStart's resolution, reused by
+  // the managed-claude provisioning so a start resolves the binary exactly once.
+  private lastResolvedBinaryPath?: string;
 
   constructor(
     private readonly appMeta: AppMetadata,
@@ -567,7 +570,10 @@ export class BackendLifecycleManager {
         // 内部永不 throw；找不到载荷会响亮跳过并回落旧行为。
         try {
           const { provisionManagedClaude } = await import('./managed-claude.js');
-          await provisionManagedClaude({ aioncoreBinaryPath: this.resolveBackend(), backendPort: port });
+          await provisionManagedClaude({
+            aioncoreBinaryPath: this.lastResolvedBinaryPath ?? this.resolveBackend(),
+            backendPort: port,
+          });
         } catch (e) {
           console.warn('[managed-claude] 加载失败（不影响后端启动）', e);
         }
@@ -601,6 +607,7 @@ export class BackendLifecycleManager {
     let binaryPath: string;
     try {
       binaryPath = this.resolveBackend();
+      this.lastResolvedBinaryPath = binaryPath;
     } catch (error) {
       const diagnostics = getResolveDiagnostics(error);
       throw new BackendStartupError(

@@ -4,9 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import { assistantOrderAfterToggle, selectableAssistants } from '@/renderer/utils/model/assistantSelection';
+
+/** The shipped policy conceals CLIs; ordering tests need them visible. */
+const revealClis = () =>
+  setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static'));
+const restorePolicy = () => setPolicy(STATIC_POLICY);
 
 const mk = (id: string, source: Assistant['source'], sort_order: number, enabled = true): Assistant =>
   ({
@@ -30,6 +36,9 @@ const mk = (id: string, source: Assistant['source'], sort_order: number, enabled
   }) as Assistant;
 
 describe('selectableAssistants', () => {
+  beforeEach(revealClis);
+  afterEach(restorePolicy);
+
   it('keeps the legacy source order when no preference exists', () => {
     const result = selectableAssistants([
       mk('builtin-a', 'builtin', 5),
@@ -72,7 +81,53 @@ describe('selectableAssistants', () => {
   });
 });
 
+describe('selectableAssistants under the concealing default policy (spec 002)', () => {
+  // No revealClis here: STATIC_POLICY ships with `cli.visible: false`.
+  afterEach(restorePolicy);
+
+  const aionrs = (id: string, sort_order: number): Assistant =>
+    ({ ...mk(id, 'generated', sort_order), agent: { type: 'aionrs' } }) as Assistant;
+
+  it('drops bare-CLI assistants when named assistants exist', () => {
+    const result = selectableAssistants([
+      mk('cli-claude', 'generated', 10),
+      mk('builtin-writer', 'builtin', 20),
+      mk('user-review', 'user', 30),
+    ]);
+    expect(result.map((a) => a.id)).toEqual(['user-review', 'builtin-writer']);
+  });
+
+  it('keeps exactly one aionrs fallback when everything enabled is a bare CLI (fresh install)', () => {
+    const result = selectableAssistants([
+      mk('cli-claude', 'generated', 10),
+      aionrs('cli-aionrs', 20),
+      mk('cli-codex', 'generated', 30),
+    ]);
+    expect(result.map((a) => a.id)).toEqual(['cli-aionrs']);
+  });
+
+  it('falls back to the first bare CLI when no aionrs assistant exists', () => {
+    const result = selectableAssistants([mk('cli-claude', 'generated', 10), mk('cli-codex', 'generated', 20)]);
+    expect(result.map((a) => a.id)).toEqual(['cli-claude']);
+  });
+
+  it('still returns an empty list when nothing is enabled', () => {
+    expect(selectableAssistants([mk('cli-off', 'generated', 10, false)])).toEqual([]);
+  });
+
+  it('applies the preferred order to the surviving named assistants', () => {
+    const result = selectableAssistants(
+      [mk('cli', 'generated', 1), mk('official', 'builtin', 1), mk('custom', 'user', 1)],
+      ['official', 'cli', 'custom']
+    );
+    expect(result.map((a) => a.id)).toEqual(['official', 'custom']);
+  });
+});
+
 describe('assistantOrderAfterToggle', () => {
+  beforeEach(revealClis);
+  afterEach(restorePolicy);
+
   const assistants = [
     mk('cli', 'generated', 1),
     mk('custom', 'user', 1),

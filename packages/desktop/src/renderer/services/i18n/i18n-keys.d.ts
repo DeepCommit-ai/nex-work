@@ -835,6 +835,7 @@ export type I18nKey =
   | 'conversation.thinking.label'
   | 'conversation.welcome.clearWorkspace'
   | 'conversation.welcome.currentWorkspace'
+  | 'conversation.welcome.defaultAssistant'
   | 'conversation.welcome.linkFolder'
   | 'conversation.welcome.modelSwitchNotSupported'
   | 'conversation.welcome.newConversation'
