@@ -94,6 +94,13 @@ dies). Old conversations do not self-heal; new ones are correct.
   `mcp__<server>__<tool>`, lowercase `running`/`completed`/`error` statuses. Measured (conversation
   1cacdbcc): without this shape the detector never fired for claude conversations, so FR-5's
   auto-open was dead code exactly where it was needed and every browser call dead-ended unattached.
+- **FR-7** Under single-tab semantics `Target.createTarget` (the MCP's `new_page`) navigates the
+  attached page to the requested url and returns the real single targetId, instead of being
+  refused. Measured (conversation 1cacdbcc): the agent's natural fallback after a failed
+  `list_pages` is `new_page`, so the refusal dead-ended every conversation's first browser use.
+  Unattached, it — like every forwarded command — now returns retry guidance ("the panel opens
+  automatically on first use — retry the same tool call") in place of the pre-auto-open text that
+  sent agents to ask the user for a panel that now opens itself.
 - **FR-6** A genuine change of the bridge's attachment — first attach, attach to a different
   webContents (tab switch), or the attached webview being destroyed — closes every connected CDP
   client socket (1012, "reconnect"). Root cause this answers, measured live and confirmed by

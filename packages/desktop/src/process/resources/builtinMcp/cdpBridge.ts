@@ -215,6 +215,21 @@ const sendError = (ws: WebSocket, id: number | undefined, message: string, sessi
  * the set across connections would starve the second client of that event, leaving
  * browser.pages() at 0 forever.
  */
+/**
+ * [ENTERPRISE PATCH] spec 007 — 未附加时的错误现在指向「重试」而不是「去开面板」。
+ *
+ * 旧文案让 agent 去找用户开面板 —— 那是 auto-open（FR-5/5b）之前的世界。现在浏览器
+ * 工具一被调用面板就会自己打开并附加，附加瞬间桥还会重置客户端连接（FR-6），
+ * 所以对 agent 正确的指令就是：稍等片刻，重试同一个调用。
+ *
+ * Pre-auto-open this message sent the agent to ask the user to open the panel.
+ * Now the first browser tool call itself opens and attaches the panel (FR-5/5b)
+ * and the bridge resets clients on attach (FR-6), so the correct instruction to
+ * the agent is simply: wait a beat and retry the same call.
+ */
+const UNATTACHED_MESSAGE =
+  'The in-app browser is not attached yet. The browser panel opens automatically on first use — wait a few seconds and retry the same tool call.';
+
 const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions: Set<string>) => {
   let req: CdpRequest;
   try {
@@ -289,24 +304,24 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
     return;
   }
 
+  if (decision.kind === 'navigate-single-target') {
+    if (!attached || attached.contents.isDestroyed()) {
+      sendError(ws, id, UNATTACHED_MESSAGE, sessionId);
+      return;
+    }
+    try {
+      await attached.dbg.sendCommand('Page.navigate', { url: decision.url });
+      ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      ws.send(JSON.stringify({ id, error: { code: -32000, message }, sessionId }));
+    }
+    return;
+  }
+
   // forward
   if (!attached || attached.contents.isDestroyed()) {
-    /**
-     * 说清楚「怎么办」，因为 Agent 侧无法自己修复：attach 只由渲染进程在 webview
-     * dom-ready 时上报触发（WebviewHost.tsx），Target.createTarget 又是明确拒绝的。
-     * 所以这条消息必须告诉用户去开浏览器面板，否则 Agent 只能反复撞同一面墙。
-     *
-     * Say what to do about it: the agent cannot fix this itself. Attachment is only
-     * triggered by the renderer reporting its webContents id on dom-ready
-     * (WebviewHost.tsx), and Target.createTarget is explicitly refused — so this message
-     * has to point at opening the browser panel, or the agent just retries into the same wall.
-     */
-    sendError(
-      ws,
-      id,
-      'The in-app browser is not currently attached. Open the browser panel in AionUi so a page is available to control.',
-      sessionId
-    );
+    sendError(ws, id, UNATTACHED_MESSAGE, sessionId);
     return;
   }
 

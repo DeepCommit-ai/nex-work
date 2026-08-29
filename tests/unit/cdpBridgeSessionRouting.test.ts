@@ -92,20 +92,34 @@ describe('cdpTargetProtocol — session routing contract', () => {
   });
 
   it('refuses commands it cannot honour instead of pretending they worked', () => {
-    /**
-     * createTarget 假装成功会让 Agent 以为开了新页面，实际还在原页面上操作 ——
-     * 比直接失败更难查。
-     *
-     * Faking createTarget success would leave the agent driving the old page while believing
-     * it had a new one — harder to diagnose than an explicit failure.
-     */
-    expect(
-      decideCdpCommand({ id: 4, method: 'Target.createTarget', params: { url: 'about:blank' } }, targetInfo).kind
-    ).toBe('error');
     expect(decideCdpCommand({ id: 5, method: 'Browser.close' }, targetInfo).kind).toBe('error');
     expect(
       decideCdpCommand({ id: 6, method: 'Target.attachToTarget', params: { targetId: 'not-ours' } }, targetInfo).kind
     ).toBe('error');
+  });
+
+  /**
+   * [ENTERPRISE PATCH] spec 007 FR-7 — createTarget 落地为导航唯一页面。
+   *
+   * 实测（会话 1cacdbcc）：agent 在 list_pages 失败后自然回退到 new_page；rev 1 的
+   * 明确拒绝让这条路径永远走不通，每个新会话的首次浏览器使用都两发全灭。这里不是
+   * 假装成功：页面真的被导航到请求的 url，返回的 targetId 也是它真实的 id。
+   */
+  it('lands createTarget as navigate-the-single-page with the real targetId', () => {
+    const decision = decideCdpCommand(
+      { id: 4, method: 'Target.createTarget', params: { url: 'https://www.bilibili.com' } },
+      targetInfo
+    );
+    expect(decision).toEqual({
+      kind: 'navigate-single-target',
+      url: 'https://www.bilibili.com',
+      payload: { targetId: SINGLE_TARGET_ID },
+    });
+  });
+
+  it('defaults a blank createTarget url to about:blank', () => {
+    const decision = decideCdpCommand({ id: 4, method: 'Target.createTarget', params: {} }, targetInfo);
+    expect(decision).toMatchObject({ kind: 'navigate-single-target', url: 'about:blank' });
   });
 
   it('attaches to our own target and hands back the fixed sessionId', () => {

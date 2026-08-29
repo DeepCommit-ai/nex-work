@@ -66,6 +66,10 @@ export type CdpDecision =
       emit: Array<{ method: string; params: Record<string, unknown> }>;
     }
   | { kind: 'forward' }
+  // 单标签语义下的 createTarget：桥把附加中的 webview 导航到 url 后回复 payload。
+  // createTarget under single-tab semantics: the bridge navigates the attached
+  // webview to `url`, then replies with `payload`.
+  | { kind: 'navigate-single-target'; url: string; payload: Record<string, unknown> }
   | { kind: 'error'; message: string };
 
 export const buildTargetInfo = (title: string, url: string): TargetInfo => ({
@@ -110,16 +114,14 @@ export const buildListPayload = (wsUrl: string, title: string, url: string) => [
 /**
  * 决定一条入站命令怎么处理。
  *
- * 关键取舍：Target.createTarget 明确报错而不是静默忽略。这个命令的语义是「新开一个
- * 标签页」，我们做不到，但如果假装成功、返回那个唯一的 targetId，Agent 会以为自己开了
- * 新页面，实际上在原页面上继续操作 —— 那种错法比直接失败更难查。宁可让它拿到一个
- * 说明清楚的错误。
+ * 关键取舍（rev 2）：Target.createTarget 落地为「把唯一页面导航到目标 url」，见该
+ * case 的注释。第一版选择明确报错（怕假装成功更难查），实测证明拒绝让 agent 的
+ * 自然回退路径（list_pages 失败 → new_page）永远走不通。
  *
- * Deliberate choice: Target.createTarget errors out rather than silently no-oping.
- * It means "open a new tab", which we cannot do; pretending it succeeded and handing
- * back the one existing targetId would leave the agent believing it had a fresh page
- * while it kept driving the old one — a failure far harder to diagnose than an explicit
- * error.
+ * Deliberate choice (rev 2): Target.createTarget lands as "navigate the single
+ * page to the requested url" — see the case comment. Rev 1 refused it outright
+ * (fearing an undiagnosable fake success); in practice the refusal dead-ended
+ * the agent's natural fallback path (failed list_pages → new_page) every time.
  */
 export const decideCdpCommand = (req: CdpRequest, getTargetInfo: () => TargetInfo): CdpDecision => {
   const method = req.method ?? '';
@@ -237,11 +239,29 @@ export const decideCdpCommand = (req: CdpRequest, getTargetInfo: () => TargetInf
       // Closing the in-app browser is not the agent's call; acknowledge and do nothing.
       return { kind: 'reply', payload: {} };
 
-    case 'Target.createTarget':
-      return {
-        kind: 'error',
-        message: 'AionUi in-app browser exposes a single fixed tab; Target.createTarget is not supported.',
-      };
+    /**
+     * [ENTERPRISE PATCH] spec 007 FR-7 — createTarget 落地为「导航唯一页面」。
+     *
+     * 旧行为是明确报错（怕"假装成功但什么都没做"）。但这里不是假装：单标签语义下，
+     * 「新开一个页面到 url」的意图被真实完成 —— 页面确实到了那个 url，返回的也是它
+     * 真实的 targetId，puppeteer 的 newPage() 等待该 target 时会命中既有页面。
+     *
+     * 为什么必须支持：实测（会话 1cacdbcc）agent 的自然模式是 list_pages 失败后改调
+     * new_page —— createTarget 一拒绝，两发全灭，每个新会话的首次浏览器使用都死在
+     * 这里。拒绝的代价从"更好排查"变成了"永远不可用"。
+     *
+     * Lands createTarget as "navigate the single page". Not a fake success: in
+     * single-tab semantics the intent — a page at that url — is genuinely
+     * fulfilled, and the returned targetId is the real one, which puppeteer's
+     * newPage() target-wait matches. Measured (conversation 1cacdbcc): the
+     * agent's natural fallback after a failed list_pages is new_page, so
+     * refusing createTarget dead-ended every conversation's first browser use.
+     */
+    case 'Target.createTarget': {
+      const rawUrl = req.params?.url;
+      const url = typeof rawUrl === 'string' && rawUrl.trim() ? rawUrl.trim() : 'about:blank';
+      return { kind: 'navigate-single-target', url, payload: { targetId: SINGLE_TARGET_ID } };
+    }
 
     case 'Target.createBrowserContext':
     case 'Target.disposeBrowserContext':

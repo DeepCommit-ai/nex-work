@@ -102,14 +102,16 @@ describe('cdpTargetProtocol — Target.* handled locally', () => {
 });
 
 describe('cdpTargetProtocol — refusals that protect the app', () => {
-  it('errors on createTarget instead of pretending a new tab was opened', () => {
-    // Silently returning the existing targetId would leave the agent driving the old
-    // page while believing it had a new one.
+  it('lands createTarget as a navigation of the single page, never a fake new tab (spec 007 FR-7)', () => {
+    // Rev 1 refused createTarget outright, fearing an undiagnosable fake success. In
+    // practice the refusal dead-ended the agent's natural fallback (failed list_pages →
+    // new_page) on every conversation's first browser use. Navigating the single page to
+    // the requested url and returning its REAL targetId fulfils the intent honestly.
     const decision = decideCdpCommand(
       { id: 7, method: 'Target.createTarget', params: { url: 'https://example.com' } },
       targetInfo
     );
-    expect(decision.kind).toBe('error');
+    expect(decision).toMatchObject({ kind: 'navigate-single-target', url: 'https://example.com' });
   });
 
   it('refuses Browser.close, which would terminate the whole application', () => {
