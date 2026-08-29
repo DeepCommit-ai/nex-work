@@ -20,6 +20,16 @@ export type AssistantListFilter = 'all' | 'enabled' | 'disabled' | 'builtin' | '
  */
 export type AssistantSourceTag = 'builtin' | 'custom' | 'cli' | null;
 
+/**
+ * [ENTERPRISE PATCH] 系统默认助手:它是"默认"本身,不属于可管理对象——
+ * 管理页(我的助手/官方助手/启用中,含各 tab 气泡计数)一律当它不存在,
+ * 且不可删除、不可停用。会话入口不受影响(仍可选、仍是默认)。
+ */
+export const DEFAULT_ASSISTANT_ID = 'default-assistant';
+export const isSystemDefaultAssistant = (assistant: { id: string }): boolean => assistant.id === DEFAULT_ASSISTANT_ID;
+export const withoutSystemDefault = <T extends { id: string }>(list: T[]): T[] =>
+  list.filter((assistant) => assistant.id !== DEFAULT_ASSISTANT_ID);
+
 export const resolveAssistantSourceTag = (source: string): AssistantSourceTag => {
   if (source === 'builtin') return 'builtin';
   if (source === 'generated') return 'cli';

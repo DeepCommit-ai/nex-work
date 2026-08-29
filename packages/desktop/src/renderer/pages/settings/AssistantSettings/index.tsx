@@ -20,7 +20,7 @@
 import { Message } from '@arco-design/web-react';
 import { useAssistantEditor, useAssistantList } from '@/renderer/hooks/assistant';
 import { useManagedAgentRuntimeCatalog } from '@/renderer/hooks/agent/useManagedAgents';
-import { buildAssistantEditorBackends, resolveAvatarImageSrc } from './assistantUtils';
+import { buildAssistantEditorBackends, resolveAvatarImageSrc, DEFAULT_ASSISTANT_ID, withoutSystemDefault } from './assistantUtils';
 import AssistantEditorPage from './AssistantEditorPage';
 import AssistantHomeTabs from './home/AssistantHomeTabs';
 import DeleteAssistantModal from './DeleteAssistantModal';
@@ -202,6 +202,7 @@ const AssistantSettings: React.FC = () => {
 
     const targetAssistantId = openAssistantFromRoute ?? openAssistantFromSession;
     if (!targetAssistantId) return;
+    if (targetAssistantId === DEFAULT_ASSISTANT_ID) return; // 系统默认助手不进编辑器
     if (assistants.length === 0) return;
 
     const targetAssistant = assistants.find((assistant) => assistant.id === targetAssistantId);
@@ -229,7 +230,7 @@ const AssistantSettings: React.FC = () => {
             />
           ) : (
             <AssistantHomeTabs
-              assistants={assistants}
+              assistants={withoutSystemDefault(assistants)}
               assistantOrder={assistantOrder}
               localeKey={localeKey}
               initialTab={homeTab}

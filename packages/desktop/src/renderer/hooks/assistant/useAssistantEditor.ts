@@ -12,6 +12,7 @@ import { ensureBackendMcpCatalog } from '@/renderer/hooks/mcp/catalog';
 import { getSkillImportErrorMessage } from '@/renderer/pages/settings/SkillsSettings/skillImportMessages';
 import { emitter } from '@/renderer/utils/emitter';
 import { assistantOrderAfterToggle, selectableAssistants } from '@/renderer/utils/model/assistantSelection';
+import { isSystemDefaultAssistant } from '@/renderer/pages/settings/AssistantSettings/assistantUtils';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mutate as swrMutate } from 'swr';
@@ -558,6 +559,11 @@ export const useAssistantEditor = ({
 
   const handleDeleteConfirm = async () => {
     if (!activeAssistant) return;
+    if (isSystemDefaultAssistant(activeAssistant)) {
+      message.warning('默认助手是系统入口,不可删除');
+      setDeleteConfirmVisible(false);
+      return;
+    }
 
     try {
       await ipcBridge.assistants.delete.invoke({ id: activeAssistant.id });
@@ -572,6 +578,10 @@ export const useAssistantEditor = ({
   };
 
   const handleToggleEnabled = async (assistant: AssistantListItem, enabled: boolean) => {
+    if (isSystemDefaultAssistant(assistant)) {
+      message.warning('默认助手是系统入口,不可停用');
+      return;
+    }
     const previousOrder = selectableAssistants(assistants, assistantOrder).map((item) => item.id);
     const nextOrder = assistantOrderAfterToggle(assistants, assistantOrder, assistant.id, enabled);
     let orderPersisted = false;
