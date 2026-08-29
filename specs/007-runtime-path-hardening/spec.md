@@ -38,6 +38,35 @@ lands on `~/bundled-claude` — measured: `[managed-claude] 没有捆绑载荷�
 `resources/bundled-claude/`, so "re-pin on every start" never happened in dev, and the CLI
 version-drift notice (spec 002 rev 6) kept firing against the employee-installed claude.
 
+### D3 — the same broken node, one lane deeper: claude's `--mcp-config`
+
+Fixing D1 revived the wrapper only where **aioncore** spawns it (aionrs sessions, verified
+`tools=26`). A Claude Code conversation showed no browser tools at all, and the reason took three
+probes to isolate:
+
+- The browser MCP **was** being handed to claude — `--mcp-config {"mcpServers":{"aionui-browser":
+{"command":"node", …}}} --strict-mcp-config` was on the live process, CDP port and token in its
+  env. The snapshot rides in from the UI: the assistant's `defaults.mcps.mode=auto` replays
+  `preferences.last_mcp_ids`, and the guid page copies the **catalog transport verbatim** into
+  `selected_session_mcp_servers` at create.
+- claude resolves that bare `command: "node"` **from its inherited PATH** — measured dir by dir:
+  the first `node` on it is the broken brew 25.6.1. The MCP child died before the handshake and
+  claude listed zero `mcp__aionui-browser__*` tools. aioncore never sees this spawn, so no fix on
+  its side of D1 could reach it.
+
+Fix (`mcpNodeCommand.ts` + the every-boot MCP reconcile in `runBackendMigrations.ts`): at each
+startup, probe `node --version` **strictly** (upstream `isCommandAvailable` counts any non-ENOENT
+failure as available — a dyld crash is precisely such a failure, so it calls the broken node fine);
+if unusable, walk aioncore's managed runtime (`<dataDir>/runtime/node/node-v<ver>-…`), verify a
+candidate the same way, and write its **absolute path** into the browser MCP transport. A healthy
+PATH node keeps the bare `node` — zero drift from upstream rows. The rewritten transport then flows
+into every new session snapshot, and the wrapper it starts runs under the managed node, which is
+exactly where D1's `buildMcpChildEnv` points the inner `npx`.
+
+Residual, on purpose: a conversation created **before** the rewrite replays its frozen session
+snapshot (measured: re-ensuring the old conversation still passes `command:"node"` and the child
+dies). Old conversations do not self-heal; new ones are correct.
+
 ## Functional Requirements
 
 - **FR-1** The builtin browser MCP launcher must spawn `npx` with the bin directory of **the node
@@ -48,6 +77,11 @@ version-drift notice (spec 002 rev 6) kept firing against the employee-installed
   the distribution layout first, then `<cwd>/resources/bundled-claude/…` (dev repo root). A
   candidate is used only if it exists; when none does, the skip log names every path probed.
   `AIONUI_CLAUDE_BIN` still overrides everything.
+- **FR-3** The builtin browser MCP transport must name a node that actually runs on this machine,
+  re-resolved at every boot by the same reconcile that already repairs the script path: bare
+  `node` while the PATH node passes a strict `--version` probe; otherwise the absolute path of a
+  verified binary from aioncore's managed runtime; otherwise bare `node` with a loud log. Never
+  blocks startup.
 
 ## Acceptance Criteria
 
@@ -57,8 +91,19 @@ version-drift notice (spec 002 rev 6) kept firing against the employee-installed
       `mcp server connected server=aionui-browser tools=26`, chrome-devtools-mcp process running
       under the managed runtime (`…/runtime/node/node-v24.11.0-darwin-arm64/bin/node`)
 - [x] **Live: dev pin lands** — `[managed-claude] Claude Code 已钉到捆绑二进制：…/nex-work/resources/
-    bundled-claude/darwin-arm64/claude` (2.1.235); `GET /api/agents/2d23ff1c/overrides` shows the
+bundled-claude/darwin-arm64/claude` (2.1.235); `GET /api/agents/2d23ff1c/overrides` shows the
       `command_override` and the untouched gateway/provenance `env_override`
+- [x] Focused tests (FR-3): resolver (7 cases: strict probe semantics, version ordering, flat
+      win32 layout, fallback) and migration wiring (fresh import carries resolved command, stale
+      bare-node row rewritten on boot, healthy row untouched)
+- [x] **Live: boot rewrite** — `[Migration] PATH \`node\` is unusable; builtin browser MCP node
+      command resolved to …/runtime/node/node-v24.11.0-darwin-arm64/bin/node (source: managed)`,
+`updated browser server: yes`
+- [x] **Live: claude lane end to end** — a UI-faithful probe conversation spawned claude with
+      `--mcp-config` carrying the absolute managed node; under the claude process: the wrapper
+      alive on that node, and under it `npm exec chrome-devtools-mcp@0.16.0 --browser-url …`
+- [x] **Live: stale-snapshot residual measured** — the pre-fix conversation still replays
+      `command:"node"` and its MCP child dies; documented rather than silently left
 - [x] Gates: format:check clean, oxlint 0 errors, `tsc --noEmit` clean
 
 ## Boundaries
@@ -67,6 +112,14 @@ version-drift notice (spec 002 rev 6) kept firing against the employee-installed
   hides it. Dev remains on PATH aioncore (`~/.local/bin/aioncore`) by design.
 - Upstream-relevant: D1 (and `buildMcpChildEnv`) is not NexWork-specific and would fix the same
   silent failure in upstream AionUi; candidate for contribution on the next sync.
+
+## Open item
+
+An assistant whose `preferences.last_mcp_ids` is empty (fresh install, never-used assistant) sends
+an empty snapshot, and the direct-CLI claude lane then runs with **no** MCP at all — unlike aionrs,
+whose factory injects every enabled builtin server by default. Whether CLI conversations should
+default to the enabled builtin set is a product decision (spec 002 territory: the system decides,
+not the clerk), filed here rather than smuggled into a path-resolution fix.
 
 ## Relationship to other specs
 

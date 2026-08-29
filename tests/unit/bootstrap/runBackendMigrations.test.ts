@@ -10,6 +10,7 @@ const {
   configFileSetMock,
   httpRequestMock,
   listServersMock,
+  resolveMcpNodeCommandMock,
   testMcpConnectionMock,
   updateServerMock,
 } = vi.hoisted(() => ({
@@ -18,6 +19,7 @@ const {
   configFileSetMock: vi.fn(),
   httpRequestMock: vi.fn(),
   listServersMock: vi.fn(),
+  resolveMcpNodeCommandMock: vi.fn(),
   testMcpConnectionMock: vi.fn(),
   updateServerMock: vi.fn(),
 }));
@@ -43,6 +45,16 @@ vi.mock('@/common/config/configMigration', () => ({
 
 vi.mock('@/process/utils/initStorage', () => ({
   getBuiltinMcpScriptPath: (name: string) => `/mock/${name}.js`,
+}));
+
+// [ENTERPRISE PATCH] spec 007 FR-3 — the node resolver probes real binaries;
+// pin it in unit tests. getDataPath touches Electron paths and real symlinks.
+vi.mock('@/process/utils/mcpNodeCommand', () => ({
+  resolveMcpNodeCommand: resolveMcpNodeCommandMock,
+}));
+
+vi.mock('@/process/utils/utils', () => ({
+  getDataPath: () => '/mock-data',
 }));
 
 vi.mock('@/process/utils/migrateAssistants', () => ({
@@ -105,6 +117,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   configFileGetMock.mockResolvedValue(undefined);
   configFileSetMock.mockResolvedValue(undefined);
+  resolveMcpNodeCommandMock.mockResolvedValue({ command: 'node', source: 'path' });
   batchImportServersMock.mockResolvedValue([]);
   updateServerMock.mockImplementation(async ({ id, data }) => ({
     ...imageServer(),
@@ -214,5 +227,68 @@ describe('runBackendMigrations', () => {
       'yes',
       'yes'
     );
+  });
+});
+
+/**
+ * [ENTERPRISE PATCH] spec 007 FR-3 — the browser MCP transport is fed verbatim
+ * into Claude Code's `--mcp-config`, and claude resolves a bare `node` from its
+ * inherited PATH. When boot-time probing finds PATH node unusable, the resolved
+ * absolute command must land both in a fresh import and in the every-boot
+ * reconcile of an existing row.
+ */
+describe('builtin browser MCP node command (spec 007 FR-3)', () => {
+  const MANAGED_NODE = '/mock-data/runtime/node/node-v24.11.0-darwin-arm64/bin/node';
+
+  const browserServer = (command: string): IMcpServer => ({
+    id: 'browser-server-id',
+    name: 'aionui-browser',
+    description:
+      "Control AionUi's built-in browser (the side preview panel): open pages, click, type and read content. " +
+      'Sign-in state is shared across tabs and preserved between sessions.',
+    enabled: true,
+    builtin: true,
+    transport: {
+      type: 'stdio',
+      command,
+      args: ['/mock/builtin-mcp-browser.js'],
+    },
+    original_json: JSON.stringify(
+      { mcpServers: { 'aionui-browser': { command, args: ['/mock/builtin-mcp-browser.js'] } } },
+      null,
+      2
+    ),
+  });
+
+  it('imports a fresh browser server with the resolved managed node command', async () => {
+    resolveMcpNodeCommandMock.mockResolvedValue({ command: MANAGED_NODE, source: 'managed' });
+    listServersMock.mockResolvedValue([]);
+
+    await runBackendMigrations(configFile as never);
+
+    const imported = batchImportServersMock.mock.calls.at(0)?.[0]?.servers as IMcpServer[];
+    const browser = imported.find((server) => server.name === 'aionui-browser');
+    expect(browser?.transport).toMatchObject({ type: 'stdio', command: MANAGED_NODE });
+    expect(browser?.original_json).toContain(MANAGED_NODE);
+  });
+
+  it('rewrites a stale bare-node transport on boot once PATH node stops working', async () => {
+    resolveMcpNodeCommandMock.mockResolvedValue({ command: MANAGED_NODE, source: 'managed' });
+    listServersMock.mockResolvedValue([imageServer(), browserServer('node')]);
+
+    await runBackendMigrations(configFile as never);
+
+    const browserUpdate = updateServerMock.mock.calls.find(([arg]) => arg.id === 'browser-server-id');
+    expect(browserUpdate).toBeDefined();
+    expect(browserUpdate![0].data.transport.command).toBe(MANAGED_NODE);
+    expect(browserUpdate![0].data.original_json).toContain(MANAGED_NODE);
+  });
+
+  it('leaves a healthy bare-node transport untouched (zero upstream drift)', async () => {
+    listServersMock.mockResolvedValue([imageServer(), browserServer('node')]);
+
+    await runBackendMigrations(configFile as never);
+
+    expect(updateServerMock).not.toHaveBeenCalled();
   });
 });

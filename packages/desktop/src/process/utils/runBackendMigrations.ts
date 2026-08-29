@@ -5,6 +5,7 @@
  */
 
 import { execFile } from 'node:child_process';
+import path from 'node:path';
 import { migrateConfigStorage, migrateLegacyMcpConfigToDb, migrateProviders } from '@/common/config/configMigration';
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { mcpService } from '@/common/adapter/ipcBridge';
@@ -17,6 +18,8 @@ import {
 } from '@/common/config/imageGenerationMcpEnv';
 import { BUILTIN_IMAGE_GEN_NAME, type IMcpServer, type IProvider } from '@/common/config/storage';
 import { getBuiltinMcpScriptPath, type ProcessConfig as ProcessConfigType } from './initStorage';
+import { resolveMcpNodeCommand } from './mcpNodeCommand';
+import { getDataPath } from './utils';
 import { migrateAssistantsToBackend } from './migrateAssistants';
 
 type ConfigFile = typeof ProcessConfigType;
@@ -175,10 +178,16 @@ function isSameStdioTransport(left: IMcpServer['transport'], right: IMcpServer['
   );
 }
 
-function buildBuiltinBrowserServer(): McpImportServer {
+/**
+ * [ENTERPRISE PATCH] spec 007 FR-3 — `nodeCommand` 由启动时探测决定：PATH node
+ * 可用则为裸 `node`（与上游零漂移），坏了则为受管运行时的绝对路径。这条 transport
+ * 会被原样拼进 Claude Code 的 `--mcp-config`，claude 只按 PATH 解析裸 `node`，
+ * 所以坏 PATH node 的机器必须在这里就把路径写死。见 mcpNodeCommand.ts。
+ */
+function buildBuiltinBrowserServer(nodeCommand: string): McpImportServer {
   const scriptPath = getBuiltinMcpScriptPath(BUILTIN_BROWSER_SCRIPT);
   const serverConfig = {
-    command: 'node',
+    command: nodeCommand,
     args: [scriptPath],
   };
 
@@ -200,7 +209,7 @@ function buildBuiltinBrowserServer(): McpImportServer {
   };
 }
 
-function buildDefaultMcpServers(): McpImportServer[] {
+function buildDefaultMcpServers(nodeCommand: string): McpImportServer[] {
   const chromeConfig = {
     command: 'npx',
     args: ['-y', 'chrome-devtools-mcp@latest'],
@@ -219,7 +228,7 @@ function buildDefaultMcpServers(): McpImportServer[] {
       },
       original_json: JSON.stringify({ mcpServers: { [BUILTIN_CHROME_DEVTOOLS_NAME]: chromeConfig } }, null, 2),
     },
-    buildBuiltinBrowserServer(),
+    buildBuiltinBrowserServer(nodeCommand),
   ];
 }
 
@@ -308,7 +317,20 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
   const imageEnvResolution = resolveImageGenerationMcpEnv(imageConfig, providers, existingImageEnv);
   logImageGenerationEnvResolution(imageEnvResolution, 'bootstrap');
   const imageServer = buildBuiltinImageGenerationServer(imageEnvResolution, imageConfig);
-  const defaultServers = buildDefaultMcpServers();
+  // [ENTERPRISE PATCH] spec 007 FR-3 — pick a node that actually runs before it
+  // gets baked into the browser MCP transport (and from there into claude's
+  // --mcp-config). Loud when PATH node is unusable; never blocks startup.
+  const nodeResolution = await resolveMcpNodeCommand({
+    runtimeNodeRoot: path.join(getDataPath(), 'runtime', 'node'),
+  });
+  if (nodeResolution.source !== 'path') {
+    console.warn(
+      '[Migration] PATH `node` is unusable; builtin browser MCP node command resolved to %s (source: %s)',
+      nodeResolution.command,
+      nodeResolution.source
+    );
+  }
+  const defaultServers = buildDefaultMcpServers(nodeResolution.command);
   const missing = [...defaultServers, imageServer].filter((server) => !existingByName.has(server.name));
   let imageServerUpdated = false;
 
@@ -410,7 +432,7 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
   const existingBrowserServer = existing.find((server) => server.name === BUILTIN_BROWSER_MCP_NAME);
   let browserServerUpdated = false;
   if (existingBrowserServer) {
-    const desiredBrowserServer = buildBuiltinBrowserServer();
+    const desiredBrowserServer = buildBuiltinBrowserServer(nodeResolution.command);
     const browserTransportChanged = !isSameStdioTransport(
       existingBrowserServer.transport,
       desiredBrowserServer.transport
