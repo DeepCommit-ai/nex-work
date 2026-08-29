@@ -89,6 +89,18 @@ dies). Old conversations do not self-heal; new ones are correct.
   currently attached", relayed to a clerk as an instruction to find a panel they had never seen.
   The tab opens in plain sight and the existing one-time notice explains it; a tab the user closes
   is not reopened by the settling event.
+- **FR-6** A genuine change of the bridge's attachment — first attach, attach to a different
+  webContents (tab switch), or the attached webview being destroyed — closes every connected CDP
+  client socket (1012, "reconnect"). Root cause this answers, measured live and confirmed by
+  reading the bundled puppeteer: a client that materializes its page while the bridge is
+  unattached has its per-command errors (`Network.enable`: "not currently attached") cached in
+  puppeteer's `pagePromise` **forever** — every agent retry replays the cached rejection without
+  sending a byte, while `/json/list` shows a healthy attached page. No protocol re-announce cures
+  it (duplicate `attachedToTarget` swaps sessions and keeps the poisoned target); a disconnect
+  does: chrome-devtools-mcp's `ensureBrowserConnected` rebuilds everything on the next tool call.
+  Load-bearing negative: a same-webContents re-report (every navigation's dom-ready) must never
+  disconnect anyone. Known residual: the first tool call right after a fresh connect can race
+  page registration and return "No page selected" once; the immediate retry lands (measured).
 - **FR-3** The builtin browser MCP transport must name a node that actually runs on this machine,
   re-resolved at every boot by the same reconcile that already repairs the script path: bare
   `node` while the PATH node passes a strict `--version` probe; otherwise the absolute path of a

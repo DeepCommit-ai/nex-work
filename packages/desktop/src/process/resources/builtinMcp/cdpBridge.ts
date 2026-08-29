@@ -68,6 +68,35 @@ const broadcast = (payload: Record<string, unknown>) => {
   }
 };
 
+/**
+ * [ENTERPRISE PATCH] spec 007 FR-6 — 附加状态真正变化时，断开所有已连客户端。
+ *
+ * puppeteer（chrome-devtools-mcp 内置）在未附加窗口期首次物化页面时，
+ * Network.enable 等转发命令被逐条报错，失败的 pagePromise 被它**永久缓存**——
+ * 之后每次重试只是回放这个缓存的 rejection，一个字节都不上线，于是"面板已经
+ * 打开了"对这个客户端永远不可见。实测：同一会话反复重试全部失败，而同一时刻
+ * /json/list 显示着健康的已附加页面。
+ *
+ * 协议层救不回来：重发 attachedToTarget 会撞上 puppeteer 的既存会话替换问题
+ * （见下方 announce-once 的注释），targetInfoChanged 更新不掉已缓存的 rejection。
+ * 所以直接断开（1012 Service Restart）：客户端的 browser.connected 变 false，
+ * chrome-devtools-mcp 的 ensureBrowserConnected 在下一次工具调用时全新重连，
+ * 拿到干净的已附加握手。代价是附加瞬间在途的那一次调用失败，重试即恢复。
+ * detach / webview 销毁同理——否则旧客户端会拿着过期的 frame tree 驱动新页面。
+ *
+ * 注意：同一 webContents 的重复 attach（每次导航的 dom-ready 都会重报）走
+ * attachInternal 的同 id 早退，不会触发这里——导航绝不能断开客户端。
+ */
+const resetClientConnections = (reason: string) => {
+  for (const ws of [...sockets]) {
+    try {
+      ws.close(1012, reason);
+    } catch {
+      /* already closing */
+    }
+  }
+};
+
 const detachInternal = () => {
   if (!attached) return;
   const { contents, dbg, onMessage, onDestroyed } = attached;
@@ -138,11 +167,13 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
   const onDestroyed = () => {
     detachInternal();
     broadcast({ method: 'Target.targetDestroyed', params: { targetId: currentTargetInfo().targetId } });
+    resetClientConnections('The in-app browser view was closed; reconnect.');
   };
 
   dbg.on('message', onMessage);
   contents.once('destroyed', onDestroyed);
   attached = { contents, dbg, onMessage, onDestroyed };
+  resetClientConnections('The in-app browser attachment changed; reconnect.');
   return { ok: true };
 };
 
