@@ -16,6 +16,7 @@ import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  handleDeptSkillsIpcCall,
   handleDeptSkillsRequest,
   isValidSkillName,
   resolveRetireDir,
@@ -161,6 +162,84 @@ describe('retire', () => {
       expect(r.status, `name=${JSON.stringify(bad)}`).toBe(400);
     }
     expect(fs.existsSync(decoy)).toBe(true);
+  });
+});
+
+describe('IPC 通道（handleDeptSkillsIpcCall）——桌面主进程直调，与 HTTP 同核（cynapse issue #16）', () => {
+  const ipc = (payload: Parameters<typeof handleDeptSkillsIpcCall>[0]) =>
+    handleDeptSkillsIpcCall(payload, { dataDir, managedConfigDir });
+
+  it('write 建目录写文件；幂等第二次 changed:false 且不触碰文件', () => {
+    expect(ipc({ action: 'write', name: 'ipc-skill', content: '# via ipc\n' })).toEqual({
+      success: true,
+      data: { changed: true },
+    });
+    const file = path.join(dataDir, 'builtin-skills', 'ipc-skill', 'SKILL.md');
+    expect(fs.readFileSync(file, 'utf8')).toBe('# via ipc\n');
+    const before = fs.statSync(file).mtimeMs;
+    expect(ipc({ action: 'write', name: 'ipc-skill', content: '# via ipc\n' })).toEqual({
+      success: true,
+      data: { changed: false },
+    });
+    expect(fs.statSync(file).mtimeMs).toBe(before);
+  });
+
+  it('retire 删除受管技能包并幂等', () => {
+    const dir = path.join(managedConfigDir, 'skills', 'ipc-old');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), 'legacy');
+    expect(ipc({ action: 'retire', name: 'ipc-old' })).toEqual({ success: true, data: { removed: true } });
+    expect(fs.existsSync(dir)).toBe(false);
+    expect(ipc({ action: 'retire', name: 'ipc-old' })).toEqual({ success: true, data: { removed: false } });
+  });
+
+  it('parity：非法名/未知动作/坏内容在两通道给出逐字节相同的信封', async () => {
+    // 守卫只有一份实现——这里用 HTTP 响应体做基准，IPC 信封必须 deep-equal。
+    const cases: { action: string; body: { name?: unknown; content?: unknown } }[] = [
+      { action: 'write', body: { name: '../escape', content: 'x' } },
+      { action: 'write', body: { name: 'UPPER', content: 'x' } },
+      { action: 'write', body: { name: 'blank-skill', content: '   \n' } },
+      { action: 'retire', body: { name: 'a/b' } },
+      { action: 'format-disk', body: { name: 'x-skill' } },
+    ];
+    for (const c of cases) {
+      const httpBody = await (await post(`/host-api/dept-skills/${c.action}`, c.body)).json();
+      const ipcBody = ipc({ action: c.action, ...c.body });
+      expect(ipcBody, `${c.action} ${JSON.stringify(c.body)}`).toEqual(httpBody);
+    }
+    // 两通道的拒绝都不许在盘上留下任何产物
+    expect(fs.readdirSync(dataDir)).toEqual([]);
+  });
+
+  it('dataDir 未配置 → HOST_DATA_DIR_UNAVAILABLE 信封（不猜路径）', () => {
+    expect(handleDeptSkillsIpcCall({ action: 'write', name: 'x-skill', content: 'x' }, { managedConfigDir })).toEqual({
+      success: false,
+      error: 'web-host 未配置 dataDir，技能写盘不可用',
+      code: 'HOST_DATA_DIR_UNAVAILABLE',
+    });
+  });
+
+  it('fs 失败收敛成 INTERNAL_ERROR 信封，绝不 throw——bridge 对 throw 的 provider 永远不回包', () => {
+    // builtin-skills 位置放一个同名文件：mkdir 必败
+    fs.writeFileSync(path.join(dataDir, 'builtin-skills'), 'decoy');
+    let envelope: unknown;
+    expect(() => {
+      envelope = ipc({ action: 'write', name: 'doomed-skill', content: 'x' });
+    }).not.toThrow();
+    expect(envelope).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+  });
+
+  it('载荷是 null/undefined 也不 throw', () => {
+    for (const bad of [null, undefined, 42, 'junk']) {
+      let envelope: unknown;
+      expect(
+        () => {
+          envelope = handleDeptSkillsIpcCall(bad as never, { dataDir, managedConfigDir });
+        },
+        `payload=${JSON.stringify(bad)}`
+      ).not.toThrow();
+      expect(envelope).toMatchObject({ success: false });
+    }
   });
 });
 

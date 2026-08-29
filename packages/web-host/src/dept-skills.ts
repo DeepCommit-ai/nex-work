@@ -1,5 +1,5 @@
 /**
- * [ENTERPRISE PATCH] 部门技能写盘桥 —— cynapse issue #14。
+ * [ENTERPRISE PATCH] 部门技能写盘桥 —— cynapse issue #14 / #16。
  *
  * ## 为什么存在
  *
@@ -13,19 +13,32 @@
  * - 没有任何删除口——退役 `~/.nexwork-claude/skills/` 的手工技能包做不了；
  * - 它是**任意绝对路径**的写口，"只许写 builtin-skills 子树"的边界只能靠调用方自律。
  *
- * 所以在 web-host（跑在宿主机上，知道 dataDir）加一个**受限**桥：写死只碰两棵
- * 子树，越权路径在端点内部拒绝，而不是指望每个调用方都拼对路径。
+ * 所以要一个跑在宿主机上、知道 dataDir 的**受限**写口：写死只碰两棵子树，
+ * 越权路径在入口内部拒绝，而不是指望每个调用方都拼对路径。
+ *
+ * ## 两个通道，一份核心（issue #16）
+ *
+ * - **HTTP**（webui）：`handleDeptSkillsRequest`，挂在 web-host static-server 的
+ *   `/host-api/dept-skills/*`。桌面形态的 renderer 直连 aioncore，够不到它。
+ * - **IPC**（Electron 桌面）：`handleDeptSkillsIpcCall`，由桌面主进程的 bridge
+ *   provider 直调（`enterprise.dept-skills` 通道）。
+ *
+ * 白名单、resolve 前缀守卫、幂等比对、错误码全部在 `performDeptSkillAction`
+ * 这一份里；通道层只允许存在传输差异（HTTP 的 405/请求体上限/JSON 解析，
+ * IPC 的信封直返）。守卫逻辑绝不复制两份——复制的那份必然漂移。
  *
  * ## 安全边界
  *
- * 认证与 `/api/*` 反代同层（static-server 不做独立认证）。这不扩大攻击面：能打到
- * 本端点的调用方同样能打到 aioncore 的 `/api/fs/write`（任意路径写），而本端点只
- * 允许两个白名单动作。技能名是唯一的路径输入，白名单正则 + resolve 前缀双保险。
+ * HTTP 侧认证与 `/api/*` 反代同层（static-server 不做独立认证）。这不扩大攻击面：
+ * 能打到本端点的调用方同样能打到 aioncore 的 `/api/fs/write`（任意路径写），而本
+ * 端点只允许两个白名单动作。IPC 侧同理：能发 bridge 事件的 renderer 也能直打
+ * aioncore HTTP 面。技能名是唯一的路径输入，白名单正则 + resolve 前缀双保险，
+ * 两通道进的是同一道门。
  *
  * ## 失败姿态
  *
  * 与 aioncore 同构的信封：`{success:true,data}` / `{success:false,error,code}`，
- * renderer 的 httpBridge 无需特判。所有拒绝都带 code，绝不静默吞掉。
+ * renderer 两通道无需特判。所有拒绝都带 code，绝不静默吞掉。
  */
 
 import fs from 'fs';
@@ -44,7 +57,7 @@ export const isValidSkillName = (name: unknown): name is string => typeof name =
 /** SKILL.md 的体积上限。薄壳只有几十行；没有上限时一次调用就能写满盘。 */
 export const MAX_SKILL_BYTES = 256 * 1024;
 
-/** 请求体上限（略高于内容上限，容 JSON 包装）。 */
+/** HTTP 请求体上限（略高于内容上限，容 JSON 包装）。 */
 const MAX_BODY_BYTES = MAX_SKILL_BYTES + 4 * 1024;
 
 export type DeptSkillsContext = {
@@ -58,6 +71,121 @@ export type DeptSkillsContext = {
    */
   managedConfigDir?: string;
 };
+
+/** 两通道同构的响应信封（与 aioncore 的 `/api/*` 信封一致）。 */
+export type DeptSkillsEnvelope =
+  | { success: true; data: { changed: boolean } | { removed: boolean } }
+  | { success: false; error: string; code: string };
+
+/** 核心动作的结果：信封 + HTTP 通道用的状态码（IPC 通道丢弃 httpStatus）。 */
+export type DeptSkillsActionResult = { httpStatus: number; body: DeptSkillsEnvelope };
+
+const ok = (data: { changed: boolean } | { removed: boolean }): DeptSkillsActionResult => ({
+  httpStatus: 200,
+  body: { success: true, data },
+});
+
+const reject = (httpStatus: number, code: string, error: string): DeptSkillsActionResult => ({
+  httpStatus,
+  body: { success: false, error, code },
+});
+
+/**
+ * 解析出目标 SKILL.md 的绝对路径，或 null（越权/非法名）。
+ *
+ * 正则已经排除了路径分隔符与 `..`，resolve 前缀是第二道保险——两道各自独立成立，
+ * 一道被将来的重构弄坏时另一道仍然兜底。
+ */
+export const resolveSkillFile = (dataDir: string, name: string): string | null => {
+  if (!isValidSkillName(name)) return null;
+  const root = path.resolve(dataDir, 'builtin-skills');
+  const target = path.resolve(root, name, 'SKILL.md');
+  if (!target.startsWith(root + path.sep)) return null;
+  return target;
+};
+
+/** retire 的目标目录，或 null。作用域写死在 managedConfigDir/skills 之下。 */
+export const resolveRetireDir = (managedConfigDir: string, name: string): string | null => {
+  if (!isValidSkillName(name)) return null;
+  const root = path.resolve(managedConfigDir, 'skills');
+  const target = path.resolve(root, name);
+  if (!target.startsWith(root + path.sep)) return null;
+  return target;
+};
+
+/**
+ * 写盘/退役的**唯一**核心实现——HTTP 桥与 Electron IPC 通道都进这道门。
+ *
+ * 自身永不 throw：所有失败（含 fs 异常）收敛成带 code 的失败信封。
+ * 通道层拿到的永远是"已定型"的结果，没有第二套错误语义可分叉。
+ */
+export function performDeptSkillAction(
+  action: unknown,
+  payload: { name?: unknown; content?: unknown },
+  ctx: DeptSkillsContext
+): DeptSkillsActionResult {
+  if (action !== 'write' && action !== 'retire') {
+    return reject(404, 'UNKNOWN_ACTION', `没有这个动作：${String(action)}`);
+  }
+  if (!isValidSkillName(payload.name)) {
+    // 名字就是路径段：非法名不是"参数错误"是越权尝试，日志里响一声。
+    console.warn(`[dept-skills] 拒绝非法技能名：${JSON.stringify(payload.name)?.slice(0, 80)}`);
+    return reject(400, 'BAD_SKILL_NAME', '技能名只允许小写字母/数字/连字符，≤64 字符');
+  }
+  const name = payload.name;
+
+  try {
+    if (action === 'write') {
+      if (!ctx.dataDir?.trim()) {
+        // 没有 dataDir 时不能猜一个：写错子树比写失败更难排查。
+        return reject(503, 'HOST_DATA_DIR_UNAVAILABLE', 'web-host 未配置 dataDir，技能写盘不可用');
+      }
+      if (typeof payload.content !== 'string' || !payload.content.trim()) {
+        return reject(400, 'BAD_CONTENT', 'content 必须是非空字符串（SKILL.md 全文）');
+      }
+      if (Buffer.byteLength(payload.content, 'utf8') > MAX_SKILL_BYTES) {
+        return reject(413, 'CONTENT_TOO_LARGE', `SKILL.md 超过 ${MAX_SKILL_BYTES} 字节`);
+      }
+      const target = resolveSkillFile(ctx.dataDir, name);
+      if (!target) {
+        return reject(400, 'BAD_SKILL_NAME', '技能名解析越出 builtin-skills 子树');
+      }
+      // 幂等：内容一致不落笔。全量重放每次启动都跑，无变化的写只会白刷 mtime、
+      // 扩大失败面（且让"这台机器的技能被谁改过"无从查起）。
+      let existing: string | null = null;
+      try {
+        existing = fs.readFileSync(target, 'utf8');
+      } catch {
+        /* 不存在 = 要写 */
+      }
+      if (existing === payload.content) {
+        return ok({ changed: false });
+      }
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, payload.content, 'utf8');
+      console.info(`[dept-skills] 已写入技能 ${name}（${existing === null ? '新建' : '更新'}）`);
+      return ok({ changed: true });
+    }
+
+    // retire：删除受管 Claude 全局技能目录里的同名手工技能包（双源退役）。
+    // 机器级技能对**所有助手**可见，会让默认助手蹭到企业技能、破坏按助手隔离。
+    const configDir = ctx.managedConfigDir?.trim() || path.join(os.homedir(), '.nexwork-claude');
+    const target = resolveRetireDir(configDir, name);
+    if (!target) {
+      return reject(400, 'BAD_SKILL_NAME', '技能名解析越出受管 skills 子树');
+    }
+    if (!fs.existsSync(target)) {
+      return ok({ removed: false });
+    }
+    fs.rmSync(target, { recursive: true, force: true });
+    console.info(`[dept-skills] 已退役受管全局技能 ${name}（${target}）`);
+    return ok({ removed: true });
+  } catch (e) {
+    return reject(500, 'INTERNAL_ERROR', e instanceof Error ? e.message : String(e));
+  }
+}
+
+// ── HTTP 通道（web-host static-server，webui 形态）───────────────────────────
 
 const json = (res: ServerResponse, status: number, body: unknown): void => {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -92,29 +220,6 @@ const readBody = (req: IncomingMessage): Promise<Buffer | null> =>
   });
 
 /**
- * 解析出目标 SKILL.md 的绝对路径，或 null（越权/非法名）。
- *
- * 正则已经排除了路径分隔符与 `..`，resolve 前缀是第二道保险——两道各自独立成立，
- * 一道被将来的重构弄坏时另一道仍然兜底。
- */
-export const resolveSkillFile = (dataDir: string, name: string): string | null => {
-  if (!isValidSkillName(name)) return null;
-  const root = path.resolve(dataDir, 'builtin-skills');
-  const target = path.resolve(root, name, 'SKILL.md');
-  if (!target.startsWith(root + path.sep)) return null;
-  return target;
-};
-
-/** retire 的目标目录，或 null。作用域写死在 managedConfigDir/skills 之下。 */
-export const resolveRetireDir = (managedConfigDir: string, name: string): string | null => {
-  if (!isValidSkillName(name)) return null;
-  const root = path.resolve(managedConfigDir, 'skills');
-  const target = path.resolve(root, name);
-  if (!target.startsWith(root + path.sep)) return null;
-  return target;
-};
-
-/**
  * 处理 `/host-api/dept-skills/*`。命中路径前缀时返回 true（无论成败，响应已发）；
  * 不是本桥的路径返回 false，调用方继续走反代/静态分支。
  */
@@ -132,7 +237,10 @@ export async function handleDeptSkillsRequest(
   }
   const action = url.slice('/host-api/dept-skills/'.length);
   if (action !== 'write' && action !== 'retire') {
-    fail(res, 404, 'UNKNOWN_ACTION', `没有这个动作：${action}`);
+    // 未知动作不读 body（不给未知动作读流的机会）。拒绝语义仍由核心给出——
+    // 消息只活在一处，两通道的 UNKNOWN_ACTION 永远同字节。
+    const unknown = performDeptSkillAction(action, {}, ctx);
+    json(res, unknown.httpStatus, unknown.body);
     return true;
   }
 
@@ -148,71 +256,29 @@ export async function handleDeptSkillsRequest(
     fail(res, 400, 'BAD_JSON', '请求体不是合法 JSON');
     return true;
   }
-  if (!isValidSkillName(body.name)) {
-    // 名字就是路径段：非法名不是"参数错误"是越权尝试，日志里响一声。
-    console.warn(`[dept-skills] 拒绝非法技能名：${JSON.stringify(body.name)?.slice(0, 80)}`);
-    fail(res, 400, 'BAD_SKILL_NAME', '技能名只允许小写字母/数字/连字符，≤64 字符');
-    return true;
-  }
-  const name = body.name;
 
+  const result = performDeptSkillAction(action, body, ctx);
+  json(res, result.httpStatus, result.body);
+  return true;
+}
+
+// ── IPC 通道（Electron 桌面主进程，issue #16）────────────────────────────────
+
+/** IPC 载荷。字段全 unknown：校验权在主进程侧的核心，不信任 renderer 的类型。 */
+export type DeptSkillsIpcPayload = { action?: unknown; name?: unknown; content?: unknown };
+
+/**
+ * Electron IPC 通道入口（桌面主进程的 bridge provider 直调）。
+ *
+ * 与 HTTP 通道同一核心、同构信封，renderer 两通道共用同一套错误处理。
+ * **绝不 throw**：bridge 的 invoke 对 throw 的 provider 永远不回包，renderer
+ * 会无声挂死在 pending——所有失败都必须收敛进失败信封（core 已兜底，这里再
+ * 兜一层是 IPC 通道的硬约束，不是防御性装饰）。
+ */
+export function handleDeptSkillsIpcCall(payload: DeptSkillsIpcPayload, ctx: DeptSkillsContext): DeptSkillsEnvelope {
   try {
-    if (action === 'write') {
-      if (!ctx.dataDir?.trim()) {
-        // 没有 dataDir 时不能猜一个：写错子树比写失败更难排查。
-        fail(res, 503, 'HOST_DATA_DIR_UNAVAILABLE', 'web-host 未配置 dataDir，技能写盘不可用');
-        return true;
-      }
-      if (typeof body.content !== 'string' || !body.content.trim()) {
-        fail(res, 400, 'BAD_CONTENT', 'content 必须是非空字符串（SKILL.md 全文）');
-        return true;
-      }
-      if (Buffer.byteLength(body.content, 'utf8') > MAX_SKILL_BYTES) {
-        fail(res, 413, 'CONTENT_TOO_LARGE', `SKILL.md 超过 ${MAX_SKILL_BYTES} 字节`);
-        return true;
-      }
-      const target = resolveSkillFile(ctx.dataDir, name);
-      if (!target) {
-        fail(res, 400, 'BAD_SKILL_NAME', '技能名解析越出 builtin-skills 子树');
-        return true;
-      }
-      // 幂等：内容一致不落笔。全量重放每次启动都跑，无变化的写只会白刷 mtime、
-      // 扩大失败面（且让"这台机器的技能被谁改过"无从查起）。
-      let existing: string | null = null;
-      try {
-        existing = fs.readFileSync(target, 'utf8');
-      } catch {
-        /* 不存在 = 要写 */
-      }
-      if (existing === body.content) {
-        json(res, 200, { success: true, data: { changed: false } });
-        return true;
-      }
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, body.content, 'utf8');
-      console.info(`[dept-skills] 已写入技能 ${name}（${existing === null ? '新建' : '更新'}）`);
-      json(res, 200, { success: true, data: { changed: true } });
-      return true;
-    }
-
-    // retire：删除受管 Claude 全局技能目录里的同名手工技能包（双源退役）。
-    // 机器级技能对**所有助手**可见，会让默认助手蹭到企业技能、破坏按助手隔离。
-    const configDir = ctx.managedConfigDir?.trim() || path.join(os.homedir(), '.nexwork-claude');
-    const target = resolveRetireDir(configDir, name);
-    if (!target) {
-      fail(res, 400, 'BAD_SKILL_NAME', '技能名解析越出受管 skills 子树');
-      return true;
-    }
-    if (!fs.existsSync(target)) {
-      json(res, 200, { success: true, data: { removed: false } });
-      return true;
-    }
-    fs.rmSync(target, { recursive: true, force: true });
-    console.info(`[dept-skills] 已退役受管全局技能 ${name}（${target}）`);
-    json(res, 200, { success: true, data: { removed: true } });
-    return true;
+    return performDeptSkillAction(payload?.action, { name: payload?.name, content: payload?.content }, ctx).body;
   } catch (e) {
-    fail(res, 500, 'INTERNAL_ERROR', e instanceof Error ? e.message : String(e));
-    return true;
+    return { success: false, error: e instanceof Error ? e.message : String(e), code: 'INTERNAL_ERROR' };
   }
 }

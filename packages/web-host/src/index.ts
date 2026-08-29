@@ -16,6 +16,11 @@ export {
 } from './backend-launcher.js';
 export type { BackendDirConfig, BackendLaunchOptions, BackendHandle, BackendStartOptions } from './backend-launcher.js';
 export { provisionManagedClaude, deriveClaudeBinaryPath, CLAUDE_AGENT_ID } from './managed-claude.js';
+// [ENTERPRISE PATCH] 部门技能写盘桥（cynapse issue #14/#16）：HTTP 通道由
+// static-server 内部挂载；IPC 通道由 Electron 桌面主进程注册 provider——
+// 两通道共用 dept-skills.ts 里同一份核心（守卫/白名单/幂等只写一份）。
+export { handleDeptSkillsIpcCall, performDeptSkillAction, isValidSkillName, MAX_SKILL_BYTES } from './dept-skills.js';
+export type { DeptSkillsContext, DeptSkillsEnvelope, DeptSkillsIpcPayload } from './dept-skills.js';
 
 /**
  * Start WebHost (main entry point).

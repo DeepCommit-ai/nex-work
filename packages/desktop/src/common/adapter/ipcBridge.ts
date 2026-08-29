@@ -2506,3 +2506,24 @@ export const sidebar = {
     (p) => `/api/sidebar/archived/project/${encodeURIComponent(p.project_id)}`
   ),
 };
+
+// ---------------------------------------------------------------------------
+// [ENTERPRISE PATCH] Dept skills bridge — stays IPC (cynapse issue #16)
+// 技能写盘/退役的桌面通道：Electron renderer 直连 aioncore，够不到 webui 形态
+// 挂在 static-server 上的 /host-api/dept-skills/* 写盘桥；桌面主进程注册本
+// provider（process/bridge/deptSkillsBridge.ts），与 HTTP 桥共用 web-host
+// dept-skills 的同一份核心（守卫/白名单/幂等只有一份实现）。
+// ---------------------------------------------------------------------------
+
+import type { DeptSkillsEnvelope } from '@aionui/web-host';
+
+export const deptSkills = {
+  /**
+   * 信封与 HTTP 桥同构（{success,data}/{success,error,code}），失败绝不 throw
+   * ——bridge 的 invoke 对 throw 的 provider 永远不回包，renderer 会挂死；
+   * 调用方（common/deptconfig/skillsChannel.ts）自带超时兜底。
+   */
+  call: bridge.buildProvider<DeptSkillsEnvelope, { action: 'write' | 'retire'; name: string; content?: string }>(
+    'enterprise.dept-skills'
+  ),
+};

@@ -14,7 +14,13 @@
  * - 上报失败：不阻塞使用，但结果里带回 detail，不静默。
  */
 
-import { acpConversation, application, assistants as assistantsBridge, mode } from '@/common/adapter/ipcBridge';
+import {
+  acpConversation,
+  application,
+  assistants as assistantsBridge,
+  deptSkills,
+  mode,
+} from '@/common/adapter/ipcBridge';
 import { normalizePolicy, setPolicy } from '@/common/capabilities/policy';
 import { enterpriseStore } from './enterpriseStore';
 import {
@@ -25,6 +31,7 @@ import {
   type PlannedWrite,
 } from '@/common/deptconfig/applyConfig';
 import { buildProvenanceEnvValue, fetchDeptConfig, postReport, toReportBody } from '@/common/deptconfig/client';
+import { callDeptSkills } from '@/common/deptconfig/skillsChannel';
 import type { ApplyReport, DeptConfig } from '@/common/deptconfig/types';
 import { buildEnvOverride, expandLeadingTilde } from '@/common/gateway/provisionGateway';
 import { GATEWAY_ENV_CONFIG_DIR } from '@/common/gateway/types';
@@ -94,32 +101,21 @@ const enrichPinnedModels = async (cfg: DeptConfig, state: CurrentState): Promise
 const renderSkillContent = (content: string, deptKey: string): string => content.split('{{CYNAPSE_KEY}}').join(deptKey);
 
 /**
- * 调 web-host 的受限写盘桥（`/host-api/dept-skills/*`）。
+ * 调技能写盘/退役桥——web-host dept-skills 同一份核心的两个通道（issue #16）：
  *
- * 只有 web 形态可达：桥挂在 static-server 上（同源），Electron renderer 的
- * HTTP 面直连 aioncore、根本不经过它——而 aioncore 的 /api/fs/write 建不了
- * 目录也删不了文件（实测 2026-08-29），所以桌面形态此路不通时**如实失败**
- * 进 failures，绝不静默跳过（"少两个技能"不能表现成"配置成功"）。
+ * - webui：同源打 static-server 的 `/host-api/dept-skills/*`（issue #14 原通道）；
+ * - Electron 桌面：renderer 直连 aioncore 够不到 static-server，走主进程 IPC
+ *   （`enterprise.dept-skills`，process/bridge/deptSkillsBridge.ts 注册）。
+ *
+ * 通道选择、IPC 超时兜底、失败面同构都在 skillsChannel 里，这里只做环境绑定。
+ * 任一通道不可达时**如实 throw** 进 failures，绝不静默跳过（"少两个技能"
+ * 不能表现成"配置成功"）。
  */
-const hostSkillsCall = async (action: 'write' | 'retire', body: Record<string, string>): Promise<void> => {
-  if (isElectronDesktop()) {
-    throw new Error('桌面形态暂无技能写盘通道（写盘桥挂在 webui 的 static-server 上）');
-  }
-  const res = await fetch(`/host-api/dept-skills/${action}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+const hostSkillsCall = (action: 'write' | 'retire', body: { name: string; content?: string }): Promise<void> =>
+  callDeptSkills(action, body, {
+    isDesktop: isElectronDesktop,
+    invokeIpc: (payload) => deptSkills.call.invoke(payload),
   });
-  let payload: { success?: boolean; error?: string; code?: string } = {};
-  try {
-    payload = (await res.json()) as typeof payload;
-  } catch {
-    /* 非 JSON：按状态码报 */
-  }
-  if (!res.ok || payload.success !== true) {
-    throw new Error(`${payload.code ?? res.status}：${payload.error ?? '写盘桥调用失败'}`);
-  }
-};
 
 const executeWrite = (w: PlannedWrite, deptKey: string): Promise<unknown> => {
   switch (w.kind) {
