@@ -18,7 +18,7 @@ import {
 } from '@/renderer/utils/model/agentRuntimeCatalog';
 import type { SlashCommandItem } from '@/common/chat/slash/types';
 import { useManagedAgentRuntimeCatalog } from '@/renderer/hooks/agent/useManagedAgents';
-import { selectableAssistants } from '@/renderer/utils/model/assistantSelection';
+import { DEFAULT_ASSISTANT_ID, selectableAssistants } from '@/renderer/utils/model/assistantSelection';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useCustomAgentsLoader } from './useCustomAgentsLoader';
 
@@ -102,6 +102,16 @@ function persistGuidAssistantSelectionKey(assistantId: string): void {
   void configService.set('guid.lastAssistantId', assistantId).catch((error) => {
     console.error('[Guid] Failed to persist selected assistant:', error);
   });
+}
+
+/**
+ * [ENTERPRISE PATCH] 新开会话的选中解析:系统默认助手在场即永远优先;
+ * 记忆的"上次选择"只在它缺席时才生效(显式 preselect 深链仍然最高优先)。
+ */
+export function resolveNewChatAssistantSelectionKey(assistants: Assistant[]): string | null {
+  const systemDefault = selectableAssistants(assistants).find((assistant) => assistant.id === DEFAULT_ASSISTANT_ID);
+  if (systemDefault) return systemDefault.id;
+  return readPersistedGuidAssistantSelectionKey(assistants) ?? pickDefaultAssistantSelectionKey(assistants);
 }
 
 export function pickDefaultAssistantSelectionKey(assistants: Assistant[]): string | null {
@@ -196,9 +206,7 @@ export const useGuidAssistantSelection = ({
 
     if (resetAssistant) {
       resetHandledRef.current = true;
-      const fallbackId =
-        readPersistedGuidAssistantSelectionKey(assistants) ?? pickDefaultAssistantSelectionKey(assistants);
-      _setSelectedAssistantId(fallbackId);
+      _setSelectedAssistantId(resolveNewChatAssistantSelectionKey(assistants));
     }
   }, [assistants, preselectAssistantId, resetAssistant]);
 
@@ -207,9 +215,7 @@ export const useGuidAssistantSelection = ({
     if (resetAssistant) return;
     if (preselectAssistantId && resolveAssistantSelectionKey(preselectAssistantId, assistants)) return;
     if (!selectedAssistantIdState || !assistants.some((assistant) => assistant.id === selectedAssistantIdState)) {
-      _setSelectedAssistantId(
-        readPersistedGuidAssistantSelectionKey(assistants) ?? pickDefaultAssistantSelectionKey(assistants)
-      );
+      _setSelectedAssistantId(resolveNewChatAssistantSelectionKey(assistants));
     }
   }, [assistants, preselectAssistantId, resetAssistant, selectedAssistantIdState]);
 

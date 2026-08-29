@@ -25,7 +25,8 @@ export type AssistantSourceTag = 'builtin' | 'custom' | 'cli' | null;
  * 管理页(我的助手/官方助手/启用中,含各 tab 气泡计数)一律当它不存在,
  * 且不可删除、不可停用。会话入口不受影响(仍可选、仍是默认)。
  */
-export const DEFAULT_ASSISTANT_ID = 'default-assistant';
+export { DEFAULT_ASSISTANT_ID } from '@/renderer/utils/model/assistantSelection';
+import { DEFAULT_ASSISTANT_ID } from '@/renderer/utils/model/assistantSelection';
 export const isSystemDefaultAssistant = (assistant: { id: string }): boolean => assistant.id === DEFAULT_ASSISTANT_ID;
 export const withoutSystemDefault = <T extends { id: string }>(list: T[]): T[] =>
   list.filter((assistant) => assistant.id !== DEFAULT_ASSISTANT_ID);

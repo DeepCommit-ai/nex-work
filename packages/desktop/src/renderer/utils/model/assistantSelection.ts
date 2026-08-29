@@ -21,6 +21,18 @@ import { can } from '@/common/capabilities/policy';
  * Note: a bare CLI assistant surfaces with `source === 'generated'`.
  */
 
+/**
+ * [ENTERPRISE PATCH] 系统默认助手:每个选择列表永远把它钉在第一位,
+ * 无论 legacy 分组还是用户的自定义排序偏好——"默认"必须一眼可见。
+ */
+export const DEFAULT_ASSISTANT_ID = 'default-assistant';
+
+const pinSystemDefaultFirst = (ordered: Assistant[]): Assistant[] => {
+  const idx = ordered.findIndex((assistant) => assistant.id === DEFAULT_ASSISTANT_ID);
+  if (idx <= 0) return ordered;
+  return [ordered[idx], ...ordered.slice(0, idx), ...ordered.slice(idx + 1)];
+};
+
 /** Legacy group weight — lower comes first. Bare CLI < user-created < official. */
 const sourceGroupWeight = (source: string): number => {
   switch (source) {
@@ -77,7 +89,7 @@ export const selectableAssistants = (assistants: Assistant[], preferredOrder?: r
     .toSorted(compareLegacyAssistantOrder);
 
   if (!preferredOrder || preferredOrder.length === 0) {
-    return concealBareCliAssistants(legacyOrdered);
+    return pinSystemDefaultFirst(concealBareCliAssistants(legacyOrdered));
   }
 
   const enabledById = new Map(legacyOrdered.map((assistant) => [assistant.id, assistant]));
@@ -97,7 +109,7 @@ export const selectableAssistants = (assistants: Assistant[], preferredOrder?: r
     orderedAssistants.push(assistant);
   }
 
-  return concealBareCliAssistants(orderedAssistants);
+  return pinSystemDefaultFirst(concealBareCliAssistants(orderedAssistants));
 };
 
 /** Build the persisted enabled order after an assistant is toggled. */
