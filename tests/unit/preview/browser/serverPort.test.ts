@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  buildMcpChildEnv,
   buildMcpSpawnCommand,
   resolveBridgeToken,
   resolveBrowserUrl,
@@ -143,5 +144,52 @@ describe('buildMcpSpawnCommand — issue #3883', () => {
     const { args } = buildMcpSpawnCommand({ platform: 'win32', version, browserUrl });
     expect(args).not.toContain('chrome-devtools-mcp@latest');
     expect(args).toContain(`chrome-devtools-mcp@${version}`);
+  });
+});
+
+/**
+ * 回归测试：npx 的 shebang 是 `#!/usr/bin/env node`，会从继承 PATH 重新解析
+ * node。启动器本身由 aioncore 的受管运行时拉起，但机器 PATH 首位的 node 坏掉时
+ * （实测：brew node 25.6.1 缺 libllhttp dylib），裸 spawn('npx') 的子进程死在
+ * MCP 握手前，浏览器工具静默消失。子进程 env 必须把正在执行启动器的运行时 bin
+ * 目录放到 PATH 首位。
+ *
+ * Regression: npx re-resolves `node` from the inherited PATH via its shebang.
+ * With a broken PATH-first node the child dies before the MCP handshake. The
+ * child env must put the launcher's own runtime bin dir first.
+ */
+describe('buildMcpChildEnv', () => {
+  it('prepends the running runtime bin dir to PATH', () => {
+    const env = buildMcpChildEnv({
+      env: { PATH: '/opt/homebrew/bin:/usr/bin', HOME: '/Users/u' },
+      execPath: '/managed/node-v24/bin/node',
+      pathDelimiter: ':',
+    });
+    expect(env.PATH).toBe('/managed/node-v24/bin:/opt/homebrew/bin:/usr/bin');
+    expect(env.HOME).toBe('/Users/u');
+  });
+
+  it('reuses the existing case-variant key on Windows instead of adding a second one', () => {
+    const env = buildMcpChildEnv({
+      env: { Path: 'C:\\broken\\node;C:\\Windows' },
+      execPath: 'C:\\managed\\node\\node.exe',
+      pathDelimiter: ';',
+    });
+    expect(env.Path).toBe('C:\\managed\\node;C:\\broken\\node;C:\\Windows');
+    expect(Object.keys(env)).not.toContain('PATH');
+  });
+
+  it('creates PATH when the inherited env has none', () => {
+    const env = buildMcpChildEnv({ env: {}, execPath: '/managed/bin/node', pathDelimiter: ':' });
+    expect(env.PATH).toBe('/managed/bin');
+  });
+
+  it('does not stack a duplicate when the runtime dir is already first', () => {
+    const env = buildMcpChildEnv({
+      env: { PATH: '/managed/bin:/usr/bin' },
+      execPath: '/managed/bin/node',
+      pathDelimiter: ':',
+    });
+    expect(env.PATH).toBe('/managed/bin:/usr/bin');
   });
 });

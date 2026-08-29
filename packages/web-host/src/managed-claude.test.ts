@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { deriveClaudeBinaryPath, provisionManagedClaude } from './managed-claude.js';
+import { deriveClaudeBinaryPath, provisionManagedClaude, resolveBundledClaudeCandidates } from './managed-claude.js';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'managed-claude-test-'));
 
@@ -161,5 +161,84 @@ describe('expandConfigDirTilde', () => {
     );
     expect(changed).toBe(false);
     expect(env[0].value).toBe('/home/emp/.nexwork-claude');
+  });
+});
+
+describe('resolveBundledClaudeCandidates', () => {
+  it('lists the distribution layout first, then the repo-root dev fallback', () => {
+    const candidates = resolveBundledClaudeCandidates(
+      '/app/resources/bundled-aioncore/linux-x64/aioncore',
+      'linux',
+      'x64',
+      '/repo'
+    );
+    expect(candidates).toEqual([
+      '/app/resources/bundled-claude/linux-x64/claude',
+      path.resolve('/repo', 'resources', 'bundled-claude', 'linux-x64', 'claude'),
+    ]);
+  });
+});
+
+describe('dev fallback — aioncore resolved from PATH', () => {
+  /**
+   * 实测 2026-08-29：dev 模式 aioncore 来自 ~/.local/bin，`<bin>/../..` 推导到
+   * $HOME，载荷却在仓库 resources/ 下 ——「每次启动重钉」在 dev 里从不发生，
+   * 版本漂移提示一直存在。cwd 回退让 dev 与分发布局走同一条钉入路径。
+   */
+  it('pins to <cwd>/resources/bundled-claude when the sibling layout has no payload', async () => {
+    const home = tmp();
+    const aioncore = path.join(home, '.local', 'bin', 'aioncore');
+    fs.mkdirSync(path.dirname(aioncore), { recursive: true });
+    fs.writeFileSync(aioncore, '');
+
+    const repo = tmp();
+    const payloadDir = path.join(repo, 'resources', 'bundled-claude', 'linux-x64');
+    fs.mkdirSync(payloadDir, { recursive: true });
+    const payload = path.join(payloadDir, 'claude');
+    fs.writeFileSync(payload, '#!/bin/sh\n', { mode: 0o755 });
+
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (!init) return { ok: true, json: async () => ({ data: { command_override: null, env_override: [] } }) };
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+
+    await provisionManagedClaude({
+      aioncoreBinaryPath: aioncore,
+      backendPort: 1234,
+      fetchImpl,
+      platform: 'linux',
+      arch: 'x64',
+      cwd: repo,
+    });
+
+    const put = calls.find((c) => c.init?.method === 'PUT');
+    expect(put).toBeDefined();
+    expect(JSON.parse(String(put!.init!.body)).command_override).toBe(payload);
+  });
+
+  it('still skips loudly when neither candidate exists', async () => {
+    const home = tmp();
+    const aioncore = path.join(home, '.local', 'bin', 'aioncore');
+    fs.mkdirSync(path.dirname(aioncore), { recursive: true });
+    fs.writeFileSync(aioncore, '');
+
+    const calls: { url: string }[] = [];
+    const fetchImpl = (async (url: string) => {
+      calls.push({ url });
+      return { ok: true, json: async () => ({ data: {} }) };
+    }) as unknown as typeof fetch;
+
+    await provisionManagedClaude({
+      aioncoreBinaryPath: aioncore,
+      backendPort: 1234,
+      fetchImpl,
+      platform: 'linux',
+      arch: 'x64',
+      cwd: tmp(),
+    });
+
+    expect(calls).toHaveLength(0);
   });
 });

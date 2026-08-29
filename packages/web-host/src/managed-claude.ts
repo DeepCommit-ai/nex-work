@@ -71,6 +71,29 @@ export function deriveClaudeBinaryPath(
   return path.resolve(path.dirname(aioncoreBinaryPath), '..', '..', 'bundled-claude', `${platform}-${arch}`, exe);
 }
 
+/**
+ * 按优先级列出捆绑 claude 的候选路径。
+ *
+ * 首选与 aioncore 同级同构的分发布局。但 dev 模式的 aioncore 来自 PATH（如
+ * `~/.local/bin/aioncore`），`<bin>/../..` 会推导到 $HOME —— 实测 2026-08-29：
+ * 推导出 `~/bundled-claude`（不存在），而 prepareClaude.js 的输出躺在仓库
+ * `resources/bundled-claude/` 下，「每次启动重钉」在 dev 里从不发生。所以补一个
+ * 工作目录回退：electron-vite dev 的 cwd 就是仓库根。打包形态里 cwd 不可预期，
+ * 但候选只在 existsSync 通过后才被采用，多列一个不存在的路径无害。
+ */
+export function resolveBundledClaudeCandidates(
+  aioncoreBinaryPath: string,
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+  cwd: string = process.cwd()
+): string[] {
+  const exe = platform === 'win32' ? 'claude.exe' : 'claude';
+  return [
+    deriveClaudeBinaryPath(aioncoreBinaryPath, platform, arch),
+    path.resolve(cwd, 'resources', 'bundled-claude', `${platform}-${arch}`, exe),
+  ];
+}
+
 export type ProvisionManagedClaudeOptions = {
   aioncoreBinaryPath: string;
   backendPort: number;
@@ -78,6 +101,7 @@ export type ProvisionManagedClaudeOptions = {
   fetchImpl?: typeof fetch;
   platform?: NodeJS.Platform;
   arch?: string;
+  cwd?: string;
 };
 
 /**
@@ -92,12 +116,14 @@ export async function provisionManagedClaude(opts: ProvisionManagedClaudeOptions
       log('AIONUI_MANAGED_CLAUDE=0——停用，Claude Code 回落 PATH 解析');
       return;
     }
-    const claudeBin =
-      process.env.AIONUI_CLAUDE_BIN?.trim() ||
-      deriveClaudeBinaryPath(opts.aioncoreBinaryPath, opts.platform, opts.arch);
-    if (!fs.existsSync(claudeBin)) {
+    const explicit = process.env.AIONUI_CLAUDE_BIN?.trim();
+    const candidates = explicit
+      ? [explicit]
+      : resolveBundledClaudeCandidates(opts.aioncoreBinaryPath, opts.platform, opts.arch, opts.cwd);
+    const claudeBin = candidates.find((candidate) => fs.existsSync(candidate));
+    if (!claudeBin) {
       log(
-        `没有捆绑载荷（${claudeBin} 不存在）——跳过，Claude Code 回落 PATH 解析。发布构建必须先跑 scripts/prepareClaude.js`
+        `没有捆绑载荷（查过 ${candidates.join('、')}）——跳过，Claude Code 回落 PATH 解析。发布构建必须先跑 scripts/prepareClaude.js`
       );
       return;
     }

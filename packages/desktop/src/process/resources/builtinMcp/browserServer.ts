@@ -30,7 +30,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import { buildMcpSpawnCommand, resolveBridgeToken, resolveBrowserUrl } from './browserServerPort';
+import { delimiter } from 'node:path';
+import { buildMcpChildEnv, buildMcpSpawnCommand, resolveBridgeToken, resolveBrowserUrl } from './browserServerPort';
 
 /**
  * stdio MCP 服务器的 stdout 是协议通道，任何附加输出都会破坏握手。
@@ -158,7 +159,12 @@ const child = spawn(spawnPlan.command, spawnPlan.args, {
   // Pass stdio straight through: this process is a forwarder, and the MCP
   // protocol stream must not be buffered or rewritten in between.
   stdio: 'inherit',
-  env: process.env,
+  // npx 及其 shebang 里的 `env node` 必须解析到正在执行本文件的运行时，
+  // 而不是继承 PATH 里可能坏掉的首位 node —— 见 buildMcpChildEnv 的说明。
+  // npx (and the `env node` in its shebang) must resolve inside the runtime
+  // executing this file, not whatever broken node sits first on the inherited
+  // PATH — see buildMcpChildEnv.
+  env: buildMcpChildEnv({ env: process.env, execPath: process.execPath, pathDelimiter: delimiter }),
 });
 
 child.on('error', (error) => {

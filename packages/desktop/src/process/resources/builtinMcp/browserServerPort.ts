@@ -79,6 +79,50 @@ export const resolveBridgeToken = (deps: ResolveBrowserUrlDeps): string | null =
 };
 
 /**
+ * 给 chrome-devtools-mcp 子进程构造 env：把**正在执行本启动器的 node 运行时**的
+ * bin 目录前置到 PATH。
+ *
+ * 为什么必须这样：`npx` 自己是个 `#!/usr/bin/env node` 脚本。aioncore 用它的受管
+ * node 运行时拉起本启动器，可启动器再 spawn 裸 `npx` 时，npx 的 shebang 会从继承
+ * 的 PATH 里**重新解析 `node`** —— 在 PATH 首位 node 坏掉的机器上（实测：brew
+ * node 25.6.1 缺 libllhttp dylib，dyld 直接杀进程），子进程死在 MCP 握手之前，
+ * 浏览器工具静默消失，日志只剩一句 "Child process stdout closed"。
+ *
+ * 把 `dirname(execPath)` 前置后，`npx` 的查找和 npx 内部的 `env node` 都落回**正在
+ * 执行本文件、已被证明可用**的那个运行时。Windows 上同理：node.exe 与 npx.cmd
+ * 同目录，cmd.exe /c npx 也按子进程 PATH 查找。
+ *
+ * Build the child env for chrome-devtools-mcp: prepend the bin directory of the
+ * node runtime executing this launcher to PATH. `npx` is itself a
+ * `#!/usr/bin/env node` script, so a bare spawn re-resolves `node` from the
+ * inherited PATH — on a machine whose PATH-first node is broken (measured: brew
+ * node 25.6.1 missing a libllhttp dylib) the child dies before the MCP
+ * handshake and the browser tools silently vanish. The runtime running this
+ * file is proven to work; make the lookup land there.
+ */
+export const buildMcpChildEnv = (deps: {
+  env: NodeJS.ProcessEnv;
+  execPath: string;
+  pathDelimiter: string;
+}): NodeJS.ProcessEnv => {
+  // 不用 path.dirname：它按宿主平台解析分隔符，跨平台单测会失真。execPath 一定
+  // 是绝对路径，双分隔符截断在两个平台上都成立。
+  // Not path.dirname — it parses by host platform, which skews cross-platform
+  // tests. execPath is always absolute; trimming at either separator holds on
+  // both platforms.
+  const lastSeparator = Math.max(deps.execPath.lastIndexOf('/'), deps.execPath.lastIndexOf('\\'));
+  const runtimeBinDir = lastSeparator > 0 ? deps.execPath.slice(0, lastSeparator) : deps.execPath;
+  // Windows 下这个键常写作 `Path`；按大小写不敏感找现有键，避免留下两份。
+  // The key is commonly `Path` on Windows; match case-insensitively so we
+  // never end up with two competing entries.
+  const pathKey = Object.keys(deps.env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH';
+  const current = deps.env[pathKey] ?? '';
+  const alreadyFirst = current === runtimeBinDir || current.startsWith(`${runtimeBinDir}${deps.pathDelimiter}`);
+  const next = alreadyFirst ? current : current ? `${runtimeBinDir}${deps.pathDelimiter}${current}` : runtimeBinDir;
+  return { ...deps.env, [pathKey]: next };
+};
+
+/**
  * 决定用什么命令行拉起 chrome-devtools-mcp。
  *
  * 抽到这里只为可测：browserServer.ts 顶层就 spawn，单测没法 import 它，于是 Windows
