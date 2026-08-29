@@ -137,3 +137,29 @@ describe('provisionManagedClaude', () => {
     expect(JSON.parse(String(put!.init!.body)).command_override).toBe(custom);
   });
 });
+
+describe('expandConfigDirTilde', () => {
+  it('展开字面 ~ 的 CLAUDE_CONFIG_DIR,其他条目原样', async () => {
+    const { expandConfigDirTilde } = await import('./managed-claude.js');
+    const { env, changed } = expandConfigDirTilde(
+      [
+        { name: 'CLAUDE_CONFIG_DIR', value: '~/.nexwork-claude' },
+        { name: 'ANTHROPIC_BASE_URL', value: 'http://127.0.0.1:54000' },
+      ],
+      '/home/emp'
+    );
+    expect(changed).toBe(true);
+    expect(env[0].value).toBe('/home/emp/.nexwork-claude');
+    expect(env[1].value).toBe('http://127.0.0.1:54000');
+  });
+
+  it('绝对路径不动、changed=false', async () => {
+    const { expandConfigDirTilde } = await import('./managed-claude.js');
+    const { env, changed } = expandConfigDirTilde(
+      [{ name: 'CLAUDE_CONFIG_DIR', value: '/home/emp/.nexwork-claude' }],
+      '/home/emp'
+    );
+    expect(changed).toBe(false);
+    expect(env[0].value).toBe('/home/emp/.nexwork-claude');
+  });
+});

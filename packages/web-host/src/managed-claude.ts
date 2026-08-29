@@ -33,9 +33,33 @@
  */
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 export const CLAUDE_AGENT_ID = '2d23ff1c';
+
+/**
+ * 展开 env_override 里 CLAUDE_CONFIG_DIR 的字面 `~`。
+ *
+ * 渲染层写入时可能拿不到宿主机 home（deptConfigService 的已知失败路径），
+ * `~/.nexwork-claude` 会按原样落库——子进程环境变量不做 shell 展开，Claude Code
+ * 拿到的就是个坏路径，隔离目录失效、企业技能包不可见（实测 2026-08-28）。
+ * web-host 跑在宿主机上，这里每次启动自愈成绝对路径。
+ */
+export function expandConfigDirTilde(
+  env: { name: string; value: string }[] | undefined,
+  homedir: string = os.homedir()
+): { env: { name: string; value: string }[]; changed: boolean } {
+  let changed = false;
+  const out = (env ?? []).map((e) => {
+    if (e.name === 'CLAUDE_CONFIG_DIR' && (e.value === '~' || e.value.startsWith('~/'))) {
+      changed = true;
+      return { ...e, value: path.join(homedir, e.value.slice(1).replace(/^\//, '')) };
+    }
+    return e;
+  });
+  return { env: out, changed };
+}
 
 /** 从 aioncore 二进制路径推导捆绑 claude：`<bin目录>/../../bundled-claude/<plat>-<arch>/claude`。 */
 export function deriveClaudeBinaryPath(
@@ -98,21 +122,22 @@ export async function provisionManagedClaude(opts: ProvisionManagedClaudeOptions
       warn('读不到 Claude Code 的 overrides——本次不钉，下次启动再试');
       return;
     }
-    if (overrides.command_override === claudeBin) {
+    const { env: fixedEnv, changed: envFixed } = expandConfigDirTilde(overrides.env_override);
+    if (overrides.command_override === claudeBin && !envFixed) {
       log(`已钉在 ${claudeBin}（无变化）`);
       return;
     }
     const put = await doFetch(`${base}/api/agents/${CLAUDE_AGENT_ID}/overrides`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      // 整体替换语义：env_override 必须原样带回，否则网关四件套被清空。
-      body: JSON.stringify({ command_override: claudeBin, env_override: overrides.env_override ?? [] }),
+      // 整体替换语义：env_override 必须带回（CLAUDE_CONFIG_DIR 的 `~` 顺手自愈成绝对路径）。
+      body: JSON.stringify({ command_override: claudeBin, env_override: fixedEnv }),
     });
     if (!put.ok) {
       warn(`钉 command_override 失败：HTTP ${put.status}`);
       return;
     }
-    log(`Claude Code 已钉到捆绑二进制：${claudeBin}`);
+    log(`Claude Code 已钉到捆绑二进制：${claudeBin}` + (envFixed ? '（并已展开 CLAUDE_CONFIG_DIR 的 ~）' : ''));
   } catch (e) {
     warn('提供受管 Claude 时出错（不影响后端启动）', e);
   }
