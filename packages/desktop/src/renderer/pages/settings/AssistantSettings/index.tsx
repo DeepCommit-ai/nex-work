@@ -20,7 +20,12 @@
 import { Message } from '@arco-design/web-react';
 import { useAssistantEditor, useAssistantList } from '@/renderer/hooks/assistant';
 import { useManagedAgentRuntimeCatalog } from '@/renderer/hooks/agent/useManagedAgents';
-import { buildAssistantEditorBackends, resolveAvatarImageSrc, DEFAULT_ASSISTANT_ID, withoutSystemDefault } from './assistantUtils';
+import {
+  buildAssistantEditorBackends,
+  resolveAvatarImageSrc,
+  DEFAULT_ASSISTANT_ID,
+  withoutSystemDefault,
+} from './assistantUtils';
 import AssistantEditorPage from './AssistantEditorPage';
 import AssistantHomeTabs from './home/AssistantHomeTabs';
 import DeleteAssistantModal from './DeleteAssistantModal';
