@@ -230,6 +230,109 @@ const sendError = (ws: WebSocket, id: number | undefined, message: string, sessi
 const UNATTACHED_MESSAGE =
   'The in-app browser is not attached yet. The browser panel opens automatically on first use — wait a few seconds and retry the same tool call.';
 
+/**
+ * [ENTERPRISE PATCH] spec 007 FR-8 — 键盘类命令转发前，把应用焦点拉回 webview。
+ *
+ * Chromium 对 CDP 键盘/文本注入不按「命令发给哪个 target」投递，而按「当前焦点
+ * widget」投递：input_handler.cc（138.0.7204.251，Electron 37 同版）里
+ * DispatchKeyEvent / InsertText / ImeSetComposition 全部走
+ * `delegate()->GetFocusedRenderWidgetHost()`，而焦点整棵窗口树只有一份，挂在最外层
+ * WebContents 上（web_contents_impl.cc: `GetFocusedFrameTree() =
+ * GetOutermostWebContents()->node_.focused_frame_tree()`）。用户刚发完消息时焦点停在
+ * 主窗口聊天输入框，于是 agent 的 fill 把表单内容逐字打进了聊天框（实测，会话
+ * 7a4f0946：文本字段全报「成功」但页面 DOM 为空；date 字段走 JS 赋值路径反而成功）。
+ *
+ * 鼠标命令按坐标命中测试路由（GetRenderWidgetHostAtPointAsynchronously），从不受焦点
+ * 影响，click 一直是对的——所以只拦键盘三命令，绝不给鼠标/截图/evaluate 抢焦点
+ * （负向约束，测试钉住）。真 Chrome 没这个问题：被自动化的页面就是唯一顶层页面，
+ * 焦点无处可去；页面嵌成 webview 后「页面焦点」与「应用焦点」合流，假设即碎。
+ *
+ * Chromium delivers CDP keyboard/text injection to the FOCUSED widget, not to the
+ * session's own target (input_handler.cc: DispatchKeyEvent / InsertText /
+ * ImeSetComposition all consult `delegate()->GetFocusedRenderWidgetHost()`), and
+ * focus is tracked once per window tree on the outermost WebContents
+ * (web_contents_impl.cc). With app focus in the host chat input, an agent fill
+ * typed the form values into the chat box (measured, conversation 7a4f0946: text
+ * fields reported success while the page DOM stayed empty; the date field, filled
+ * via JS assignment, stuck). Mouse events hit-test by coordinates and were never
+ * affected — hence only the three keyboard methods force focus back to the
+ * webview, never mouse/screenshot/evaluate (a pinned negative constraint).
+ *
+ * focus 是尽力而为：失败也必须照常转发（字可能落错处，但命令绝不能凭空丢失）。
+ * Focus is best-effort: forwarding must proceed even when it fails.
+ */
+const KEYBOARD_INPUT_METHODS = new Set(['Input.dispatchKeyEvent', 'Input.insertText', 'Input.imeSetComposition']);
+
+/**
+ * 让「嵌入层」把 DOM 焦点交给 webview 元素 —— 这是唯一实测有效的通路。
+ *
+ * 主进程侧的 `contents.focus()` 对 guest 实测无效（探针：guest 的
+ * document.hasFocus() 保持 false，键仍打进宿主聊天框）；而宿主渲染进程里
+ * `webviewEl.focus()` 走用户点击同一条焦点通道，实测让 guest hasFocus 翻真、
+ * 两类按键全部落进 webview。executeJavaScript 可等待，把首字符竞态压到最小。
+ *
+ * Main-process `contents.focus()` measurably does nothing for a guest (probe:
+ * guest document.hasFocus() stays false, keys still land in the host chat box),
+ * while a DOM `webviewEl.focus()` in the EMBEDDER renderer — the same channel a
+ * real user click takes — measurably flips guest focus and lands both key kinds
+ * in the webview. executeJavaScript is awaitable, minimising the first-key race.
+ */
+const buildEmbedderFocusScript = (webContentsId: number): string => `(() => {
+  for (const wv of document.querySelectorAll('webview')) {
+    try {
+      if (wv.getWebContentsId && wv.getWebContentsId() === ${webContentsId}) {
+        const wasActive = document.activeElement === wv;
+        wv.focus();
+        return { found: true, wasActive };
+      }
+    } catch { /* webview not attached yet */ }
+  }
+  return { found: false, wasActive: false };
+})()`;
+
+/**
+ * 每个键盘命令前都执行，无 guard、无轮询 —— 两者的信号都被实测证伪：
+ *  - `contents.isFocused()` 对 guest **恒为 false**（焦点实际已在 guest、键正常落位
+ *    时依然 false），既当不了跳过条件，也当不了 settle 信号；
+ *  - 首字符竞态实测不存在：executeJavaScript 的完成回执落后于渲染进程发出的焦点
+ *    转移消息，第一个 insertText 稳定落位（探针 '恒1' 从未缺首字）。
+ * 已聚焦时宿主侧 `wv.focus()` 是 DOM no-op，无条件执行的增量只是一次
+ * executeJavaScript 往返（毫秒级），换来最强自愈：用户中途点回聊天框，
+ * 下一个键盘命令立即把焦点夺回 webview。
+ *
+ * Runs before every keyboard command, unguarded and unpolled — both signals were
+ * measured false: `contents.isFocused()` stays false for a guest even while keys
+ * demonstrably land in it, and no first-key race exists (the executeJavaScript
+ * completion trails the renderer's focus-transfer message; the probe never lost
+ * a leading char). When already focused, the embedder-side `wv.focus()` is a DOM
+ * no-op, so the unconditional call costs one millisecond-scale roundtrip and
+ * buys the strongest self-healing: if the user clicks back into the chat box
+ * mid-fill, the very next keyboard command reclaims the webview.
+ */
+const focusAttachedForKeyboardInput = async (): Promise<void> => {
+  if (!attached || attached.contents.isDestroyed()) return;
+  const { contents } = attached;
+  try {
+    const host = contents.hostWebContents;
+    if (!host || host.isDestroyed()) {
+      // No embedder to ask (should not happen for a webview); try the direct
+      // call even though it was measured ineffective for guests — better than
+      // silently doing nothing.
+      contents.focus();
+      return;
+    }
+    const result = (await host.executeJavaScript(buildEmbedderFocusScript(contents.id), true)) as {
+      found?: boolean;
+      wasActive?: boolean;
+    } | null;
+    if (result?.found && !result.wasActive) {
+      console.log('[CDP] Focused the browser webview for agent keyboard input');
+    }
+  } catch {
+    // Focus is best-effort; the command itself must still be forwarded.
+  }
+};
+
 const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions: Set<string>) => {
   let req: CdpRequest;
   try {
@@ -324,6 +427,8 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
     sendError(ws, id, UNATTACHED_MESSAGE, sessionId);
     return;
   }
+
+  if (KEYBOARD_INPUT_METHODS.has(method)) await focusAttachedForKeyboardInput();
 
   try {
     const result = await attached.dbg.sendCommand(method, params ?? {});
