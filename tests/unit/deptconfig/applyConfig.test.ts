@@ -237,3 +237,103 @@ describe('buildReport — import/pin 计入报告', () => {
     expect(rep.modelPinned).toEqual(['butler']);
   });
 });
+
+describe('issue #14 — 技能下发与按助手挂载', () => {
+  const skillCfg = (over: Partial<DeptConfig> = {}): DeptConfig =>
+    cfg({
+      skills: { 'delivery-parser': '# 薄壳 {{CYNAPSE_KEY}}\n', 'oa-form-filler': '# OA 薄壳\n' },
+      assistants: [
+        { id: 'word', agent_id: 'claude' },
+        { id: 'delivery', agent_id: 'claude', enabled_skills: ['delivery-parser'] },
+        { id: 'oa', agent_id: 'claude', enabled_skills: ['oa-form-filler'] },
+      ],
+      ...over,
+    });
+
+  const skillWorld = (): CurrentState => ({
+    agents: [
+      { id: 'claude', enabled: true },
+      { id: 'aionrs', enabled: true },
+    ],
+    assistants: [
+      { id: 'word', enabled: true, agent_id: 'claude', enabled_skills: null },
+      { id: 'delivery', enabled: true, agent_id: 'claude', enabled_skills: null },
+      { id: 'oa', enabled: true, agent_id: 'claude', enabled_skills: ['oa-form-filler'] },
+    ],
+  });
+
+  describe('validateConfig', () => {
+    it('rejects a path-shaped skill name — 技能名是写盘路径的一段', () => {
+      expect(validateConfig(skillCfg({ skills: { '../escape': 'x' } }))).toContainEqual(
+        expect.stringContaining('不合法')
+      );
+      expect(validateConfig(skillCfg({ skills: { UPPER: 'x' } }))).toContainEqual(expect.stringContaining('不合法'));
+    });
+
+    it('rejects a blank skill body — 空 SKILL.md 是发现不了的技能', () => {
+      expect(validateConfig(skillCfg({ skills: { 'blank-skill': '  \n' } }))).toContainEqual(
+        expect.stringContaining('空白')
+      );
+    });
+
+    it('rejects a ghost mount — 挂了一个不在表里的技能，会话里它就是不出现且不报错', () => {
+      const bad = skillCfg({
+        assistants: [
+          { id: 'word', agent_id: 'claude' },
+          { id: 'delivery', agent_id: 'claude', enabled_skills: ['nope'] },
+        ],
+      });
+      expect(validateConfig(bad)).toContainEqual(expect.stringContaining('nope'));
+    });
+
+    it('accepts the real shape and a config without skills at all', () => {
+      expect(validateConfig(skillCfg())).toEqual([]);
+      expect(validateConfig(cfg())).toEqual([]); // 老服务端：没有 skills 字段
+    });
+  });
+
+  describe('planWrites', () => {
+    it('writes skills first and retires the managed copies last — 中途崩溃不许留下"旧的删了新的没写"', () => {
+      const writes = planWrites(skillCfg(), skillWorld());
+      const kinds = writes.map((w) => w.kind);
+      expect(kinds.slice(0, 2)).toEqual(['skill.write', 'skill.write']);
+      expect(kinds.slice(-2)).toEqual(['skill.retire', 'skill.retire']);
+      const mountIdx = kinds.indexOf('assistant.set_skills');
+      expect(mountIdx).toBeGreaterThan(1); // 挂载晚于写盘：不许指向还不存在的目录
+    });
+
+    it('carries the placeholder content through unrendered — 计划里绝不出现真 key', () => {
+      const w = planWrites(skillCfg(), skillWorld()).find((x) => x.kind === 'skill.write' && x.name === 'delivery-parser');
+      expect(w && 'content' in w && w.content).toContain('{{CYNAPSE_KEY}}');
+    });
+
+    it('mounts only where the current set differs, and never touches unlisted assistants', () => {
+      const writes = planWrites(skillCfg(), skillWorld());
+      const mounts = writes.filter((w) => w.kind === 'assistant.set_skills');
+      // delivery 现状 null ≠ 想要的集合 → 挂；oa 已一致 → 不动；word 配置没写 → 不碰
+      expect(mounts).toEqual([{ kind: 'assistant.set_skills', id: 'delivery', skills: ['delivery-parser'] }]);
+    });
+
+    it('mounts even when the current set is unreadable — 沉默不能冒充"已经挂好"', () => {
+      const world = skillWorld();
+      world.assistants[1].enabled_skills = undefined; // delivery：没读到
+      const mounts = planWrites(skillCfg(), world).filter((w) => w.kind === 'assistant.set_skills');
+      expect(mounts.map((m) => 'id' in m && m.id)).toContain('delivery');
+    });
+
+    it('plans no retire when the server sent no skills — 老服务端的机器上手工技能包是唯一技能源', () => {
+      const writes = planWrites(cfg(), world());
+      expect(writes.some((w) => w.kind === 'skill.retire' || w.kind === 'skill.write')).toBe(false);
+    });
+  });
+
+  describe('buildReport', () => {
+    it('reports synced/retired/mounted skills so 落实报告含技能项', () => {
+      const writes = planWrites(skillCfg(), skillWorld());
+      const report = buildReport('v1', writes, skillWorld(), []);
+      expect(report.skillsSynced).toEqual(['delivery-parser', 'oa-form-filler']);
+      expect(report.skillsRetired).toEqual(['delivery-parser', 'oa-form-filler']);
+      expect(report.skillsMounted).toEqual(['delivery']);
+    });
+  });
+});

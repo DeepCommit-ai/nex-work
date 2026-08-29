@@ -57,6 +57,8 @@ export async function startWebHost(opts: WebHostOptions): Promise<WebHostHandle>
       backendPort: backendHandle.port,
       port: opts.port,
       allowRemote: opts.allowRemote ?? false,
+      // 技能写盘桥（cynapse issue #14）需要知道 builtin-skills 落在哪。
+      dataDir: opts.dataDir,
     });
   } catch (err) {
     // If static-server fails, clean up backend

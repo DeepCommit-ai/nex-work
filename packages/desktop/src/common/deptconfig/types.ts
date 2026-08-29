@@ -36,6 +36,13 @@ export type AssistantSpec = {
    * Butler 必须钉回 glm-4.7。不写 = 不碰本地的 defaults。
    */
   fixed_model?: string | null;
+  /**
+   * 按助手挂载的技能名集合（cynapse issue #14）。落成 aioncore 的
+   * `enabled_skills`（PUT partial，实测生效）——会话工作区只物化这个集合。
+   * 不写/null = 不碰（保持 aioncore 默认技能集）。服务端保证引用无 ghost、
+   * 且不下发空集；客户端 validateConfig 再兜一遍。
+   */
+  enabled_skills?: string[] | null;
 };
 
 /**
@@ -67,6 +74,14 @@ export type DeptConfig = {
   assistants: AssistantSpec[];
   /** LiteLLM 别名。客户端不用它做决定，仅供展示与排错。 */
   model_aliases: string[];
+  /**
+   * 技能库（cynapse issue #14）：技能名 → SKILL.md 全文（只含本部门
+   * enabled_skills 引用到的子集）。内容是"调执行端点"的薄壳，凭证是
+   * {{CYNAPSE_KEY}} 占位——**渲染发生在客户端写盘时**（executeWrite 用
+   * enterpriseStore 里的部门 key），载荷与本类型的任何日志都不含真 key。
+   * 落盘目标：web-host 写盘桥 → `<dataDir>/builtin-skills/<名>/SKILL.md`。
+   */
+  skills?: Record<string, string> | null;
   /** 网关凭据（见 GatewaySection）。旧服务端可能没有——validateConfig 会把缺失报成问题。 */
   gateway?: GatewaySection;
   /** 002 的能力开关。落实成功后喂给 policy store（normalizePolicy 会兜住缺键与未知键）。 */
@@ -101,6 +116,12 @@ export type ApplyReport = {
   imported: string[];
   /** 本轮被钉了默认模型的助手（issue #6）。 */
   modelPinned: string[];
+  /** 本轮下发并确保写盘的技能（issue #14）。幂等重放时也在列——"确保在场"就是动作。 */
+  skillsSynced: string[];
+  /** 本轮退役的受管全局技能目录名（双源清理，issue #14）。 */
+  skillsRetired: string[];
+  /** 本轮被改写 enabled_skills 挂载的助手（issue #14）。 */
+  skillsMounted: string[];
   failures: string[];
   /**
    * 落实后实际处于启用状态的集合（FR-8 回读）。

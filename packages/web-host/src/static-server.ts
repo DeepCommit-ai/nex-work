@@ -14,12 +14,18 @@ import http, { type IncomingMessage, type Server, type ServerResponse } from 'no
 import { networkInterfaces } from 'node:os';
 import net, { type Socket } from 'node:net';
 import serveHandler from 'serve-handler';
+import { handleDeptSkillsRequest } from './dept-skills.js';
 
 export type StaticServerOptions = {
   staticDir: string;
   backendPort: number;
   port?: number;
   allowRemote?: boolean;
+  /**
+   * aioncore 的 dataDir。传了才启用 `/host-api/dept-skills/*` 写盘桥
+   * （cynapse issue #14）；不传时该端点答 503，绝不猜路径。
+   */
+  dataDir?: string;
 };
 
 export type StaticServerHandle = {
@@ -177,6 +183,13 @@ export async function startStaticServer(opts: StaticServerOptions): Promise<Stat
     try {
       if (!req.url || !req.method) {
         res.writeHead(400).end();
+        return;
+      }
+
+      // /host-api/dept-skills/* — web-host 自己处理的受限写盘桥（cynapse issue
+      // #14），不反代：aioncore 没有这个能力（/api/fs/write 不建目录、无删除口）。
+      // 前缀刻意不用 /api/，避免与 aioncore 未来路由撞车。
+      if (await handleDeptSkillsRequest(req, res, { dataDir: opts.dataDir })) {
         return;
       }
 

@@ -51,7 +51,14 @@ const readCurrentState = async (): Promise<{ state: CurrentState; agentTypes: Ma
   return {
     state: {
       agents: agents.map((a) => ({ id: a.id, enabled: a.enabled })),
-      assistants: assistants.map((a) => ({ id: a.id, enabled: a.enabled, agent_id: a.agent_id })),
+      // enabled_skills：aioncore 列表 API 直接带（null = 未挂/默认集），
+      // 挂载比对（issue #14）不需要逐个取 detail。
+      assistants: assistants.map((a) => ({
+        id: a.id,
+        enabled: a.enabled,
+        agent_id: a.agent_id,
+        enabled_skills: a.enabled_skills ?? null,
+      })),
     },
     agentTypes: new Map(agents.map((a) => [a.id, a.agent_type])),
   };
@@ -79,15 +86,59 @@ const enrichPinnedModels = async (cfg: DeptConfig, state: CurrentState): Promise
   }
 };
 
-const executeWrite = (w: PlannedWrite): Promise<unknown> => {
+/**
+ * 技能薄壳的凭证渲染（issue #14）。占位符 → 员工机器上已存的部门 key。
+ * **只在落盘前的这一刻发生**：/config 载荷、PlannedWrite、ApplyReport、console
+ * 全程只见占位符——渲染结果只进写盘请求体，不进任何日志。
+ */
+const renderSkillContent = (content: string, deptKey: string): string =>
+  content.split('{{CYNAPSE_KEY}}').join(deptKey);
+
+/**
+ * 调 web-host 的受限写盘桥（`/host-api/dept-skills/*`）。
+ *
+ * 只有 web 形态可达：桥挂在 static-server 上（同源），Electron renderer 的
+ * HTTP 面直连 aioncore、根本不经过它——而 aioncore 的 /api/fs/write 建不了
+ * 目录也删不了文件（实测 2026-08-29），所以桌面形态此路不通时**如实失败**
+ * 进 failures，绝不静默跳过（"少两个技能"不能表现成"配置成功"）。
+ */
+const hostSkillsCall = async (action: 'write' | 'retire', body: Record<string, string>): Promise<void> => {
+  if (isElectronDesktop()) {
+    throw new Error('桌面形态暂无技能写盘通道（写盘桥挂在 webui 的 static-server 上）');
+  }
+  const res = await fetch(`/host-api/dept-skills/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let payload: { success?: boolean; error?: string; code?: string } = {};
+  try {
+    payload = (await res.json()) as typeof payload;
+  } catch {
+    /* 非 JSON：按状态码报 */
+  }
+  if (!res.ok || payload.success !== true) {
+    throw new Error(`${payload.code ?? res.status}：${payload.error ?? '写盘桥调用失败'}`);
+  }
+};
+
+const executeWrite = (w: PlannedWrite, deptKey: string): Promise<unknown> => {
   switch (w.kind) {
+    case 'skill.write':
+      // {{CYNAPSE_KEY}} 在这里渲染（见 renderSkillContent 的纪律注释）。
+      return hostSkillsCall('write', { name: w.name, content: renderSkillContent(w.content, deptKey) });
+    case 'skill.retire':
+      return hostSkillsCall('retire', { name: w.name });
+    case 'assistant.set_skills':
+      // PUT 是 partial：只带 enabled_skills，别的字段不碰（实测）。
+      return assistantsBridge.update.invoke({ id: w.id, enabled_skills: w.skills });
     case 'agent.enable':
       return acpConversation.setAgentEnabled.invoke({ id: w.id, enabled: true });
     case 'agent.disable':
       return acpConversation.setAgentEnabled.invoke({ id: w.id, enabled: false });
     case 'assistant.import':
-      // 服务端定义 → 本地 custom 助手（issue #7）。agent_id / fixed_model 随创建
-      // 载荷一并落地，planWrites 不再为它补 repoint/pin。
+      // 服务端定义 → 本地 custom 助手（issue #7）。agent_id / fixed_model /
+      // enabled_skills 随创建载荷一并落地，planWrites 不再为它补 repoint/pin/挂载。
       return assistantsBridge.create.invoke({
         id: w.spec.id,
         name: w.spec.name!.trim(),
@@ -95,6 +146,7 @@ const executeWrite = (w: PlannedWrite): Promise<unknown> => {
         ...(w.spec.avatar ? { avatar: w.spec.avatar } : {}),
         ...(w.spec.agent_id ? { agent_id: w.spec.agent_id } : {}),
         ...(w.spec.fixed_model ? { defaults: { model: { mode: 'fixed', value: w.spec.fixed_model } } } : {}),
+        ...(w.spec.enabled_skills?.length ? { enabled_skills: [...w.spec.enabled_skills] } : {}),
       });
     case 'assistant.repoint':
       return assistantsBridge.update.invoke({ id: w.id, agent_id: w.agentId });
@@ -236,9 +288,11 @@ export const applyDeptConfig = async (serverUrl: string, deptKey: string): Promi
   console.info('[enterprise] 落实中', { version: cfg.version, dept: cfg.dept, writes: writes.length });
   for (const w of writes) {
     try {
-      await executeWrite(w);
+      await executeWrite(w, deptKey);
     } catch (e) {
-      failures.push(`${w.kind} ${w.id}：${e instanceof Error ? e.message : String(e)}`);
+      // skill.* 的标识是 name；其余是 id。报错里带上是哪一条，部分失败必须可指认。
+      const subject = 'id' in w ? w.id : w.name;
+      failures.push(`${w.kind} ${subject}：${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

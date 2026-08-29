@@ -178,6 +178,7 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
       backendPort: 0, // invalid port → API proxy will fail cleanly
       port,
       allowRemote,
+      dataDir,
     });
     currentHandle = handle;
 

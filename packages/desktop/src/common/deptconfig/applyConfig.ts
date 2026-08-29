@@ -39,11 +39,31 @@ export type CurrentState = {
      * 宁可多写一次也不能把"读不到现状"静默当成"已经钉好"。
      */
     fixed_model?: string | null;
+    /**
+     * 当前挂载的技能集（aioncore 列表 API 直接带；null = 未挂/默认集）。
+     * undefined = 没读到——与 fixed_model 同一姿态：没读到照样下（幂等 PUT）。
+     */
+    enabled_skills?: string[] | null;
   }[];
 };
 
 /** 一个待执行的写操作。按数组顺序执行。 */
 export type PlannedWrite =
+  /**
+   * 把服务端下发的技能薄壳写进 `<dataDir>/builtin-skills/<name>/SKILL.md`
+   * （issue #14）。content 是**未渲染**的占位文本——{{CYNAPSE_KEY}} 的渲染在
+   * executeWrite 落盘前做，计划与报告里永远不出现真 key。写口自身幂等
+   * （内容比对，见 web-host dept-skills），所以这里无条件计划。
+   */
+  | { kind: 'skill.write'; name: string; content: string }
+  /**
+   * 退役受管 Claude 全局技能目录里的同名手工技能包（`~/.nexwork-claude/
+   * skills/<name>`）。机器级技能对所有助手可见——留着它，默认助手会蹭到
+   * 企业技能，按助手隔离就破了。删除口幂等（不存在 = no-op）。
+   */
+  | { kind: 'skill.retire'; name: string }
+  /** 把助手的 enabled_skills 挂载改成服务端指定的集合（issue #14）。 */
+  | { kind: 'assistant.set_skills'; id: string; skills: string[] }
   | { kind: 'agent.enable'; id: string }
   | { kind: 'agent.disable'; id: string }
   /** 本地没有这个 id 且配置带 name（完整定义）：按定义创建（issue #7）。 */
@@ -91,7 +111,38 @@ export const validateConfig = (cfg: DeptConfig): string[] => {
     // 且两种失败此刻都表现成"配置成功"。服务端已保证带全，缺了就是响应坏了。
     problems.push('配置没有可用的网关段（base_url/api_key）——流量将不经网关，既不计费也不采集');
   }
+
+  // ── 技能下发（issue #14）。服务端也拦，这里是客户端写盘前的最后防线：
+  // 技能名会成为写盘路径的一段（web-host 桥再拒一次，三道各自独立成立）。
+  const badSkillNames = Object.keys(cfg.skills ?? {}).filter((n) => !SKILL_NAME_RE.test(n));
+  if (badSkillNames.length) {
+    problems.push(`技能名 ${badSkillNames.join(', ')} 不合法（小写字母/数字/连字符）——技能名是写盘路径的一段`);
+  }
+  const blankSkills = Object.entries(cfg.skills ?? {})
+    .filter(([, c]) => typeof c !== 'string' || !c.trim())
+    .map(([n]) => n);
+  if (blankSkills.length) {
+    problems.push(`技能 ${blankSkills.join(', ')} 的内容是空白——会写出一个 Claude Code 发现不了的空 SKILL.md`);
+  }
+  for (const a of cfg.assistants ?? []) {
+    if (a.enabled_skills == null) continue;
+    // ghost 引用：挂了但技能表里没有 → 不会写盘、物化时找不到目录，
+    // 会话里技能就是不出现且没有任何报错。
+    const ghost = a.enabled_skills.filter((n) => !(cfg.skills ?? {})[n]);
+    if (ghost.length) {
+      problems.push(`助手 ${a.id} 挂载的技能 ${ghost.join(', ')} 不在下发的 skills 表里——技能不会出现且不会报错`);
+    }
+  }
   return problems;
+};
+
+/** 与服务端 validate、web-host 写盘桥同一条白名单——三道防线各自独立成立。 */
+const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/** 两个可空技能集合是否等价（挂载比对用；null/undefined 视为"未挂"）。 */
+const sameSkillSet = (a: string[] | null | undefined, b: string[] | null | undefined): boolean => {
+  if (a == null || b == null) return a == null && b == null;
+  return a.length === b.length && a.toSorted().join('\n') === b.toSorted().join('\n');
 };
 
 /**
@@ -103,6 +154,14 @@ export const planWrites = (cfg: DeptConfig, current: CurrentState): PlannedWrite
   const wantAgents = new Set(cfg.agents);
   const wantAssistants = new Map<string, AssistantSpec>(cfg.assistants.map((a) => [a.id, a]));
   const byId = new Map(current.assistants.map((a) => [a.id, a]));
+
+  // 技能写盘**最先**（issue #14）：enabled_skills 挂载在后面才写——反过来的话，
+  // 崩在中间会留下"挂载指向一个还不存在的技能目录"，新会话物化出空集。
+  // 无条件计划（不比对差异）：写口自身幂等（内容一致 no-op），而客户端拿不到
+  // 盘上现状——"读不到现状"绝不静默当成"已经写好"（与 pin_model 同一姿态）。
+  const skillWrites: PlannedWrite[] = Object.entries(cfg.skills ?? {})
+    .toSorted(([a], [b]) => a.localeCompare(b))
+    .map(([name, content]) => ({ kind: 'skill.write', name, content }));
 
   const enableAgents: PlannedWrite[] = current.agents
     .filter((a) => wantAgents.has(a.id) && !a.enabled)
@@ -126,6 +185,11 @@ export const planWrites = (cfg: DeptConfig, current: CurrentState): PlannedWrite
     if (spec.fixed_model && cur && cur.fixed_model !== spec.fixed_model) {
       assistantWrites.push({ kind: 'assistant.pin_model', id: spec.id, model: spec.fixed_model });
     }
+    // 技能挂载（issue #14）：配置有值且与现状不同才写。undefined（没读到现状）
+    // 也写——沉默不能冒充"已经挂好"。配置没写 enabled_skills = 不碰。
+    if (spec.enabled_skills != null && cur && !sameSkillSet(spec.enabled_skills, cur.enabled_skills ?? null)) {
+      assistantWrites.push({ kind: 'assistant.set_skills', id: spec.id, skills: [...spec.enabled_skills] });
+    }
     if (!cur?.enabled) assistantWrites.push({ kind: 'assistant.enable', id: spec.id });
   }
 
@@ -138,7 +202,16 @@ export const planWrites = (cfg: DeptConfig, current: CurrentState): PlannedWrite
     .filter((a) => !wantAgents.has(a.id) && a.enabled)
     .map((a) => ({ kind: 'agent.disable', id: a.id }));
 
-  return [...enableAgents, ...assistantWrites, ...disableAssistants, ...disableAgents];
+  // 双源退役**最后**（issue #14）：受管全局目录（~/.nexwork-claude/skills/）里的
+  // 同名手工技能包让默认助手也蹭得到技能，按助手隔离形同虚设。放在末尾，中途
+  // 崩溃留下的是"新旧并存"（下次重放收敛），而不是"旧的删了新的没写"（两个
+  // demo 助手当场失能）。只退役本轮下发的名字：cfg.skills 为空（老服务端）时
+  // 一个都不删——那台机器的手工技能包仍是唯一技能源。
+  const skillRetires: PlannedWrite[] = Object.keys(cfg.skills ?? {})
+    .toSorted()
+    .map((name) => ({ kind: 'skill.retire', name }));
+
+  return [...skillWrites, ...enableAgents, ...assistantWrites, ...disableAssistants, ...disableAgents, ...skillRetires];
 };
 
 /**
@@ -162,6 +235,9 @@ export const buildReport = (
   repointed: writes.filter((w) => w.kind === 'assistant.repoint').map((w) => w.id),
   imported: writes.filter((w) => w.kind === 'assistant.import').map((w) => w.id),
   modelPinned: writes.filter((w) => w.kind === 'assistant.pin_model').map((w) => w.id),
+  skillsSynced: writes.filter((w) => w.kind === 'skill.write').map((w) => w.name),
+  skillsRetired: writes.filter((w) => w.kind === 'skill.retire').map((w) => w.name),
+  skillsMounted: writes.filter((w) => w.kind === 'assistant.set_skills').map((w) => w.id),
   failures,
   finalAgents: after.agents
     .filter((a) => a.enabled)
