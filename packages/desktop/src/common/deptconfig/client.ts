@@ -84,6 +84,10 @@ export const toReportBody = (rep: ApplyReport, clientId: string): Record<string,
   applied_version: rep.version,
   agents_enabled: rep.finalAgents,
   assistants_enabled: rep.finalAssistants,
+  // 技能落地面（issue #14）：只报名字，不报内容——服务端原样落盘 var/reports.jsonl，
+  // 回答"这台机器上一轮同步了哪些技能"。老服务端不认识这些键会忽略，安全。
+  skills_synced: rep.skillsSynced,
+  skills_retired: rep.skillsRetired,
   failures: rep.failures,
 });
 
