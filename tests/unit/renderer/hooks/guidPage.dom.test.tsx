@@ -239,7 +239,8 @@ vi.mock('@/renderer/utils/platform', () => ({
   resolveBackendAssetUrl: vi.fn((path: string) => path),
 }));
 
-vi.mock('@/renderer/pages/guid/utils/assistantDefaults', () => ({
+vi.mock('@/renderer/pages/guid/utils/assistantDefaults', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/renderer/pages/guid/utils/assistantDefaults')>()),
   resolveGuidAssistantDefaults: (...args: unknown[]) => resolveGuidAssistantDefaultsMock(...args),
 }));
 

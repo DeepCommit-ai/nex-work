@@ -28,7 +28,7 @@ import { useGuidModelSelection } from './hooks/useGuidModelSelection';
 import { useGuidSend } from './hooks/useGuidSend';
 import { useTypewriterPlaceholder } from './hooks/useTypewriterPlaceholder';
 import { ensureBackendMcpCatalog } from '@/renderer/hooks/mcp/catalog';
-import { resolveGuidAssistantDefaults } from './utils/assistantDefaults';
+import { resolveEffectiveDefaultMcpIds, resolveGuidAssistantDefaults } from './utils/assistantDefaults';
 import SpeechInputButton from '@/renderer/components/chat/SpeechInputButton';
 import { chatFileRefPath, uploadFileRef } from '@/common/types/chatFile';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
@@ -174,6 +174,26 @@ const GuidPage: React.FC = () => {
     () => resolveGuidAssistantDefaults(selectedAssistantDetail),
     [selectedAssistantDetail]
   );
+  // [ENTERPRISE PATCH] spec 007 FR-4 — empty assistant defaults fall back to
+  // every enabled server in the catalog, so a fresh install's CLI conversations
+  // still carry the built-in browser. See resolveEffectiveDefaultMcpIds.
+  const effectiveDefaultMcpIds = useMemo(
+    () => resolveEffectiveDefaultMcpIds(resolvedAssistantDefaults, availableMcpServers),
+    [resolvedAssistantDefaults, availableMcpServers]
+  );
+  // Seeded separately from the big applyAssistantDefaults effect: the fallback
+  // depends on the MCP catalog, which loads after the assistant detail, and
+  // putting the catalog into that effect's signature would re-apply model and
+  // permission defaults on catalog arrival. Value-keyed so SWR revalidations
+  // with unchanged values never stomp a user's manual picker changes.
+  const seededMcpDefaultsKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedAssistantId || !selectedAssistantDetail) return;
+    const key = JSON.stringify({ assistant: selectedAssistantId, effective: effectiveDefaultMcpIds });
+    if (seededMcpDefaultsKeyRef.current === key) return;
+    seededMcpDefaultsKeyRef.current = key;
+    setGuidSelectedMcpServerIds(effectiveDefaultMcpIds);
+  }, [selectedAssistantId, selectedAssistantDetail, effectiveDefaultMcpIds]);
   const selectedSkillNames = useMemo(() => {
     const disabledBuiltinSkillSet = new Set(
       guidDisabledBuiltinSkills ?? resolvedAssistantDefaults.disabledBuiltinSkillIds
@@ -276,7 +296,7 @@ const GuidPage: React.FC = () => {
     assistantDefaultDisabledBuiltinSkillIds: resolvedAssistantDefaults.disabledBuiltinSkillIds,
     availableMcpServers,
     selectedMcpServerIds: guidSelectedMcpServerIds,
-    assistantDefaultMcpIds: resolvedAssistantDefaults.mcpIds,
+    assistantDefaultMcpIds: effectiveDefaultMcpIds,
     isGoogleAuth: modelSelection.isGoogleAuth,
 
     // Mention state reset
@@ -460,7 +480,7 @@ const GuidPage: React.FC = () => {
           agentSelection.setSelectedThoughtLevelValue(fallbackThoughtLevel, { persistPreference: false });
         }
       }
-      setGuidSelectedMcpServerIds(resolvedDefaults.mcpIds);
+      // MCP seeding lives in its own catalog-aware effect above (spec 007 FR-4).
     };
 
     void applyAssistantDefaults().catch((error) => {

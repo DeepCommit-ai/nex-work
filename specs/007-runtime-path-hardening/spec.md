@@ -77,6 +77,11 @@ dies). Old conversations do not self-heal; new ones are correct.
   the distribution layout first, then `<cwd>/resources/bundled-claude/…` (dev repo root). A
   candidate is used only if it exists; when none does, the skip log names every path probed.
   `AIONUI_CLAUDE_BIN` still overrides everything.
+- **FR-4** A new conversation's MCP set: an explicit picker selection wins; the assistant's own
+  defaults win; an **empty** result falls back to every enabled server in the catalog — matching
+  the aionrs factory, so "enabled in the MCP directory" means on-by-default in every lane,
+  including the fresh install where no assistant has any MCP history. The one respected empty is
+  an admin's `fixed`-mode empty list: a decision, not an absence of one.
 - **FR-3** The builtin browser MCP transport must name a node that actually runs on this machine,
   re-resolved at every boot by the same reconcile that already repairs the script path: bare
   `node` while the PATH node passes a strict `--version` probe; otherwise the absolute path of a
@@ -113,13 +118,21 @@ bundled-claude/darwin-arm64/claude` (2.1.235); `GET /api/agents/2d23ff1c/overrid
 - Upstream-relevant: D1 (and `buildMcpChildEnv`) is not NexWork-specific and would fix the same
   silent failure in upstream AionUi; candidate for contribution on the next sync.
 
-## Open item
+## Open item — resolved as FR-4
 
-An assistant whose `preferences.last_mcp_ids` is empty (fresh install, never-used assistant) sends
-an empty snapshot, and the direct-CLI claude lane then runs with **no** MCP at all — unlike aionrs,
-whose factory injects every enabled builtin server by default. Whether CLI conversations should
-default to the enabled builtin set is a product decision (spec 002 territory: the system decides,
-not the clerk), filed here rather than smuggled into a path-resolution fix.
+An assistant with empty `preferences.last_mcp_ids` (fresh install) used to send an empty snapshot,
+leaving the direct-CLI claude lane with **no** MCP at all. Closed by FR-4:
+`resolveEffectiveDefaultMcpIds` (pure, tested) applies the fallback, and the guid page seeds the
+picker through it in a catalog-aware effect — separate from the assistant-defaults effect (whose
+signature must not include the catalog, or model/permission defaults would re-apply on catalog
+arrival) and value-keyed so SWR revalidations never stomp a user's manual picker changes. The
+picker chip shows the seeded count, so what will be injected is visible, and unticking still wins.
+
+A second finding from the same session, recorded for the field: with the MCP lane healthy, the
+first browser tool call can still return "The in-app browser is not currently attached"
+(`cdpBridge.ts`) — the single-target bridge controls only a browser tab the user can see, and no
+tab was open. That is designed behavior (the agent's reply relays the fix: open the browser panel),
+not a defect of this spec.
 
 ## Relationship to other specs
 

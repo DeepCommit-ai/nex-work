@@ -5,7 +5,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { resolveGuidAssistantDefaults } from '@/renderer/pages/guid/utils/assistantDefaults';
+import {
+  resolveEffectiveDefaultMcpIds,
+  resolveGuidAssistantDefaults,
+} from '@/renderer/pages/guid/utils/assistantDefaults';
 import type { AssistantDetail } from '@/common/types/agent/assistantTypes';
 
 const buildDetail = (
@@ -79,6 +82,7 @@ describe('resolveGuidAssistantDefaults', () => {
       skillIds: [],
       disabledBuiltinSkillIds: [],
       mcpIds: ['mcp-a', 'mcp-b'],
+      mcpMode: 'fixed',
     });
   });
 
@@ -109,6 +113,7 @@ describe('resolveGuidAssistantDefaults', () => {
       skillIds: ['skill-a'],
       disabledBuiltinSkillIds: ['skill-b'],
       mcpIds: ['mcp-1'],
+      mcpMode: 'auto',
     });
   });
 
@@ -135,6 +140,7 @@ describe('resolveGuidAssistantDefaults', () => {
       skillIds: [],
       disabledBuiltinSkillIds: [],
       mcpIds: [],
+      mcpMode: 'auto',
     });
   });
 
@@ -148,6 +154,7 @@ describe('resolveGuidAssistantDefaults', () => {
       skillIds: [],
       disabledBuiltinSkillIds: [],
       mcpIds: [],
+      mcpMode: 'auto',
     });
   });
 
@@ -165,6 +172,52 @@ describe('resolveGuidAssistantDefaults', () => {
       skillIds: ['skill-fixed'],
       disabledBuiltinSkillIds: [],
       mcpIds: [],
+      mcpMode: 'auto',
     });
+  });
+});
+
+/**
+ * [ENTERPRISE PATCH] spec 007 FR-4 — fresh-install default MCP set.
+ *
+ * Measured live: on the same machine the aionrs factory injected the enabled
+ * built-in browser while a Claude Code conversation spawned with no MCP at all,
+ * because a never-used assistant resolves an empty `last_mcp_ids` and the UI
+ * sends that emptiness as the session snapshot. Empty-by-absence falls back to
+ * every enabled catalog server; empty-by-decision (`fixed` mode) is respected.
+ */
+describe('resolveEffectiveDefaultMcpIds', () => {
+  const catalog = [
+    { id: 'mcp-browser', enabled: true },
+    { id: 'mcp-chrome-devtools', enabled: false },
+    { id: 'mcp-user-server' },
+  ];
+
+  it('keeps the assistant defaults when they resolve to anything', () => {
+    expect(resolveEffectiveDefaultMcpIds({ mcpIds: ['mcp-1'], mcpMode: 'auto' }, catalog)).toEqual(['mcp-1']);
+  });
+
+  it('falls back to every enabled catalog server when auto mode has no history', () => {
+    expect(resolveEffectiveDefaultMcpIds({ mcpIds: [], mcpMode: 'auto' }, catalog)).toEqual([
+      'mcp-browser',
+      'mcp-user-server',
+    ]);
+  });
+
+  it('excludes disabled servers from the fallback', () => {
+    expect(resolveEffectiveDefaultMcpIds({ mcpIds: [], mcpMode: 'auto' }, catalog)).not.toContain(
+      'mcp-chrome-devtools'
+    );
+  });
+
+  it("respects an admin's explicit fixed-to-none decision", () => {
+    expect(resolveEffectiveDefaultMcpIds({ mcpIds: [], mcpMode: 'fixed' }, catalog)).toEqual([]);
+  });
+
+  it('falls back when there is no assistant detail at all (mode unknown)', () => {
+    expect(resolveEffectiveDefaultMcpIds({ mcpIds: [], mcpMode: '' }, catalog)).toEqual([
+      'mcp-browser',
+      'mcp-user-server',
+    ]);
   });
 });
