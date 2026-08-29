@@ -5,7 +5,7 @@
  * drift, both of which actually did.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { BUILTIN_TAB_IDS } from '@/renderer/pages/settings/components/SettingsSider';
+import { BUILTIN_TAB_IDS, HIDDEN_SETTINGS_TAB_IDS } from '@/renderer/pages/settings/components/SettingsSider';
 import { getBuiltinSettingsNavItems } from '@/renderer/pages/settings/components/SettingsPageWrapper';
 import { DEFAULT_CAPABILITIES, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 
@@ -20,7 +20,16 @@ describe('getBuiltinSettingsNavItems', () => {
     // read `result[i].id`, and every settings page rendered blank in web mode.
     const items = getBuiltinSettingsNavItems(true, t);
     expect(items.every(Boolean)).toBe(true);
-    expect(items.map((i) => i.id)).toEqual([...BUILTIN_TAB_IDS]);
+    // [spec 002 FR-9] pet/about 属于隐藏面，不再出现在任何导航副本里。
+    expect(items.map((i) => i.id)).toEqual(BUILTIN_TAB_IDS.filter((id) => !HIDDEN_SETTINGS_TAB_IDS.has(id)));
+  });
+
+  it('hides the desktop-pet and About entries on both desktop and web (spec 002 FR-9)', () => {
+    for (const desktop of [true, false]) {
+      const ids = getBuiltinSettingsNavItems(desktop, t).map((i) => i.id);
+      expect(ids).not.toContain('pet');
+      expect(ids).not.toContain('about');
+    }
   });
 
   it('never yields an undefined entry even if an id loses its row', () => {

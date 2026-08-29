@@ -79,18 +79,24 @@ test.describe('Extension: Settings Tabs Position Anchoring', () => {
     expect(e2eIdx).toBeGreaterThan(capabilitiesIdx);
   });
 
-  test('tab with anchor "about/before" appears before About in sidebar', async ({ page }) => {
-    await goToSettings(page, 'about');
+  test('tab anchored to the hidden About falls back to the unanchored slot before System (spec 002 FR-9)', async ({
+    page,
+  }) => {
+    await goToSettings(page, 'system');
     await waitForExtensionSettingsTabs(page);
 
     const siderItemIds = await getSiderItemIds(page);
 
+    // About is a hidden surface now; the extension anchored to it must not vanish
+    // with it, but land in the unanchored default slot (before 'system').
     const aboutIdx = siderItemIds.indexOf('about');
     const beforeAboutIdx = siderItemIds.indexOf(EXT_E2E_BEFORE_ABOUT_ID);
+    const systemIdx = siderItemIds.indexOf('system');
 
-    expect(aboutIdx).toBeGreaterThanOrEqual(0);
+    expect(aboutIdx).toBe(-1);
     expect(beforeAboutIdx).toBeGreaterThanOrEqual(0);
-    expect(beforeAboutIdx).toBeLessThan(aboutIdx);
+    expect(systemIdx).toBeGreaterThanOrEqual(0);
+    expect(beforeAboutIdx).toBeLessThan(systemIdx);
   });
 
   test('tab with anchor "display/after" appears after Display in sidebar', async ({ page }) => {

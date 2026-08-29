@@ -24,7 +24,6 @@ const FeatureNotAvailable = React.lazy(() => import('@renderer/pages/settings/Fe
 const GatewaySettings = React.lazy(() => import('@renderer/pages/settings/GatewaySettings'));
 // [ENTERPRISE PATCH] 企业接入 —— 部门配置下发的入口，对员工始终可见
 const EnterpriseSettings = React.lazy(() => import('@renderer/pages/settings/EnterpriseSettings'));
-const PetSettings = React.lazy(() => import('@renderer/pages/settings/PetSettings'));
 const ArchivedSettings = React.lazy(() => import('@renderer/pages/settings/ArchivedSettings'));
 const ExtensionSettingsPage = React.lazy(() => import('@renderer/pages/settings/ExtensionSettingsPage'));
 const LoginPage = React.lazy(() => import('@renderer/pages/login'));
@@ -132,10 +131,12 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
             element={agentSettingsVisible ? withRouteFallback(GatewaySettings) : <Navigate to='/guid' replace />}
           />
           <Route path='/settings/enterprise' element={withRouteFallback(EnterpriseSettings)} />
-          <Route path='/settings/pet' element={withRouteFallback(PetSettings)} />
+          {/* [ENTERPRISE PATCH] spec 002 FR-9 — 桌面宠物与「关于」页对本产品隐藏；
+              直链同菜单一致，落回 /guid（与 gateway 的守卫同款）。 */}
+          <Route path='/settings/pet' element={<Navigate to='/guid' replace />} />
           <Route path='/settings/archived' element={withRouteFallback(ArchivedSettings)} />
           <Route path='/settings/system' element={withRouteFallback(SystemSettings)} />
-          <Route path='/settings/about' element={withRouteFallback(SystemSettings)} />
+          <Route path='/settings/about' element={<Navigate to='/guid' replace />} />
           <Route path='/settings/ext/:tabId' element={withRouteFallback(ExtensionSettingsPage)} />
           {/* The bare `/settings` landing followed the agent page. With that page
               gated it would land on a redirect to `/guid`, i.e. the settings entry

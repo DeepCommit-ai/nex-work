@@ -30,7 +30,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useExtI18n } from '@/renderer/hooks/system/useExtI18n';
-import { BUILTIN_TAB_IDS, LEGACY_ANCHOR_REMAP } from './SettingsSider';
+import { BUILTIN_TAB_IDS, HIDDEN_SETTINGS_TAB_IDS, LEGACY_ANCHOR_REMAP } from './SettingsSider';
 import './settings.css';
 
 interface SettingsPageWrapperProps {
@@ -121,7 +121,11 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn, a
 
   // A missing row must not become an `undefined` element: the callers below index
   // into this list and read `.id` from it.
-  return BUILTIN_TAB_IDS.filter((id) => agentSettingsVisible || (id !== 'agent' && id !== 'model' && id !== 'gateway'))
+  // [ENTERPRISE PATCH] spec 002 FR-9 — 两份导航副本同治（这张少一刀，隐藏页就在
+  // 移动端/包装导航里复活）。/ Both navigation copies must apply the same cut, or a
+  // hidden page resurfaces one viewport away.
+  return BUILTIN_TAB_IDS.filter((id) => !HIDDEN_SETTINGS_TAB_IDS.has(id))
+    .filter((id) => agentSettingsVisible || (id !== 'agent' && id !== 'model' && id !== 'gateway'))
     .map((id) => builtinMap[id])
     .filter((item): item is NavItem => Boolean(item));
 }

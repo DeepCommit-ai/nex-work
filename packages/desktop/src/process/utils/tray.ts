@@ -168,58 +168,8 @@ const buildTrayContextMenu = async (): Promise<Electron.Menu> => {
     },
   });
 
-  template.push({ type: 'separator' });
-  template.push({
-    label: `🐾 ${i18n.t('pet.desktopPet')}`,
-    submenu: [
-      {
-        label: i18n.t('pet.showHide'),
-        click: async () => {
-          try {
-            const petManager = await import('../pet/petManager');
-            // Toggle: if pet windows exist, hide; otherwise show/create
-            petManager.showPetWindow();
-          } catch {
-            /* pet not available */
-          }
-        },
-      },
-      { type: 'separator' as const },
-      {
-        label: i18n.t('pet.sizeSmall', { px: 200 }),
-        click: async () => {
-          try {
-            const { resizePetWindow } = await import('../pet/petManager');
-            resizePetWindow(200);
-          } catch {
-            /* ignore */
-          }
-        },
-      },
-      {
-        label: i18n.t('pet.sizeMedium', { px: 280 }),
-        click: async () => {
-          try {
-            const { resizePetWindow } = await import('../pet/petManager');
-            resizePetWindow(280);
-          } catch {
-            /* ignore */
-          }
-        },
-      },
-      {
-        label: i18n.t('pet.sizeLarge', { px: 360 }),
-        click: async () => {
-          try {
-            const { resizePetWindow } = await import('../pet/petManager');
-            resizePetWindow(360);
-          } catch {
-            /* ignore */
-          }
-        },
-      },
-    ],
-  });
+  // [ENTERPRISE PATCH] spec 002 FR-9 — 桌面宠物对本产品隐藏，托盘子菜单一并摘除。
+  // The desktop-pet surface is hidden for this build; its tray submenu goes with it.
   template.push({ type: 'separator' });
   template.push({
     label: i18n.t('common.tray.checkUpdate'),
@@ -229,13 +179,8 @@ const buildTrayContextMenu = async (): Promise<Electron.Menu> => {
     },
   });
   template.push({ type: 'separator' });
-  template.push({
-    label: i18n.t('common.tray.about'),
-    click: () => {
-      showAndFocusMainWindow();
-      mainWindowRef?.webContents.send('tray:open-about');
-    },
-  });
+  // [ENTERPRISE PATCH] spec 002 FR-9 — 「关于」页已隐藏，托盘入口一并摘除。
+  // The About page is hidden; its tray entry goes with it.
   template.push({
     label: i18n.t('common.tray.restart'),
     click: () => {

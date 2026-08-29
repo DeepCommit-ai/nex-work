@@ -2,12 +2,13 @@
 
 **Feature Branch**: `nex-work`
 **Created**: 2026-08-25
-**Status**: Implemented, revision 6 — partially verified; see _Acceptance Criteria_
+**Status**: Implemented, revision 7 — partially verified; see _Acceptance Criteria_
 **Revisions**: rev 2 fixed four defects found by adversarial review; rev 3 rewrote the architecture
 around the private LiteLLM gateway and one-way trajectory export; rev 4 records implementation and
 what rendering the app changed about it; rev 5 conceals bare-CLI assistants from selection lists —
 the fresh-install home pill bar was a CLI roster; rev 6 makes CLI version-drift notices dev-only
-and re-pins the bundled Claude to the version aioncore verifies.
+and re-pins the bundled Claude to the version aioncore verifies; rev 7 hides the desktop-pet and
+Other/About settings surfaces on every client form (FR-9).
 
 ## Why
 
@@ -112,6 +113,16 @@ and scheduling control are not yet.**
   exporting anything. It must not claim a server decision when the static provider was in force.
   This ships from day one — a corpus without provenance cannot later be split into "server routed
   this" and "local default did".
+- **FR-9** The desktop-pet and Other/About settings surfaces are hidden **unconditionally** on
+  desktop and web (per user decision, not capability-gated): both navigation copies drop the
+  `pet` and `about` tabs through one shared `HIDDEN_SETTINGS_TAB_IDS` set (the 「其他」 group
+  header hangs off `about` and disappears with it), direct routes redirect to `/guid` the same
+  way the gateway guard does, and the tray loses its pet submenu and About entry. Extension tabs
+  anchored to a hidden tab fall back to the existing unanchored slot (before `system`) instead
+  of vanishing. Boundary, stated honestly: this hides the _surfaces_; a pet already enabled in
+  stored config (`pet.enabled=true`) would still auto-show on boot with no remaining off switch —
+  acceptable because the flag defaults off and fresh installs never set it, noted so nobody
+  mistakes hiding for disabling.
 
 ## Forward compatibility — decided now, so the backend costs nothing later
 
@@ -162,6 +173,13 @@ The backend cannot yet specify its endpoint. These choices make that irrelevant:
 ## Acceptance Criteria
 
 Marked against what was actually exercised (constitution principle V).
+
+- [x] **FR-9**: unit — both nav copies drop `pet`/`about` on desktop and web, full-list equality
+      re-pinned against the filtered id list; e2e updated — the fixture extension anchored to
+      `about` lands in the unanchored slot before `system` while `about` itself is absent;
+      renderer verified live via HMR (sider shows no 桌面宠物 / 其他 / 关于; direct
+      `#/settings/about` and `#/settings/pet` land on `/guid`); tray menu change needs the app
+      restart it got
 
 - [x] **Zero CLI logos, and zero CLI names once the agent rows are renamed.** Measured with a
       headless browser over nine routes plus two mobile viewports, reading the rendered text and

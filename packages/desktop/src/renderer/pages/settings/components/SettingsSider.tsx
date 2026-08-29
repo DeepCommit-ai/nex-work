@@ -48,6 +48,17 @@ export const BUILTIN_TAB_IDS = [
 ] as const;
 
 /**
+ * [ENTERPRISE PATCH] spec 002 FR-9 — 面向文员产品裁掉的设置面。
+ * 桌面宠物与「其他/关于」在客户端与网页端一律不出现：两份导航副本、
+ * 「其他」分组头（挂在 about 前，about 消失分组头即消失）、路由三处同治。
+ * Product surfaces trimmed for the clerical build: the desktop-pet and
+ * Other/About settings never render on desktop or web. Both navigation
+ * copies, the group header (anchored on `about`), and the routes are gated
+ * through this one set.
+ */
+export const HIDDEN_SETTINGS_TAB_IDS: ReadonlySet<string> = new Set(['pet', 'about']);
+
+/**
  * Legacy anchor IDs that have been merged into other tabs.
  * When an extension anchors to one of these, it is redirected to the new host.
  * This keeps older extensions working without requiring them to update.
@@ -147,7 +158,8 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
     // than disabled: a greyed-out entry still says a CLI layer exists, which is
     // the thing staff are not meant to think in terms of. Extension tabs anchored
     // to a dropped entry fall through to `unanchored` by the existing check.
-    const result: SiderItem[] = BUILTIN_TAB_IDS.filter((id) => isDesktop || id !== 'pet')
+    const result: SiderItem[] = BUILTIN_TAB_IDS.filter((id) => !HIDDEN_SETTINGS_TAB_IDS.has(id))
+      .filter((id) => isDesktop || id !== 'pet')
       .filter((id) => agentSettingsVisible || (id !== 'agent' && id !== 'model' && id !== 'gateway'))
       .map((id) => builtinMap[id]);
 

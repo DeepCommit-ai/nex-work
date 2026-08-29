@@ -102,7 +102,8 @@ test.describe('Agent Settings Detection', () => {
 
   test('re-entering the page keeps the diagnostics surface instead of legacy picker content', async ({ page }) => {
     await goToSettings(page, 'agent');
-    await goToSettings(page, 'about');
+    // 'about' is hidden since spec 002 FR-9; any other page serves the round-trip.
+    await goToSettings(page, 'system');
     await goToSettings(page, 'agent');
 
     await expectAnyText(page, TEXT.customAgents);
