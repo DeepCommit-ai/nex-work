@@ -67,6 +67,42 @@ Residual, on purpose: a conversation created **before** the rewrite replays its 
 snapshot (measured: re-ensuring the old conversation still passes `command:"node"` and the child
 dies). Old conversations do not self-heal; new ones are correct.
 
+### D4 — agent keystrokes landed in the app's own chat input
+
+With every link above healthy, form filling still corrupted the product surface: in conversation
+7a4f0946 the agent's `fill` calls all reported "Successfully filled out the element" while the
+page DOM stayed empty — and the typed values (`恒瑞充电`, `YL-120kW直流充电桩`, `150`, …)
+appeared, character by character, in the app's own chat compose box. The date field alone stuck.
+
+Four layers, each verified against source or wire:
+
+- chrome-devtools-mcp 0.16.0 `fill` delegates to puppeteer's `Locator.fill`; for
+  text/textarea/number inputs that path types via **synthesized keyboard events** — CJK through
+  `Input.insertText`, ASCII through `Input.dispatchKeyEvent`. Only non-typeable inputs (date,
+  color, …) are set via JS assignment, which is exactly why the date field survived and why the
+  tool's "success" is a lie: typing is fire-and-forget, nothing reads the value back.
+- The bridge forwarded `Input.*` verbatim to the webview's debugger.
+- Chromium routes CDP keyboard/text injection to the **focused widget**, not to the session's
+  own target: `input_handler.cc` (tag 138.0.7204.251, the exact Chromium of Electron 37.10.3)
+  sends DispatchKeyEvent / InsertText / ImeSetComposition through
+  `delegate()->GetFocusedRenderWidgetHost()`. Mouse events hit-test by coordinates instead —
+  which is why `click` never once missed.
+- Focus is tracked **once per window tree**, on the outermost WebContents
+  (`web_contents_impl.cc`: `GetFocusedFrameTree()` returns
+  `GetOutermostWebContents()->node_.focused_frame_tree()`). The user had just sent a message,
+  so focus sat in the chat textarea — every synthesized key was delivered there. Real Chrome
+  never exhibits this because the automated page is the only top-level page; embedding it as a
+  webview merges "page focus" into "app focus" and breaks the tools' hidden assumption.
+
+Reproduced at will with a bridge probe (chat textarea focused → `Input.insertText` '恒' +
+`Input.dispatchKeyEvent` '1' → guest input empty, chat box reads `恒1`), then fixed and the same
+probe re-run green. Two candidate mechanisms were measured dead before the fix landed:
+main-process `contents.focus()` does nothing for a guest (guest `document.hasFocus()` stays
+false, keys still leak), and `contents.isFocused()` reads false even while keys demonstrably
+land in the guest — so it can serve as neither guard nor settle signal. What works is the
+embedder: `hostWebContents.executeJavaScript` running `webviewEl.focus()` in the host renderer,
+the same focus channel a real user click takes (FR-8).
+
 ## Functional Requirements
 
 - **FR-1** The builtin browser MCP launcher must spawn `npx` with the bin directory of **the node
@@ -111,8 +147,22 @@ dies). Old conversations do not self-heal; new ones are correct.
   it (duplicate `attachedToTarget` swaps sessions and keeps the poisoned target); a disconnect
   does: chrome-devtools-mcp's `ensureBrowserConnected` rebuilds everything on the next tool call.
   Load-bearing negative: a same-webContents re-report (every navigation's dom-ready) must never
-  disconnect anyone. Known residual: the first tool call right after a fresh connect can race
-  page registration and return "No page selected" once; the immediate retry lands (measured).
+  disconnect anyone. Known residual, remeasured during FR-8 verification: "No page selected" on a
+  fresh connection is **not** a one-shot race — it can persist for that connection's lifetime
+  (both the incident conversation and the live probe saw take_snapshot fail, wait 2.5s, and
+  fail identically) until the agent's natural `new_page` fallback (FR-7) re-selects the page.
+  Pre-existing, survivable through FR-7, recorded as its own defect candidate.
+- **FR-8** Before forwarding `Input.dispatchKeyEvent` / `Input.insertText` /
+  `Input.imeSetComposition`, the bridge has the embedder renderer focus the browser webview
+  element (`hostWebContents.executeJavaScript` → `webviewEl.focus()`), so agent keystrokes land
+  in the page being automated instead of whichever app field currently holds focus (D4).
+  Unguarded and unpolled on purpose: both candidate signals were measured false (guest
+  `isFocused()` stays false even while keys land; no first-key race was observed), an
+  already-focused webview makes the call a DOM no-op, and re-running per command self-heals
+  when the user clicks back into the chat mid-fill. Pinned negatives: mouse / evaluate /
+  screenshot commands never touch focus, and a focus failure never blocks forwarding. Honest
+  tradeoff: while the agent types, the webview holds the app's one keyboard focus — two
+  typists, one focus model; the panel is the agent's workspace for those seconds.
 - **FR-3** The builtin browser MCP transport must name a node that actually runs on this machine,
   re-resolved at every boot by the same reconcile that already repairs the script path: bare
   `node` while the PATH node passes a strict `--version` probe; otherwise the absolute path of a
@@ -140,6 +190,16 @@ bundled-claude/darwin-arm64/claude` (2.1.235); `GET /api/agents/2d23ff1c/overrid
       alive on that node, and under it `npm exec chrome-devtools-mcp@0.16.0 --browser-url …`
 - [x] **Live: stale-snapshot residual measured** — the pre-fix conversation still replays
       `command:"node"` and its MCP child dies; documented rather than silently left
+- [x] Focused tests (FR-8): keyboard methods run the embedder focus script before the forward
+      (order asserted) and on every command; mouse/evaluate/screenshot never touch focus; a
+      rejecting script and a missing embedder still forward the command
+- [x] **Live: bug reproduced, then killed** — chat textarea focused (incident precondition);
+      pre-fix the bridge probe's `恒`+`1` landed in the chat box with the guest input empty;
+      post-fix the guest input reads `恒1`, the chat box stays empty, guest
+      `document.hasFocus()` flips true
+- [x] **Live: real chain (FR-8)** — the actual wrapper → chrome-devtools-mcp 0.16.0 `fill` on
+      the incident form's 客户名称 field wrote `恒瑞充电150` into the page DOM (read back via
+      `evaluate_script`), chat box clean, exactly one "[CDP] Focused the browser webview" log
 - [x] Gates: format:check clean, oxlint 0 errors, `tsc --noEmit` clean
 
 ## Method, codified
