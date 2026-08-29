@@ -142,6 +142,13 @@ bundled-claude/darwin-arm64/claude` (2.1.235); `GET /api/agents/2d23ff1c/overrid
       `command:"node"` and its MCP child dies; documented rather than silently left
 - [x] Gates: format:check clean, oxlint 0 errors, `tsc --noEmit` clean
 
+## Method, codified
+
+The layered-falsification method that separated these defects (evidence per layer, fresh-vs-stale
+clients, race-vs-state, your-path-vs-user's-path, negative-constraint tests, error text as part of
+the fix) is codified as the repo `debugging` skill (`.claude/skills/debugging/SKILL.md`) so any
+agent working this repo applies it by default.
+
 ## Boundaries
 
 - Fixes **resolution**, not the broken machine: the brew node stays broken; nothing here repairs or

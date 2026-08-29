@@ -147,6 +147,7 @@ When opening a PR, fill in the PR body using [.github/pull_request_template.md](
 | Skill            | Purpose                                                                     | Triggers                                                                                               |
 | ---------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | **architecture** | File & directory structure conventions for all process types                | Creating files, adding modules, architectural decisions                                                |
+| **debugging**    | Layered-falsification workflow for recurring / multi-layer failures         | A fix "worked" but the symptom returned; failures crossing process or protocol boundaries              |
 | **i18n**         | Internationalization workflow and standards                                 | Adding or changing user-facing text, modifying `locales/` or `packages/desktop/src/common/config/i18n` |
 | **testing**      | Testing workflow and quality standards                                      | Writing tests, changing runtime behavior, fixing bugs, or claiming behavior is verified                |
 | **bump-version** | Version bump workflow: update package.json, checks, branch, PR, tag release | Bumping version, `/bump-version`                                                                       |
