@@ -38,6 +38,7 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
   const { content: text, status, subject } = message.content;
   const duration = message.content.duration ?? (message.content as { duration_ms?: number }).duration_ms;
   const isDone = status === 'done';
+  const startUnwitnessed = message.content.startUnwitnessed === true;
   const [expanded, setExpanded] = useState(!isDone);
   const [elapsedTime, setElapsedTime] = useState(() => {
     const initialStartedAt = message.created_at ?? Date.now();
@@ -53,9 +54,10 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
     }
   }, [isDone]);
 
-  // Elapsed timer for active thinking
+  // Elapsed timer for active thinking. An unwitnessed start gets no timer at
+  // all — counting from the rebuild moment reads as "re-thinking from 0s".
   useEffect(() => {
-    if (isDone) return;
+    if (isDone || startUnwitnessed) return;
 
     startTimeRef.current = message.created_at ?? Date.now();
     setElapsedTime(Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000)));
@@ -64,7 +66,7 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isDone, message.created_at, message.msg_id]);
+  }, [isDone, startUnwitnessed, message.created_at, message.msg_id]);
 
   // Auto-scroll to bottom during streaming
   useEffect(() => {
@@ -73,9 +75,18 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
     }
   }, [text, isDone, expanded]);
 
+  // duration == null ⇔ 没有可信时长（起点未亲见且后端没给数）:宁缺毋假。
+  // duration == null ⇔ no trustworthy figure exists (unwitnessed start and no
+  // backend-provided duration): show no number rather than a wrong one. (spec 008)
+  const completeLabel = t('conversation.thinking.complete', { defaultValue: 'Thought complete' });
+  const activeLabel = subject || t('conversation.thinking.label', { defaultValue: 'Thinking...' });
   const summaryText = isDone
-    ? `${t('conversation.thinking.complete', { defaultValue: 'Thought complete' })} · ${formatDuration(duration || 0)}`
-    : `${subject || t('conversation.thinking.label', { defaultValue: 'Thinking...' })} · ${formatElapsedTime(elapsedTime)}`;
+    ? duration == null
+      ? completeLabel
+      : `${completeLabel} · ${formatDuration(duration)}`
+    : startUnwitnessed
+      ? activeLabel
+      : `${activeLabel} · ${formatElapsedTime(elapsedTime)}`;
 
   return (
     <div className={styles.container}>

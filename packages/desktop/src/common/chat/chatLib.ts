@@ -403,6 +403,14 @@ export type IMessageThinking = IMessage<
     subject?: string;
     duration?: number;
     status: 'thinking' | 'done';
+    /**
+     * 本挂载没有亲见这个思考段的起点（会话中途重进,气泡由重进后的 chunk 重建）。
+     * 渲染层据此隐藏会撒谎的实时计时;时长只在拿到可信数字时展示。（spec 008）
+     * This mount did not witness the segment's start (mid-turn re-entry rebuilt
+     * the bubble from post-entry chunks). The renderer hides the lying live
+     * counter; a duration is shown only when a trustworthy figure exists.
+     */
+    startUnwitnessed?: boolean;
   }
 >;
 

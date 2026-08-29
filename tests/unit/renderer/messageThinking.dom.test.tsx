@@ -16,7 +16,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-function createThinkingMessage(createdAt: number): IMessageThinking {
+function createThinkingMessage(createdAt: number, content?: Partial<IMessageThinking['content']>): IMessageThinking {
   return {
     id: 'thinking-1',
     type: 'thinking',
@@ -27,6 +27,7 @@ function createThinkingMessage(createdAt: number): IMessageThinking {
     content: {
       content: 'analyzing',
       status: 'thinking',
+      ...content,
     },
   };
 }
@@ -54,5 +55,29 @@ describe('MessageThinking', () => {
     render(<MessageThinking message={createThinkingMessage(createdAt)} />);
 
     expect(screen.getByText('Thinking... · 7s')).toBeInTheDocument();
+  });
+
+  // [spec 008] 起点未亲见的气泡不许显示会撒谎的计时。
+  it('hides the elapsed counter when the segment start was not witnessed', () => {
+    vi.setSystemTime(new Date('2026-05-26T09:00:10.000Z'));
+    render(<MessageThinking message={createThinkingMessage(Date.now(), { startUnwitnessed: true })} />);
+
+    expect(screen.getByText('Thinking...')).toBeInTheDocument();
+    expect(screen.queryByText(/Thinking\.\.\. · /)).toBeNull();
+  });
+
+  it('omits the duration suffix when a completed thinking has no trustworthy duration', () => {
+    render(<MessageThinking message={createThinkingMessage(Date.now(), { status: 'done', content: '' })} />);
+
+    expect(screen.getByText('Thought complete')).toBeInTheDocument();
+    expect(screen.queryByText(/Thought complete · /)).toBeNull();
+  });
+
+  it('still shows the stored duration when one exists', () => {
+    render(
+      <MessageThinking message={createThinkingMessage(Date.now(), { status: 'done', content: '', duration: 2298 })} />
+    );
+
+    expect(screen.getByText('Thought complete · 2s')).toBeInTheDocument();
   });
 });

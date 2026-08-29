@@ -203,6 +203,33 @@ describe('message merging', () => {
     expect((result.current.messages[2] as IMessageThinking).content.content).toBe('gamma');
   });
 
+  // [spec 008] 未亲见标记必须穿过 chunk 追加与 done 合并存活,时长缺失也必须原样保留。
+  it('carries the unwitnessed stamp through chunk appends and a durationless done merge', async () => {
+    const { result } = renderHook(() => useMessageHarness(), {
+      wrapper: TestWrapper,
+    });
+
+    act(() => {
+      result.current.addOrUpdateMessage({
+        ...createThinkingMessage('msg-1', 'alpha'),
+        content: { content: 'alpha', status: 'thinking', startUnwitnessed: true },
+      });
+      result.current.addOrUpdateMessage(createThinkingMessage('msg-1', ' beta'));
+      result.current.addOrUpdateMessage({
+        ...createThinkingDoneMessage('msg-1', 0),
+        content: { content: '', status: 'done', duration: undefined },
+      });
+    });
+    await flushMessageQueue();
+
+    expect(result.current.messages).toHaveLength(1);
+    const merged = result.current.messages[0] as IMessageThinking;
+    expect(merged.content.status).toBe('done');
+    expect(merged.content.content).toBe('alpha beta');
+    expect(merged.content.startUnwitnessed).toBe(true);
+    expect(merged.content.duration).toBeUndefined();
+  });
+
   it('merges thinking done updates into the existing thinking message instead of appending a completion message', async () => {
     const { result } = renderHook(() => useMessageHarness(), {
       wrapper: TestWrapper,

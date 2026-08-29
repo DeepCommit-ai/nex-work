@@ -136,7 +136,19 @@ export const useAcpMessage = (
   // Track whether current turn has a thinking message in the conversation
   const hasThinkingMessageRef = useRef(false);
   const [hasThinkingMessage, setHasThinkingMessage] = useState(false);
-  const activeThinkingRef = useRef<{ msgId: string; startedAt: number } | null>(null);
+  const activeThinkingRef = useRef<{ msgId: string; startedAt: number; witnessed: boolean } | null>(null);
+  /**
+   * [spec 008] 思考段起点"未亲见"标记。会话中途重进时,正在进行的思考段的
+   * 首个 chunk 早已流过,此刻重建的气泡起点是假的;直到亲见一次分段边界
+   * （任何非思考类消息、或 thinking done）之前,新建的思考气泡都打上
+   * startUnwitnessed,由渲染层隐藏计时。
+   * Set on mid-turn re-entry: the in-flight segment's real first chunk is long
+   * gone, so bubbles rebuilt now carry a false origin. Until one segment
+   * boundary is witnessed (any non-thinking message, or a thinking done), new
+   * thinking bubbles are stamped startUnwitnessed and the renderer hides the
+   * elapsed counter.
+   */
+  const unwitnessedThinkingRef = useRef(false);
 
   // Track request trace state for displaying complete request lifecycle
   const requestTraceRef = useRef<{
@@ -205,7 +217,12 @@ export const useAcpMessage = (
       if (!activeThinking) return;
 
       const endTime = boundaryMessage.created_at ?? Date.now();
-      const duration = completeOptions?.duration ?? Math.max(0, endTime - activeThinking.startedAt);
+      // 后端给的时长永远可信;客户端自己计的只在起点亲见时才诚实——否则宁缺毋假。
+      // A backend-provided duration is always trusted; a client-computed one is
+      // honest only when this mount witnessed the segment start (spec 008).
+      const duration =
+        completeOptions?.duration ??
+        (activeThinking.witnessed ? Math.max(0, endTime - activeThinking.startedAt) : undefined);
 
       mergeLiveMessage({
         id: `${activeThinking.msgId}-thinking-done`,
@@ -232,6 +249,7 @@ export const useAcpMessage = (
   const markTurnEnded = useCallback(() => {
     endConversationTurn(conversation_id);
     setTurnStartedAtMs(null);
+    unwitnessedThinkingRef.current = false;
   }, [conversation_id]);
 
   // Exported setter: the send box flips this on send / send-failure, so track
@@ -240,6 +258,8 @@ export const useAcpMessage = (
     (action) => {
       const next = typeof action === 'function' ? action(aiProcessingRef.current) : action;
       if (next) {
+        // 本地发送:这个 turn 从出生起就被亲见。/ A local send is witnessed from birth.
+        unwitnessedThinkingRef.current = false;
         setTurnStartedAtMs(beginConversationTurn(conversation_id));
       } else {
         endConversationTurn(conversation_id);
@@ -280,26 +300,32 @@ export const useAcpMessage = (
         return;
       }
 
-      const shouldCompleteThinking =
-        activeThinkingRef.current &&
-        ![
-          'thought',
-          'thinking',
-          'start',
-          'request_trace',
-          'acp_context_usage',
-          'acp_model_info',
-          'acp_config_option',
-          'codex_model_info',
-          'available_commands',
-          'slash_commands_updated',
-          'agent_status',
-          'user_content',
-          'teammate_message',
-        ].includes(message.type);
+      const isThinkingBoundary = ![
+        'thought',
+        'thinking',
+        'start',
+        'request_trace',
+        'acp_context_usage',
+        'acp_model_info',
+        'acp_config_option',
+        'codex_model_info',
+        'available_commands',
+        'slash_commands_updated',
+        'agent_status',
+        'user_content',
+        'teammate_message',
+      ].includes(message.type);
 
-      if (shouldCompleteThinking) {
-        completeActiveThinking(message);
+      if (isThinkingBoundary) {
+        if (activeThinkingRef.current) {
+          completeActiveThinking(message);
+        }
+        // 亲见了一次分段边界:此后开始的思考段,其首个 chunk 就是真实起点。
+        // 即使当下没有活跃气泡（重进时 agent 正在跑工具）也成立。
+        // A witnessed boundary: any thinking segment starting after this point
+        // begins with its true first chunk — also when no bubble is active
+        // (re-entry landed while the agent ran a tool). (spec 008)
+        unwitnessedThinkingRef.current = false;
       }
 
       const transformedMessage = transformMessage(message);
@@ -320,6 +346,8 @@ export const useAcpMessage = (
                 duration: thinkingData.duration ?? thinkingData.duration_ms,
               });
             }
+            // done 帧同样是亲见的分段边界。/ A done frame is a witnessed boundary too.
+            unwitnessedThinkingRef.current = false;
             break;
           }
 
@@ -332,15 +360,23 @@ export const useAcpMessage = (
             activeThinkingRef.current = {
               msgId: message.msg_id,
               startedAt: message.created_at ?? Date.now(),
+              witnessed: !unwitnessedThinkingRef.current,
             };
           } else if (activeThinkingRef.current.msgId !== message.msg_id) {
             activeThinkingRef.current = {
               msgId: message.msg_id,
               startedAt: message.created_at ?? Date.now(),
+              witnessed: !unwitnessedThinkingRef.current,
             };
           }
           hasThinkingMessageRef.current = true;
           setHasThinkingMessage(true);
+          if (unwitnessedThinkingRef.current && transformedMessage?.type === 'thinking') {
+            // 中途重进重建的气泡:起点未亲见,渲染层不显示会撒谎的秒数。（spec 008）
+            // Rebuilt mid-turn after re-entry: origin unwitnessed, so the renderer
+            // suppresses the lying elapsed counter. (spec 008)
+            transformedMessage.content.startUnwitnessed = true;
+          }
           mergeLiveMessage(transformedMessage);
           break;
         }
@@ -611,6 +647,11 @@ export const useAcpMessage = (
     setAiProcessing(false);
     aiProcessingRef.current = false;
     setTurnStartedAtMs(null);
+    // 水合未定前先按"未亲见"处理:此刻能到达的思考帧只可能属于一个我们中途
+    // 加入的 turn。水合判 idle 会立即撤销。
+    // Until hydration settles, assume unwitnessed: a thinking frame arriving now
+    // can only belong to a turn we joined midway. Idle hydration clears it.
+    unwitnessedThinkingRef.current = true;
 
     void getConversationOrNull(conversation_id)
       .then((res) => {
@@ -625,9 +666,11 @@ export const useAcpMessage = (
           aiProcessingRef.current = false;
           endConversationTurn(conversation_id);
           setHasHydratedRunningState(true);
+          unwitnessedThinkingRef.current = false;
           return;
         }
         const isRunning = isConversationProcessing(res);
+        unwitnessedThinkingRef.current = isRunning;
         setRunning(isRunning);
         runningRef.current = isRunning;
         if (isRunning) {

@@ -11,6 +11,7 @@ import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conve
 import { resetConversationTurnClockForTests } from '@/renderer/pages/conversation/utils/conversationTurnClock';
 import { resetEnsureConversationRuntimeStateForTests } from '@/renderer/pages/conversation/utils/ensureConversationRuntime';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
+import type { IMessageThinking, TMessage } from '@/common/chat/chatLib';
 
 const {
   addOrUpdateMessageMock,
@@ -101,7 +102,14 @@ describe('useAcpMessage', () => {
     vi.mocked(getConversationOrNull).mockResolvedValue(null);
 
     const now = Date.now();
-    renderHook(() => useAcpMessage('conv-1'));
+    const { result } = renderHook(() => useAcpMessage('conv-1'));
+
+    // [spec 008] 水合未定前的帧会被按"起点未亲见"处理;本测试针对的是常规流,先等水合。
+    // Frames arriving before hydration settles are treated as unwitnessed; this
+    // test targets the ordinary flow, so let hydration settle first.
+    await waitFor(() => {
+      expect(result.current.hasHydratedRunningState).toBe(true);
+    });
 
     expect(responseStreamHandlerRef.current).toBeTypeOf('function');
 
@@ -149,7 +157,12 @@ describe('useAcpMessage', () => {
   it('completes thinking as soon as the first non-thinking message arrives', async () => {
     vi.mocked(getConversationOrNull).mockResolvedValue(null);
 
-    renderHook(() => useAcpMessage('conv-1'));
+    const { result } = renderHook(() => useAcpMessage('conv-1'));
+
+    // [spec 008] 同上:等水合,避免帧落进"未亲见"窗口。/ Same as above: let hydration settle.
+    await waitFor(() => {
+      expect(result.current.hasHydratedRunningState).toBe(true);
+    });
 
     responseStreamHandlerRef.current?.({
       type: 'thinking',
@@ -653,5 +666,103 @@ describe('tokenUsageFromAcpUsage', () => {
   it('drops a zero-amount cost as unreported', () => {
     const usage = tokenUsageFromAcpUsage({ used: 10, cost: { amount: 0, currency: 'USD' } });
     expect(usage.cost).toBeUndefined();
+  });
+});
+
+describe('useAcpMessage — unwitnessed thinking after mid-turn re-entry (spec 008)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetConversationTurnClockForTests();
+    resetEnsureConversationRuntimeStateForTests();
+    ensureRuntimeInvokeMock.mockResolvedValue({ recovered: false, config_options: [], runtime: null });
+    getSlashCommandsInvokeMock.mockResolvedValue([]);
+    getUsageInvokeMock.mockResolvedValue(null);
+    responseStreamHandlerRef.current = undefined;
+  });
+
+  const thinkingCalls = (): IMessageThinking[] =>
+    addOrUpdateMessageMock.mock.calls
+      .map((call) => call[0] as TMessage)
+      .filter((m): m is IMessageThinking => m.type === 'thinking');
+
+  const sendThinkingChunk = (msgId: string, content: string) => {
+    responseStreamHandlerRef.current?.({
+      type: 'thinking',
+      data: { content, status: 'thinking' },
+      msg_id: msgId,
+      conversation_id: 'conv-1',
+    });
+  };
+
+  it('stamps bubbles rebuilt mid-turn, completes them without a fabricated duration, and trusts segments after a witnessed boundary', async () => {
+    vi.mocked(getConversationOrNull).mockResolvedValue({
+      type: 'acp',
+      status: 'running',
+      runtime: { is_processing: true },
+    } as never);
+
+    const { result } = renderHook(() => useAcpMessage('conv-1'));
+    await waitFor(() => {
+      expect(result.current.hasHydratedRunningState).toBe(true);
+    });
+
+    // In-flight segment: its real first chunk streamed before we mounted.
+    sendThinkingChunk('m1', 'alpha');
+    expect(thinkingCalls().at(-1)?.content.startUnwitnessed).toBe(true);
+
+    // Boundary (text) completes it — no fabricated client-side duration.
+    responseStreamHandlerRef.current?.({ type: 'text', data: 'beta', msg_id: 'm1', conversation_id: 'conv-1' });
+    const unwitnessedDone = thinkingCalls().find((m) => m.content.status === 'done');
+    expect(unwitnessedDone).toBeDefined();
+    expect(unwitnessedDone?.content.duration).toBeUndefined();
+
+    // The boundary was witnessed, so the next segment is trusted again.
+    sendThinkingChunk('m2', 'gamma');
+    const witnessed = thinkingCalls().find((m) => m.msg_id === 'm2' && m.content.status !== 'done');
+    expect(witnessed?.content.startUnwitnessed).toBeUndefined();
+
+    responseStreamHandlerRef.current?.({ type: 'finish', data: null, msg_id: 'm2', conversation_id: 'conv-1' });
+    const witnessedDone = thinkingCalls().find((m) => m.msg_id === 'm2' && m.content.status === 'done');
+    expect(witnessedDone?.content.duration).toEqual(expect.any(Number));
+  });
+
+  it('still trusts a backend-provided duration for an unwitnessed bubble', async () => {
+    vi.mocked(getConversationOrNull).mockResolvedValue({
+      type: 'acp',
+      status: 'running',
+      runtime: { is_processing: true },
+    } as never);
+
+    const { result } = renderHook(() => useAcpMessage('conv-1'));
+    await waitFor(() => {
+      expect(result.current.hasHydratedRunningState).toBe(true);
+    });
+
+    sendThinkingChunk('m1', 'alpha');
+    responseStreamHandlerRef.current?.({
+      type: 'thinking',
+      data: { content: '', status: 'done', duration_ms: 2298 },
+      msg_id: 'm1',
+      conversation_id: 'conv-1',
+    });
+
+    const done = thinkingCalls().find((m) => m.content.status === 'done');
+    expect(done?.content.duration).toBe(2298);
+  });
+
+  it('does not stamp thinking bubbles when hydration reports an idle conversation', async () => {
+    vi.mocked(getConversationOrNull).mockResolvedValue(null);
+
+    const { result } = renderHook(() => useAcpMessage('conv-1'));
+    await waitFor(() => {
+      expect(result.current.hasHydratedRunningState).toBe(true);
+    });
+
+    sendThinkingChunk('m1', 'alpha');
+    expect(thinkingCalls().at(-1)?.content.startUnwitnessed).toBeUndefined();
+
+    responseStreamHandlerRef.current?.({ type: 'text', data: 'beta', msg_id: 'm1', conversation_id: 'conv-1' });
+    const done = thinkingCalls().find((m) => m.content.status === 'done');
+    expect(done?.content.duration).toEqual(expect.any(Number));
   });
 });
