@@ -38,7 +38,14 @@ import { BUILTIN_BROWSER_MCP_NAME } from '@/common/config/constants';
  * agent is waiting for approval of a browser action, which is exactly when the
  * user most needs to know where to look.
  */
-const IN_FLIGHT_STATUSES = new Set(['Executing', 'Pending', 'Confirming']);
+const IN_FLIGHT_STATUSES = new Set([
+  'Executing',
+  'Pending',
+  'Confirming',
+  // 直连 CLI 通道（Claude Code）的 tool_call 消息用小写状态词。
+  // The direct-CLI lane (Claude Code) uses lowercase statuses on tool_call messages.
+  'running',
+]);
 
 type ToolGroupEntry = {
   name?: string;
@@ -62,7 +69,34 @@ const isBrowserMcpEntry = (entry: ToolGroupEntry): boolean => {
   const name = entry.name;
   if (typeof name === 'string' && name.startsWith(`${BUILTIN_BROWSER_MCP_NAME}__`)) return true;
 
+  /**
+   * [ENTERPRISE PATCH] spec 007 — Claude Code（直连 CLI）把 MCP 工具命名为
+   * `mcp__<server>__<tool>`。实测 2026-08-29：漏掉这个形态时，浏览器活动检测
+   * 对 claude 会话永远不触发——角标不亮、面板不自动打开，agent 的浏览器调用
+   * 全部死在"未附加"，而用户被要求去找一个不会自己出现的面板。
+   *
+   * Claude Code (direct CLI) names MCP tools `mcp__<server>__<tool>`. Measured
+   * 2026-08-29: without this shape the detector never fires for claude
+   * conversations — no badge, no auto-open, every browser call dead-ends
+   * unattached.
+   */
+  if (typeof name === 'string' && name.startsWith(`mcp__${BUILTIN_BROWSER_MCP_NAME}__`)) return true;
+
   return false;
+};
+
+/**
+ * 直连 CLI 通道逐条发 `tool_call` 消息（data 是单个条目），而 ACP 通道发
+ * `tool_group`（data 是数组）。归一成条目数组后两条通道共用同一套判定。
+ *
+ * The direct-CLI lane emits per-call `tool_call` messages (data is one entry);
+ * the ACP lane emits `tool_group` (data is an array). Normalising to a list
+ * lets both lanes share the same predicates.
+ */
+const toolEntriesOf = (messageType: string, data: unknown): ToolGroupEntry[] => {
+  if (messageType === 'tool_group') return Array.isArray(data) ? (data as ToolGroupEntry[]) : [];
+  if (messageType === 'tool_call' && data && typeof data === 'object') return [data as ToolGroupEntry];
+  return [];
 };
 
 /**
@@ -70,10 +104,7 @@ const isBrowserMcpEntry = (entry: ToolGroupEntry): boolean => {
  * Whether a tool_group message means the agent is currently driving the browser.
  */
 export const isBrowserMcpActivity = (messageType: string, data: unknown): boolean => {
-  if (messageType !== 'tool_group') return false;
-  if (!Array.isArray(data)) return false;
-
-  return (data as ToolGroupEntry[]).some(
+  return toolEntriesOf(messageType, data).some(
     (entry) => isBrowserMcpEntry(entry) && IN_FLIGHT_STATUSES.has(String(entry.status))
   );
 };
@@ -90,10 +121,7 @@ export const isBrowserMcpActivity = (messageType: string, data: unknown): boolea
  * extinguishing the badge too early.
  */
 export const isBrowserMcpSettled = (messageType: string, data: unknown): boolean => {
-  if (messageType !== 'tool_group') return false;
-  if (!Array.isArray(data)) return false;
-
-  const entries = (data as ToolGroupEntry[]).filter(isBrowserMcpEntry);
+  const entries = toolEntriesOf(messageType, data).filter(isBrowserMcpEntry);
   if (entries.length === 0) return false;
 
   return entries.every((entry) => !IN_FLIGHT_STATUSES.has(String(entry.status)));

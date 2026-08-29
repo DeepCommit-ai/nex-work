@@ -89,6 +89,11 @@ dies). Old conversations do not self-heal; new ones are correct.
   currently attached", relayed to a clerk as an instruction to find a panel they had never seen.
   The tab opens in plain sight and the existing one-time notice explains it; a tab the user closes
   is not reopened by the settling event.
+- **FR-5b** Browser-activity detection must recognise the direct-CLI (Claude Code) message shape:
+  per-call `tool_call` messages (data is one entry, not a `tool_group` array), tool names prefixed
+  `mcp__<server>__<tool>`, lowercase `running`/`completed`/`error` statuses. Measured (conversation
+  1cacdbcc): without this shape the detector never fired for claude conversations, so FR-5's
+  auto-open was dead code exactly where it was needed and every browser call dead-ended unattached.
 - **FR-6** A genuine change of the bridge's attachment — first attach, attach to a different
   webContents (tab switch), or the attached webview being destroyed — closes every connected CDP
   client socket (1012, "reconnect"). Root cause this answers, measured live and confirmed by

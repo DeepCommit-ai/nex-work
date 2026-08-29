@@ -82,3 +82,41 @@ describe('isBrowserMcpSettled', () => {
     expect(isBrowserMcpSettled('text', [mcpEntry('Success')])).toBe(false);
   });
 });
+
+/**
+ * [ENTERPRISE PATCH] spec 007 — 直连 CLI 通道（Claude Code）的形态。
+ *
+ * 实测 2026-08-29（会话 1cacdbcc）：claude 逐条发 `tool_call` 消息，data 是单个
+ * 条目，工具名带 `mcp__` 前缀（`mcp__aionui-browser__list_pages`），状态用小写
+ * `running`/`completed`/`error`。旧判定只认 `tool_group` 数组 + 无前缀名 ——
+ * 双重 miss，浏览器活动检测对 claude 会话永远不触发，自动开面板成了死代码。
+ */
+describe('direct-CLI (Claude Code) tool_call shape', () => {
+  const entry = (status: string) => ({
+    call_id: 'call_1',
+    name: 'mcp__aionui-browser__list_pages',
+    args: {},
+    status,
+  });
+
+  it('detects in-flight activity from a single tool_call entry with the mcp__ prefix', () => {
+    expect(isBrowserMcpActivity('tool_call', entry('running'))).toBe(true);
+  });
+
+  it('treats completed and error tool_call entries as settled, not active', () => {
+    expect(isBrowserMcpActivity('tool_call', entry('completed'))).toBe(false);
+    expect(isBrowserMcpActivity('tool_call', entry('error'))).toBe(false);
+    expect(isBrowserMcpSettled('tool_call', entry('completed'))).toBe(true);
+    expect(isBrowserMcpSettled('tool_call', entry('error'))).toBe(true);
+  });
+
+  it('ignores non-browser tool_call entries in both directions', () => {
+    const other = { call_id: 'c', name: 'mcp__some-other__tool', status: 'running' };
+    expect(isBrowserMcpActivity('tool_call', other)).toBe(false);
+    expect(isBrowserMcpSettled('tool_call', other)).toBe(false);
+  });
+
+  it('still recognises the mcp__ prefix inside tool_group arrays', () => {
+    expect(isBrowserMcpActivity('tool_group', [entry('running')])).toBe(true);
+  });
+});

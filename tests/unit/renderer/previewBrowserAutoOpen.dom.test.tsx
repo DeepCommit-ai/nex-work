@@ -105,6 +105,19 @@ describe('browser MCP activity auto-opens the in-app browser (spec 007 FR-5)', (
     expect(browserTabs()).toHaveLength(1);
   });
 
+  it('opens on the direct-CLI (Claude Code) tool_call shape — mcp__ prefix, single entry', () => {
+    // 实测形态（会话 1cacdbcc）：逐条 tool_call、mcp__ 前缀、小写 running。
+    mount();
+
+    emit({
+      type: 'tool_call',
+      data: { call_id: 'call_1', name: 'mcp__aionui-browser__list_pages', args: {}, status: 'running' },
+    });
+
+    expect(browserTabs()).toHaveLength(1);
+    expect(ctx.isOpen).toBe(true);
+  });
+
   it('ignores tool activity that is not the browser MCP', () => {
     mount();
 
