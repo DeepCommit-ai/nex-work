@@ -82,6 +82,13 @@ dies). Old conversations do not self-heal; new ones are correct.
   the aionrs factory, so "enabled in the MCP directory" means on-by-default in every lane,
   including the fresh install where no assistant has any MCP history. The one respected empty is
   an admin's `fixed`-mode empty list: a decision, not an absence of one.
+- **FR-5** When browser-MCP activity starts and no browser tab is open, the preview panel opens
+  one on its own. The single-target bridge attaches only to a mounted, user-visible browser tab —
+  by design — but the missing tab must be the app's job, not the employee's: measured live with
+  every other link healthy, the first tool call still dead-ended in "The in-app browser is not
+  currently attached", relayed to a clerk as an instruction to find a panel they had never seen.
+  The tab opens in plain sight and the existing one-time notice explains it; a tab the user closes
+  is not reopened by the settling event.
 - **FR-3** The builtin browser MCP transport must name a node that actually runs on this machine,
   re-resolved at every boot by the same reconcile that already repairs the script path: bare
   `node` while the PATH node passes a strict `--version` probe; otherwise the absolute path of a

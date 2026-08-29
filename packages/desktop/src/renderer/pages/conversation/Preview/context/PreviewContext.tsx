@@ -1309,6 +1309,25 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
    * changed" — indistinguishable from a user click. The tool-call stream is the only
    * signal that separates the two.
    */
+  // [ENTERPRISE PATCH] spec 007 FR-5 — the agent cannot attach the single-target
+  // CDP bridge itself: attaching needs a browser tab's webview mounted, and on a
+  // fresh conversation none exists, so every browser tool call dead-ends in
+  // "The in-app browser is not currently attached" and the employee is asked to
+  // find a panel they have never seen. When browser-MCP activity starts with no
+  // browser tab open, open one: the webview's dom-ready reports its webContents
+  // id, the bridge attaches, and the agent's next call lands. The tab opens in
+  // plain sight and the one-time notice explains it, so this stays within the
+  // visible-browser design. Refs, because the subscription below deliberately
+  // mounts once ([] deps) and would otherwise close over first-render values.
+  const hasBrowserTabRef = useRef(false);
+  useEffect(() => {
+    hasBrowserTabRef.current = tabs.some((tab) => tab.content_type === 'browser');
+  }, [tabs]);
+  const openBrowserTabRef = useRef(openBrowserTab);
+  useEffect(() => {
+    openBrowserTabRef.current = openBrowserTab;
+  }, [openBrowserTab]);
+
   useEffect(() => {
     const markBrowserTabs = (agentActive: boolean) => {
       setTabs((prevTabs) => {
@@ -1341,6 +1360,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const unsubscribe = stream.on((message) => {
       if (isBrowserMcpActivity(message.type, message.data)) {
+        if (!hasBrowserTabRef.current) openBrowserTabRef.current();
         markBrowserTabs(true);
         maybeNotifyFirstAgentBrowserUse();
         return;
