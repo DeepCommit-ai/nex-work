@@ -303,7 +303,9 @@ describe('issue #14 — 技能下发与按助手挂载', () => {
     });
 
     it('carries the placeholder content through unrendered — 计划里绝不出现真 key', () => {
-      const w = planWrites(skillCfg(), skillWorld()).find((x) => x.kind === 'skill.write' && x.name === 'delivery-parser');
+      const w = planWrites(skillCfg(), skillWorld()).find(
+        (x) => x.kind === 'skill.write' && x.name === 'delivery-parser'
+      );
       expect(w && 'content' in w && w.content).toContain('{{CYNAPSE_KEY}}');
     });
 

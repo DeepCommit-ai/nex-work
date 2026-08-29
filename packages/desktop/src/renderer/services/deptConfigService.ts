@@ -91,8 +91,7 @@ const enrichPinnedModels = async (cfg: DeptConfig, state: CurrentState): Promise
  * **只在落盘前的这一刻发生**：/config 载荷、PlannedWrite、ApplyReport、console
  * 全程只见占位符——渲染结果只进写盘请求体，不进任何日志。
  */
-const renderSkillContent = (content: string, deptKey: string): string =>
-  content.split('{{CYNAPSE_KEY}}').join(deptKey);
+const renderSkillContent = (content: string, deptKey: string): string => content.split('{{CYNAPSE_KEY}}').join(deptKey);
 
 /**
  * 调 web-host 的受限写盘桥（`/host-api/dept-skills/*`）。

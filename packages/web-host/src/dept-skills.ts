@@ -39,8 +39,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
  */
 const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-export const isValidSkillName = (name: unknown): name is string =>
-  typeof name === 'string' && SKILL_NAME_RE.test(name);
+export const isValidSkillName = (name: unknown): name is string => typeof name === 'string' && SKILL_NAME_RE.test(name);
 
 /** SKILL.md 的体积上限。薄壳只有几十行；没有上限时一次调用就能写满盘。 */
 export const MAX_SKILL_BYTES = 256 * 1024;
