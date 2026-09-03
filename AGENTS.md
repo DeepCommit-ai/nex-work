@@ -153,3 +153,31 @@ When opening a PR, fill in the PR body using [.github/pull_request_template.md](
 | **bump-version** | Version bump workflow: update package.json, checks, branch, PR, tag release | Bumping version, `/bump-version`                                                                       |
 
 > Skills are located in `.claude/skills/` and contain project conventions that apply to **all** agents and contributors.
+
+## Related Repositories (one app, three repos)
+
+**cynapse, nex-work and nex-agents are three parts of the same application**, cloned as
+sibling directories under `~/workspace/DeepCommit-ai/`, all under the `DeepCommit-ai`
+GitHub org. Before changing one side, decide whether the other two must move with it.
+
+| Repo           | Local path                             | Branch                       | Role                                                                                                                                       |
+| -------------- | -------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **cynapse**    | `~/workspace/DeepCommit-ai/cynapse`    | `main`                       | Server + **spec hub**: `/config` delivery, trajectory collection. All specs live in `doc/`                                                 |
+| **nex-work**   | `~/workspace/DeepCommit-ai/nex-work`   | **`nex-work`** (not main)    | This repo. Electron desktop client, the config consumer: pulls `/config`, then orchestrates local APIs to apply it; full replay on startup |
+| **nex-agents** | `~/workspace/DeepCommit-ai/nex-agents` | `main` + `evo/<agent>/<nnn>` | Self-evolving agents: dual substrate + evaluation gate. Artifacts ship through cynapse config and install into this client                 |
+
+**How changes propagate**
+
+1. A new cynapse config version means the apply logic and UI here must change too.
+   **Server-only changes are not done** — the end-to-end path has to run.
+2. A skill or agent change in nex-agents ships through cynapse config, then installs and
+   runs on this client.
+3. Design docs and acceptance criteria go into cynapse `doc/spec/` and `doc/reference/`.
+   This repo does not start a parallel spec system for cross-repo work.
+4. Contract details (config schema, local API shapes, path conventions such as
+   `CLAUDE_CONFIG_DIR`) are duplicated across repos and will drift. Change one side,
+   change the other in the same pass.
+
+**Cross-repo authority: when a task spans repos, go change the other repos directly.
+Do not stop and ask first.** Work on the `nex-work` branch here, keep the spec-kit layout
+and upstream-drift accounting, and commit in each repo separately, naming the counterpart.
