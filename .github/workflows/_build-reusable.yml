@@ -390,6 +390,7 @@ jobs:
           try {
             Write-Host "Running Windows build command: $Command"
             iex $Command
+            if ($LASTEXITCODE -ne 0) { throw "Windows build exited with code $LASTEXITCODE" }
             Write-Host "Windows build completed successfully"
           } catch {
             $BuildFailed = $true
@@ -399,6 +400,7 @@ jobs:
 
           if ($BuildFailed) {
             "result=failure" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            exit 1
           } else {
             "result=success" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           }
@@ -563,6 +565,47 @@ jobs:
           CI: true
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Smoke test packaged enterprise settings
+        if: success() && (startsWith(matrix.platform, 'macos') || startsWith(matrix.platform, 'windows'))
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { _electron: electron, expect } = require('@playwright/test');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const os = require('node:os');
+          const arch = '${{ matrix.arch }}';
+          const candidates = process.platform === 'darwin'
+            ? [`out/mac-${arch}/NexWork.app/Contents/MacOS/NexWork`, 'out/mac/NexWork.app/Contents/MacOS/NexWork']
+            : ['out/win-unpacked/NexWork.exe', `out/win-${arch}-unpacked/NexWork.exe`];
+          const executablePath = candidates.find((file) => fs.existsSync(file));
+          if (!executablePath) throw new Error('Packaged executable missing');
+          const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nexwork-package-smoke-'));
+          (async () => {
+            const app = await electron.launch({
+              executablePath: path.resolve(executablePath),
+              env: { ...process.env, AIONUI_E2E_TEST: '1', AIONUI_E2E_USER_DATA_DIR: userData },
+              timeout: 120000,
+            });
+            try {
+              const page = await app.firstWindow({ timeout: 120000 });
+              await page.waitForFunction(() => Boolean(window.__backendPort), null, { timeout: 120000 });
+              const port = await page.evaluate(() => window.__backendPort);
+              const response = await fetch(`http://127.0.0.1:${port}/api/settings/client?keys=enterprise.serverUrl`);
+              if (!response.ok) throw new Error(`Bundled backend returned ${response.status}`);
+              const settings = await response.json();
+              if (settings.data?.['enterprise.serverUrl']) throw new Error('Installer contains enterprise configuration');
+              await page.evaluate(() => { window.location.hash = '/settings/enterprise'; });
+              await expect(page.getByPlaceholder('http://cynapse.internal:54001')).toBeVisible({ timeout: 60000 });
+              await expect(page.locator('input[type="password"]')).toBeVisible();
+              console.log('PASS: packaged app, bundled backend, clean enterprise settings form');
+            } finally {
+              await app.close();
+            }
+          })().catch((error) => { console.error(error); process.exitCode = 1; });
+          NODE
 
       # macOS 钥匙串清理
       - name: Clean up keychain (macOS only)
