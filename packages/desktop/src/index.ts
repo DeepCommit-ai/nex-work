@@ -39,6 +39,9 @@ import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
 import { setInitialLanguage } from '@process/services/i18n';
 import { setupApplicationMenu } from './process/utils/appMenu';
 import { AUTO_UPDATE_ENABLED } from '@/branding';
+import { prepareNexworkAssistants, reconcileNexworkAssistants } from '@/branding/assistants/runtime';
+import { configureNexworkClaude } from '@/branding/assistants/claudeProfile';
+import { migrateNexworkAssistantData } from '@/branding/assistants/migration';
 import { startWebHost } from '@aionui/web-host';
 import { initializeZoomFactor, setupZoomForWindow } from './process/utils/zoom';
 import { hydrateWindowsProcessPath } from './process/startup/windowsPath';
@@ -218,7 +221,18 @@ const backendManager = new BackendLifecycleManager(
     resourcesPath: process.resourcesPath,
     userDataPath: app.getPath('userData'),
   },
-  resolveBinaryPath
+  resolveBinaryPath,
+  {
+    spawnEnvironment: (dataDir) => {
+      const env = prepareNexworkAssistants(dataDir);
+      migrateNexworkAssistantData(dataDir);
+      return env;
+    },
+    afterReady: async (port) => {
+      await configureNexworkClaude(port);
+      await reconcileNexworkAssistants(port);
+    },
+  }
 );
 let disposeCronResumeListener: (() => void) | null = null;
 
@@ -353,6 +367,7 @@ const scheduleBackendMigrations = (): void => {
     try {
       const { runBackendMigrations } = await import('./process/utils/runBackendMigrations');
       await runBackendMigrations(ProcessConfig);
+      await reconcileNexworkAssistants(backendManager.port);
       console.info('[AionUi] runBackendMigrations completed');
     } catch (error) {
       console.error('[AionUi] Backend migration hook threw:', error);

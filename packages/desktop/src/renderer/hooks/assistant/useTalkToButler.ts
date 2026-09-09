@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import { NEXWORK_ASSISTANT_ID } from '@/branding/assistants/policy';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import { globalNavigate } from '@/renderer/utils/navigation';
 import { Message } from '@arco-design/web-react';
@@ -12,8 +13,8 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mutate as swrMutate } from 'swr';
 
-/** Backend manifest id of the built-in AionUi Butler assistant. */
-const BUTLER_ASSISTANT_ID = 'aionui-assistant';
+/** Backend manifest id of the product-owned NexWork assistant. */
+const BUTLER_ASSISTANT_ID = NEXWORK_ASSISTANT_ID;
 
 export type TalkToButlerArgs = {
   /** Prompt pre-filled into the home chat input. */
@@ -35,7 +36,7 @@ const findButler = (assistants: Assistant[]): Assistant | undefined => {
 
 /**
  * Shared entry point behind every "via chat" action: jump to the home page,
- * select the AionUi Butler, and pre-fill the chat input with a ready-made
+ * select the NexWork assistant, and pre-fill the chat input with a ready-made
  * prompt (and optional attachments). Auto-enables the Butler if the user has
  * disabled it, since clicking the action is an explicit intent to use it.
  *
@@ -59,9 +60,7 @@ export const useTalkToButler = (): ((args: TalkToButlerArgs) => Promise<void>) =
           if (butler.enabled === false) {
             await ipcBridge.assistants.setState.invoke({ id: butler.id, enabled: true });
             await swrMutate('assistants.list');
-            Message.success(
-              t('settings.talkToButler.enabledToast', { defaultValue: 'Enabled the AionUi Butler for you' })
-            );
+            Message.success(t('settings.talkToButler.enabledToast'));
           }
         }
       } catch (error) {

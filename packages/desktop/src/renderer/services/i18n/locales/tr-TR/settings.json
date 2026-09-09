@@ -1344,18 +1344,18 @@
     "addViaChat": "Sohbetle ekle",
     "addManually": "Elle ekle",
     "solveViaChat": "Sohbetle çöz",
-    "enabledToast": "AionUi Kâhyası sizin için etkinleştirildi",
+    "enabledToast": "NexWork asistanı etkinleştirildi.",
     "prompt": {
       "createAssistant": "Yeni bir asistan oluşturmama ve kurulumunda bana yol göstermene yardım et.",
       "addCustomAgent": "Özel bir Agent eklememe yardım et.",
       "addModel": "Yeni bir LLM sağlayıcısı ve API anahtarı ekle, ardından varsayılan model olarak ayarla.",
       "addMcp": "Bir MCP sunucusu kurmama yardım et.",
       "addSkill": "Bir beceri içe aktarıp bir asistana eklememe yardım et.",
-      "setupRemote": "Telefonumdan veya internetten AionUi’yi açabilmem için uzaktan erişimi ayarlamama yardım et.",
-      "diagnose": "AionUi kullanırken bir sorunla karşılaştım, teşhis etmeme yardım et.\n\n[Modül] {{module}}\n[Açıklama] {{description}}\n[Ekler] giriş alanındaki ekran görüntülerine bakın.\n\nLütfen nedenini teşhis et ve nasıl düzelteceğimi söyle.",
-      "diagnoseChatError": "AionUi sohbeti sırasında bir hatayla karşılaştım, teşhis etmeme yardım et.\n\n[Hata] {{error}}\n\nLütfen nedenini teşhis et ve nasıl düzelteceğimi söyle."
+      "setupRemote": "Telefonumdan veya internetten NexWork’yi açabilmem için uzaktan erişimi ayarlamama yardım et.",
+      "diagnose": "NexWork kullanırken bir sorunla karşılaştım, teşhis etmeme yardım et.\n\n[Modül] {{module}}\n[Açıklama] {{description}}\n[Ekler] giriş alanındaki ekran görüntülerine bakın.\n\nLütfen nedenini teşhis et ve nasıl düzelteceğimi söyle.",
+      "diagnoseChatError": "NexWork sohbeti sırasında bir hatayla karşılaştım, teşhis etmeme yardım et.\n\n[Hata] {{error}}\n\nLütfen nedenini teşhis et ve nasıl düzelteceğimi söyle."
     },
-    "solveWithButler": "Kâhya'ya sor"
+    "solveWithButler": "NexWork asistanına sor"
   },
   "providerIdConflict": "Provider ID zaten var. Lütfen tekrar deneyin.",
   "autoInjectedSkillsHint": "Her sohbete otomatik olarak yüklenir — etkinleştirmeye gerek yoktur; aracı bunları ne zaman kullanacağına karar verir.",

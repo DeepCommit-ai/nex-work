@@ -1442,3 +1442,61 @@ describe('BackendLifecycleManager.start peer retry', () => {
     expect(attemptStart).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('product assistant initialization', () => {
+  it('materializes the catalog before spawn and waits for reconciliation before reporting readiness', async () => {
+    const child = makeFakeChild();
+    vi.mocked(spawn).mockReturnValue(child);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok'));
+    let complete: () => void = () => {};
+    const afterReady = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        })
+    );
+    const environment = vi.fn(() => ({ AIONUI_BUILTIN_ASSISTANTS_PATH: '/product/assistants' }));
+    const manager = new BackendLifecycleManager(APP_META, () => '/binary', {
+      spawnEnvironment: environment,
+      afterReady,
+    });
+    try {
+      const starting = manager.start('/data');
+      await Promise.resolve();
+      emitListening(child, 55443);
+      await vi.waitFor(() => expect(afterReady).toHaveBeenCalledWith(55443));
+      expect(manager.status).toBe('starting');
+      expect(environment).toHaveBeenCalledWith('/data');
+      expect(vi.mocked(spawn).mock.calls[0][2]?.env?.AIONUI_BUILTIN_ASSISTANTS_PATH).toBe('/product/assistants');
+      complete();
+      await starting;
+      expect(manager.status).toBe('running');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('reports product failures and stops the child instead of exposing an upstream catalog', async () => {
+    const child = makeFakeChild();
+    vi.mocked(spawn).mockReturnValue(child);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('ok'));
+    const manager = new BackendLifecycleManager(APP_META, () => '/binary', {
+      afterReady: async () => {
+        throw new Error('catalog rejected');
+      },
+    });
+    const stop = vi.spyOn(manager, 'stop').mockResolvedValue(undefined);
+    try {
+      const starting = manager.start('/data');
+      const rejected = expect(starting).rejects.toMatchObject({ details: { stage: 'product_configuration' } });
+      await Promise.resolve();
+      emitListening(child, 55444);
+      await rejected;
+      expect(stop).toHaveBeenCalled();
+      expect(manager.status).toBe('error');
+    } finally {
+      fetchSpy.mockRestore();
+      stop.mockRestore();
+    }
+  });
+});

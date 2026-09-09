@@ -22,6 +22,7 @@ import {
   mode,
 } from '@/common/adapter/ipcBridge';
 import { normalizePolicy, setPolicy } from '@/common/capabilities/policy';
+import { scopeNexworkDepartmentConfig } from '@/branding/assistants/department';
 import { enterpriseStore } from './enterpriseStore';
 import {
   buildReport,
@@ -40,6 +41,12 @@ import type { EnvEntry } from '@/common/gateway/types';
 
 /** aionrs 走 provider 行而非 env——与 006 的网关页共用同一行，避免两处各插一条。 */
 const GATEWAY_PROVIDER_NAME = 'NexWork Gateway';
+
+const prepareClaudeOfficeRole = async (configDir: string): Promise<void> => {
+  if (!isElectronDesktop()) return;
+  const result = await application.prepareNexworkClaude.invoke({ configDir });
+  if (!result?.success) throw new Error(result?.error ?? 'Cannot prepare NexWork Claude profile');
+};
 
 export type ApplyOutcome =
   | { status: 'failed'; detail: string }
@@ -248,6 +255,7 @@ const provisionGatewayFor = async (
       });
       // PUT 是整体替换（实测：漏掉 command_override 会把它清成 null）。这里只管
       // env，command_override（受管 claude 的钉子，issue #8）必须原样带过。
+      if (agentId === CLAUDE_AGENT_ID) await prepareClaudeOfficeRole(configDir);
       await acpConversation.setAgentOverrides.invoke({
         id: agentId,
         command_override: overrides?.command_override ?? null,
@@ -264,7 +272,9 @@ export const applyDeptConfig = async (serverUrl: string, deptKey: string): Promi
   const fetched = await fetchDeptConfig(serverUrl, deptKey);
   if (fetched.status === 'failed') return { status: 'failed', detail: fetched.detail };
 
-  const cfg = fetched.config;
+  const sourceProblems = validateConfig(fetched.config);
+  if (sourceProblems.length) return { status: 'failed', detail: `配置不可落实：${sourceProblems.join('；')}` };
+  const cfg = scopeNexworkDepartmentConfig(fetched.config);
   const problems = validateConfig(cfg);
   if (problems.length) return { status: 'failed', detail: `配置不可落实：${problems.join('；')}` };
 
@@ -338,7 +348,10 @@ const ensureBaselineIsolation = async (): Promise<void> => {
     const existing = env.find((e) => e.name === GATEWAY_ENV_CONFIG_DIR)?.value?.trim() ?? '';
     // 已有绝对路径(不管谁设的)绝不动;但残留的 `~` 前缀值是本函数旧版写坏的,
     // 留着它每个 workspace 都会长出字面量 `~/` 目录——必须迁移。
-    if (existing && !existing.startsWith('~')) return;
+    if (existing && !existing.startsWith('~')) {
+      await prepareClaudeOfficeRole(existing);
+      return;
+    }
     const home = await resolveBackendHome();
     const value = expandLeadingTilde(existing || DEFAULT_CONFIG_DIR, home);
     if (value.startsWith('~')) {
@@ -346,6 +359,7 @@ const ensureBaselineIsolation = async (): Promise<void> => {
       return;
     }
     if (value === existing) return;
+    await prepareClaudeOfficeRole(value);
     await acpConversation.setAgentOverrides.invoke({
       id: CLAUDE_AGENT_ID,
       // 同上：整体替换语义，command_override 带过，别把受管 claude 的钉子抹了。

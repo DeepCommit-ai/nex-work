@@ -151,3 +151,19 @@ describe('assistantOrderAfterToggle', () => {
     ]);
   });
 });
+
+describe('NexWork default assistant', () => {
+  afterEach(restorePolicy);
+  it('keeps the NexWork assistant first even with a saved old ordering', () => {
+    const assistants = [
+      mk('word-creator', 'builtin', 1),
+      mk('nexwork-assistant', 'builtin', 9),
+      mk('aionui-assistant', 'builtin', 0, false),
+    ];
+    expect(
+      selectableAssistants(assistants, ['aionui-assistant', 'word-creator', 'nexwork-assistant']).map(
+        (assistant) => assistant.id
+      )
+    ).toEqual(['nexwork-assistant', 'word-creator']);
+  });
+});

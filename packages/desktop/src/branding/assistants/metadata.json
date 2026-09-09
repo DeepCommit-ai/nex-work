@@ -1,0 +1,288 @@
+{
+  "en-US": {
+    "nexwork-assistant": {
+      "name": "NexWork Assistant",
+      "description": "Help with everyday office tasks in NexWork.",
+      "prompts": ["Summarize these materials and list the next steps."]
+    },
+    "word-creator": {
+      "name": "Word Assistant",
+      "description": "Create and edit professional Word documents.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "PPT Assistant",
+      "description": "Create and edit PowerPoint presentations.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Excel Assistant",
+      "description": "Create, edit, and analyze Excel spreadsheets.",
+      "prompts": []
+    }
+  },
+  "zh-CN": {
+    "nexwork-assistant": {
+      "name": "NexWork 助手",
+      "description": "在 NexWork 中协助完成日常办公任务。",
+      "prompts": ["帮我整理这些材料，并列出下一步行动。"]
+    },
+    "word-creator": {
+      "name": "Word 文档助手",
+      "description": "创建和编辑专业 Word 文档。",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "PPT 演示助手",
+      "description": "创建和编辑 PowerPoint 演示文稿。",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Excel 表格助手",
+      "description": "创建、编辑和分析 Excel 表格。",
+      "prompts": []
+    }
+  },
+  "zh-TW": {
+    "nexwork-assistant": {
+      "name": "NexWork 助手",
+      "description": "在 NexWork 中協助完成日常辦公工作。",
+      "prompts": ["幫我整理這些資料，並列出下一步行動。"]
+    },
+    "word-creator": {
+      "name": "Word 文件助手",
+      "description": "建立和編輯專業 Word 文件。",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "PPT 簡報助手",
+      "description": "建立和編輯 PowerPoint 簡報。",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Excel 試算表助手",
+      "description": "建立、編輯和分析 Excel 試算表。",
+      "prompts": []
+    }
+  },
+  "ja-JP": {
+    "nexwork-assistant": {
+      "name": "NexWork アシスタント",
+      "description": "NexWork で日常の業務をサポートします。",
+      "prompts": ["この資料を要約して、次のアクションを一覧にしてください。"]
+    },
+    "word-creator": {
+      "name": "Word アシスタント",
+      "description": "Word 文書の作成と編集。",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "PPT アシスタント",
+      "description": "PowerPoint プレゼンテーションの作成と編集。",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Excel アシスタント",
+      "description": "Excel の表の作成、編集、分析。",
+      "prompts": []
+    }
+  },
+  "ko-KR": {
+    "nexwork-assistant": {
+      "name": "NexWork 도우미",
+      "description": "NexWork에서 일상적인 업무를 도와줍니다.",
+      "prompts": ["이 자료를 요약하고 다음 할 일을 정리해 주세요."]
+    },
+    "word-creator": {
+      "name": "Word 문서 도우미",
+      "description": "전문적인 Word 문서를 만들고 편집합니다.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "PPT 발표 도우미",
+      "description": "PowerPoint 프레젠테이션을 만들고 편집합니다.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Excel 도우미",
+      "description": "Excel 스프레드시트를 만들고 편집하고 분석합니다.",
+      "prompts": []
+    }
+  },
+  "tr-TR": {
+    "nexwork-assistant": {
+      "name": "NexWork Asistanı",
+      "description": "NexWork ile günlük ofis işlerinize yardımcı olur.",
+      "prompts": ["Bu materyalleri özetle ve sonraki adımları listele."]
+    },
+    "word-creator": {
+      "name": "Word Asistanı",
+      "description": "Profesyonel Word belgeleri oluşturun ve düzenleyin.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "PPT Asistanı",
+      "description": "PowerPoint sunumları oluşturun ve düzenleyin.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Excel Asistanı",
+      "description": "Excel tabloları oluşturun, düzenleyin ve analiz edin.",
+      "prompts": []
+    }
+  },
+  "ru-RU": {
+    "nexwork-assistant": {
+      "name": "Помощник NexWork",
+      "description": "Помощь с повседневными рабочими задачами в NexWork.",
+      "prompts": ["Обобщи эти материалы и перечисли следующие шаги."]
+    },
+    "word-creator": {
+      "name": "Помощник Word",
+      "description": "Создание и редактирование документов Word.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "Помощник PPT",
+      "description": "Создание и редактирование презентаций PowerPoint.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Помощник Excel",
+      "description": "Создание, редактирование и анализ таблиц Excel.",
+      "prompts": []
+    }
+  },
+  "uk-UA": {
+    "nexwork-assistant": {
+      "name": "Помічник NexWork",
+      "description": "Допомога з повсякденними робочими завданнями в NexWork.",
+      "prompts": ["Підсумуй ці матеріали та переліч наступні кроки."]
+    },
+    "word-creator": {
+      "name": "Помічник Word",
+      "description": "Створення та редагування документів Word.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "Помічник PPT",
+      "description": "Створення та редагування презентацій PowerPoint.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Помічник Excel",
+      "description": "Створення, редагування й аналіз таблиць Excel.",
+      "prompts": []
+    }
+  },
+  "pt-BR": {
+    "nexwork-assistant": {
+      "name": "Assistente NexWork",
+      "description": "Ajuda com tarefas diárias de escritório no NexWork.",
+      "prompts": ["Resuma estes materiais e liste os próximos passos."]
+    },
+    "word-creator": {
+      "name": "Assistente Word",
+      "description": "Crie e edite documentos profissionais do Word.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "Assistente PPT",
+      "description": "Crie e edite apresentações do PowerPoint.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Assistente Excel",
+      "description": "Crie, edite e analise planilhas do Excel.",
+      "prompts": []
+    }
+  },
+  "de-DE": {
+    "nexwork-assistant": {
+      "name": "NexWork-Assistent",
+      "description": "Unterstützung bei täglichen Büroaufgaben in NexWork.",
+      "prompts": ["Fasse diese Materialien zusammen und liste die nächsten Schritte auf."]
+    },
+    "word-creator": {
+      "name": "Word-Assistent",
+      "description": "Professionelle Word-Dokumente erstellen und bearbeiten.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "PPT-Assistent",
+      "description": "PowerPoint-Präsentationen erstellen und bearbeiten.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Excel-Assistent",
+      "description": "Excel-Tabellen erstellen, bearbeiten und analysieren.",
+      "prompts": []
+    }
+  },
+  "es-ES": {
+    "nexwork-assistant": {
+      "name": "Asistente NexWork",
+      "description": "Ayuda con las tareas diarias de oficina en NexWork.",
+      "prompts": ["Resume estos materiales y enumera los próximos pasos."]
+    },
+    "word-creator": {
+      "name": "Asistente Word",
+      "description": "Crea y edita documentos profesionales de Word.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "Asistente PPT",
+      "description": "Crea y edita presentaciones de PowerPoint.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Asistente Excel",
+      "description": "Crea, edita y analiza hojas de cálculo de Excel.",
+      "prompts": []
+    }
+  },
+  "fr-FR": {
+    "nexwork-assistant": {
+      "name": "Assistant NexWork",
+      "description": "Aide aux tâches de bureau quotidiennes dans NexWork.",
+      "prompts": ["Résume ces documents et indique les prochaines étapes."]
+    },
+    "word-creator": {
+      "name": "Assistant Word",
+      "description": "Créez et modifiez des documents Word professionnels.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "Assistant PPT",
+      "description": "Créez et modifiez des présentations PowerPoint.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "Assistant Excel",
+      "description": "Créez, modifiez et analysez des feuilles de calcul Excel.",
+      "prompts": []
+    }
+  },
+  "fa-IR": {
+    "nexwork-assistant": {
+      "name": "دستیار NexWork",
+      "description": "کمک به کارهای روزمره اداری در NexWork.",
+      "prompts": ["این مطالب را خلاصه کن و گام‌های بعدی را فهرست کن."]
+    },
+    "word-creator": {
+      "name": "دستیار Word",
+      "description": "ایجاد و ویرایش سندهای حرفه‌ای Word.",
+      "prompts": []
+    },
+    "ppt-creator": {
+      "name": "دستیار PPT",
+      "description": "ایجاد و ویرایش ارائه‌های PowerPoint.",
+      "prompts": []
+    },
+    "excel-creator": {
+      "name": "دستیار Excel",
+      "description": "ایجاد، ویرایش و تحلیل صفحه‌گسترده‌های Excel.",
+      "prompts": []
+    }
+  }
+}

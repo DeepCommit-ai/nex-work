@@ -1312,18 +1312,18 @@
     "addViaChat": "Per Chat hinzufügen",
     "addManually": "Manuell hinzufügen",
     "solveViaChat": "Per Chat lösen",
-    "enabledToast": "AionUi-Butler für dich aktiviert",
+    "enabledToast": "Der NexWork-Assistent ist aktiviert.",
     "prompt": {
       "createAssistant": "Hilf mir, einen neuen Assistenten zu erstellen, und führe mich durch die Einrichtung.",
       "addCustomAgent": "Hilf mir, einen benutzerdefinierten Agent hinzuzufügen.",
       "addModel": "Hilf mir, einen neuen LLM-Anbieter und API-Schlüssel hinzuzufügen, und lege ihn als Standardmodell fest.",
       "addMcp": "Hilf mir, einen MCP-Server einzurichten.",
       "addSkill": "Hilf mir, einen Skill zu importieren und einem Assistenten zuzuordnen.",
-      "setupRemote": "Hilf mir, den Fernzugriff einzurichten, damit ich AionUi vom Handy oder über das Internet öffnen kann.",
-      "diagnose": "Ich habe ein Problem mit AionUi, hilf mir bei der Diagnose.\n\n[Modul] {{module}}\n[Beschreibung] {{description}}\n[Anhänge] siehe die Screenshots im Eingabefeld.\n\nBitte diagnostiziere die Ursache und sag mir, wie ich es behebe.",
-      "diagnoseChatError": "Während einer Unterhaltung in AionUi ist ein Fehler aufgetreten, hilf mir bei der Diagnose.\n\n[Fehler] {{error}}\n\nBitte diagnostiziere die Ursache und sag mir, wie ich es behebe."
+      "setupRemote": "Hilf mir, den Fernzugriff einzurichten, damit ich NexWork vom Handy oder über das Internet öffnen kann.",
+      "diagnose": "Ich habe ein Problem mit NexWork, hilf mir bei der Diagnose.\n\n[Modul] {{module}}\n[Beschreibung] {{description}}\n[Anhänge] siehe die Screenshots im Eingabefeld.\n\nBitte diagnostiziere die Ursache und sag mir, wie ich es behebe.",
+      "diagnoseChatError": "Während einer Unterhaltung in NexWork ist ein Fehler aufgetreten, hilf mir bei der Diagnose.\n\n[Fehler] {{error}}\n\nBitte diagnostiziere die Ursache und sag mir, wie ich es behebe."
     },
-    "solveWithButler": "Butler fragen"
+    "solveWithButler": "NexWork-Assistenten fragen"
   },
   "browserNotification": {
     "enable": "Enable browser notifications",

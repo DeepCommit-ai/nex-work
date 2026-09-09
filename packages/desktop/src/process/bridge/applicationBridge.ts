@@ -7,6 +7,7 @@
 import type { BrowserWindow } from 'electron';
 import { app, session } from 'electron';
 import { ipcBridge } from '@/common';
+import { prepareNexworkClaudeProfile } from '@/branding/assistants/claudeProfile';
 import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
 import { ProcessConfig } from '@process/utils/initStorage';
 import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
@@ -98,6 +99,14 @@ export function setApplicationMainWindow(win: BrowserWindow): void {
 }
 
 export function initApplicationBridge(): void {
+  ipcBridge.application.prepareNexworkClaude.provider(({ configDir }) => {
+    try {
+      prepareNexworkClaudeProfile(configDir);
+      return Promise.resolve({ success: true });
+    } catch (error) {
+      return Promise.resolve({ success: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  });
   // Platform-agnostic handlers: systemInfo, updateSystemInfo, getPath
   initApplicationBridgeCore();
 

@@ -666,6 +666,9 @@ export interface IRendererLogEntry {
 // ---------------------------------------------------------------------------
 
 export const application = {
+  prepareNexworkClaude: bridge.buildProvider<{ success: boolean; error?: string }, { configDir: string }>(
+    'app.prepare-nexwork-claude'
+  ),
   restart: bridge.buildProvider<IAppRestartResult, void>('restart-app'),
   openDevTools: bridge.buildProvider<boolean, void>('open-dev-tools'),
   isDevToolsOpened: bridge.buildProvider<boolean, void>('is-dev-tools-opened'),

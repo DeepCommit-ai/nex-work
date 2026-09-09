@@ -22,7 +22,8 @@ type BackendStartupStage =
   | 'spawn_error'
   | 'early_exit'
   | 'listen_timeout'
-  | 'health_timeout';
+  | 'health_timeout'
+  | 'product_configuration';
 
 type HealthCheckDiagnostics = {
   healthCheckAttempts: number;
@@ -530,7 +531,11 @@ export class BackendLifecycleManager {
 
   constructor(
     private readonly appMeta: AppMetadata,
-    private readonly resolveBackend: BackendBinaryResolver
+    private readonly resolveBackend: BackendBinaryResolver,
+    private readonly productHooks?: {
+      spawnEnvironment?: (dataDir: string) => Record<string, string>;
+      afterReady?: (port: number) => Promise<void>;
+    }
   ) {}
 
   get port(): number {
@@ -539,6 +544,24 @@ export class BackendLifecycleManager {
 
   get status(): BackendStatus {
     return this._status;
+  }
+
+  private async initializeProduct(port: number): Promise<void> {
+    try {
+      await this.productHooks?.afterReady?.(port);
+    } catch (cause) {
+      await this.stop();
+      this._status = 'error';
+      throw new BackendStartupError(
+        'Product assistant configuration failed',
+        {
+          stage: 'product_configuration',
+          appVersion: this.appMeta.version,
+          port,
+        },
+        cause
+      );
+    }
   }
 
   private isPeerAlreadyRunningError(error: unknown): boolean {
@@ -706,7 +729,7 @@ export class BackendLifecycleManager {
     try {
       this.childProcess = spawn(binaryPath, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: buildSpawnEnv(dirs),
+        env: { ...buildSpawnEnv(dirs), ...this.productHooks?.spawnEnvironment?.(dbPath) },
         cwd: dirs?.workDir ?? dbPath,
         detached: process.platform !== 'win32',
       });
@@ -904,6 +927,7 @@ export class BackendLifecycleManager {
     }
 
     startupSettled = true;
+    await this.initializeProduct(port);
     this._status = 'running';
     this.restartCount = 0;
     if (healthOrReady.kind === 'ready') {
@@ -1021,6 +1045,7 @@ export class BackendLifecycleManager {
       ]);
       if (this.childProcess !== childProcess || this._status !== 'starting') return;
       if (outcome.kind === 'health' && !outcome.health.ok) return;
+      await this.initializeProduct(port);
       this._status = 'running';
       this.restartCount = 0;
       const elapsedMs =
@@ -1031,8 +1056,11 @@ export class BackendLifecycleManager {
         `[aioncore] late ${outcome.kind === 'ready' ? 'ready signal' : 'health ready'} on port ${port}, elapsed_ms=${elapsedMs}, data-dir: ${this._lastDbPath}`
       );
       await onReady?.(port);
-    })().catch((error) => {
+    })().catch(async (error) => {
       console.error('[aioncore] background health wait failed:', error);
+      if (error instanceof BackendStartupError && error.details.stage === 'product_configuration') {
+        await this._lastOptions?.onPendingExit?.(error);
+      }
     });
   }
 
