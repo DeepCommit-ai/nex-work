@@ -1,4 +1,4 @@
-/** Upgrade product-owned copies before the pinned backend opens its database. */
+/** Upgrade product-owned copies after the backend owns and upgrades its database, before desktop readiness. */
 import {
   existsSync,
   lstatSync,
@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { BetterSqlite3Driver } from '@process/services/database/drivers/BetterSqlite3Driver';
 import type { ISqliteDriver } from '@process/services/database/drivers/ISqliteDriver';
 import metadata from './metadata.json';
@@ -17,6 +18,7 @@ import { NEXWORK_ASSISTANT_RULES } from './prompts';
 import { isNexworkAssistant, LEGACY_ASSISTANT_ID, NEXWORK_ASSISTANT_ID } from './policy';
 
 type Row = Record<string, unknown>;
+type FileMove = { from: string; to: string };
 type Change = { table: string; key: string; id: string; before: Row; after: Row };
 const RULE_SKILLS = {
   'word-creator': ['officecli-docx'],
@@ -39,10 +41,11 @@ function identicalTree(left: string, right: string): boolean {
   );
 }
 
-/** Quarantine only links/copies that still match the backend-owned skill resource. */
-function retireWorkspaceSkills(dataDir: string, workspace: string, retired: Set<string>): void {
-  if (!path.isAbsolute(workspace)) return;
-  for (const relative of ['.claude/skills', '.claude/skill', '.aion/skills', '.aion/skill']) {
+/** Plan quarantine only for links/copies that still match a backend-owned skill resource. */
+function planWorkspaceSkills(dataDir: string, workspace: string, retired: Set<string>): FileMove[] {
+  const moves: FileMove[] = [];
+  if (!path.isAbsolute(workspace)) return moves;
+  for (const relative of ['.claude/skills', '.claude/skill', '.aionrs/skills']) {
     for (const name of retired) {
       const target = path.join(workspace, relative, name);
       if (!existsSync(target)) continue;
@@ -56,10 +59,10 @@ function retireWorkspaceSkills(dataDir: string, workspace: string, retired: Set<
       );
       if (!owned) continue;
       const quarantine = path.join(workspace, path.dirname(relative), 'nexwork-disabled-skills');
-      mkdirSync(quarantine, { recursive: true });
-      renameSync(target, path.join(quarantine, `${name}-${Date.now()}-${process.pid}`));
+      moves.push({ from: target, to: path.join(quarantine, `${name}-${randomUUID()}`) });
     }
   }
+  return moves;
 }
 
 /** Preserve history and runtime choices while refreshing built-in profile copies and rules. */
@@ -70,14 +73,18 @@ export function migrateNexworkAssistantData(
   const file = path.join(dataDir, 'aionui-backend.db');
   if (!existsSync(file)) return 0;
   const db = open(file);
+  const moved: FileMove[] = [];
+  let transactionOpen = false;
   try {
     db.exec('BEGIN IMMEDIATE');
+    transactionOpen = true;
     const tables = new Set(
       (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(
         (row) => row.name
       )
     );
     const changes: Change[] = [];
+    const fileMoves = new Map<string, FileMove>();
     const add = (table: string, key: string, row: Row, after: Row): void => {
       const changed = Object.fromEntries(Object.entries(after).filter(([name, value]) => row[name] !== value));
       if (Object.keys(changed).length)
@@ -143,27 +150,40 @@ export function migrateNexworkAssistantData(
         });
         if (tables.has('conversations')) {
           const conversation = db
-            .prepare('SELECT id, extra FROM conversations WHERE id = ?')
+            .prepare('SELECT id, type, extra FROM conversations WHERE id = ?')
             .get(row.conversation_id) as Row | undefined;
           if (conversation) {
             const extra = JSON.parse(String(conversation.extra)) as Record<string, unknown>;
-            if (typeof extra.workspace === 'string') retireWorkspaceSkills(dataDir, extra.workspace, retired);
-            if (Array.isArray(extra.skills)) {
-              const next = extra.skills.filter((skill) => typeof skill !== 'string' || !retired.has(skill));
-              if (next.length !== extra.skills.length)
-                add('conversations', 'id', conversation, { extra: json({ ...extra, skills: next }) });
+            if (typeof extra.workspace === 'string') {
+              for (const move of planWorkspaceSkills(dataDir, extra.workspace, retired)) fileMoves.set(move.from, move);
             }
+            // The backend executes the rule copy in extra, not rules_content in the snapshot.
+            if (conversation.type === 'aionrs') {
+              extra.preset_rules = NEXWORK_ASSISTANT_RULES[id];
+              delete extra.preset_context;
+            } else if (conversation.type === 'acp' || conversation.type === 'antigravity') {
+              extra.preset_context = NEXWORK_ASSISTANT_RULES[id];
+              delete extra.preset_rules;
+            }
+            if (Array.isArray(extra.skills)) {
+              extra.skills = extra.skills.filter((skill) => typeof skill !== 'string' || !retired.has(skill));
+            }
+            add('conversations', 'id', conversation, { extra: json(extra) });
           }
         }
       }
     }
-    if (changes.length) {
+    if (changes.length || fileMoves.size) {
       const backupDir = path.join(dataDir, 'nexwork-resources', 'migration-backups');
       mkdirSync(backupDir, { recursive: true, mode: 0o700 });
-      writeFileSync(path.join(backupDir, `assistants-${Date.now()}-${process.pid}.json`), json(changes), {
-        mode: 0o600,
-        flag: 'wx',
-      });
+      writeFileSync(
+        path.join(backupDir, `assistants-${randomUUID()}.json`),
+        json({ changes, fileMoves: [...fileMoves.values()] }),
+        {
+          mode: 0o600,
+          flag: 'wx',
+        }
+      );
       for (const change of changes) {
         const fields = Object.keys(change.after);
         db.prepare(
@@ -171,10 +191,35 @@ export function migrateNexworkAssistantData(
         ).run(...Object.values(change.after), change.id);
       }
     }
+    for (const move of fileMoves.values()) {
+      mkdirSync(path.dirname(move.to), { recursive: true });
+      renameSync(move.from, move.to);
+      moved.push(move);
+    }
     db.exec('COMMIT');
+    transactionOpen = false;
     return changes.length;
   } catch (error) {
-    db.exec('ROLLBACK');
+    const errors: unknown[] = [error];
+    for (const move of moved.toReversed()) {
+      try {
+        renameSync(move.to, move.from);
+      } catch (rollbackError) {
+        errors.push(rollbackError);
+      }
+    }
+    if (transactionOpen) {
+      try {
+        db.exec('ROLLBACK');
+      } catch (rollbackError) {
+        errors.push(rollbackError);
+      }
+    }
+    if (errors.length > 1)
+      // oxlint-disable-next-line preserve-caught-error -- AggregateError takes its cause in the third argument.
+      throw new AggregateError(errors, 'NexWork assistant migration rollback failed; inspect migration-backups', {
+        cause: error,
+      });
     throw error;
   } finally {
     db.close();

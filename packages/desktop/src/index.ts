@@ -223,12 +223,10 @@ const backendManager = new BackendLifecycleManager(
   },
   resolveBinaryPath,
   {
-    spawnEnvironment: (dataDir) => {
-      const env = prepareNexworkAssistants(dataDir);
+    spawnEnvironment: prepareNexworkAssistants,
+    afterReady: async (port, dataDir) => {
+      // Wait for backend ownership, legacy database copy, and schema upgrades first.
       migrateNexworkAssistantData(dataDir);
-      return env;
-    },
-    afterReady: async (port) => {
       await configureNexworkClaude(port);
       await reconcileNexworkAssistants(port);
     },

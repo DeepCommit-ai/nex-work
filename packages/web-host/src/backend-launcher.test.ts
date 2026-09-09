@@ -1464,7 +1464,7 @@ describe('product assistant initialization', () => {
       const starting = manager.start('/data');
       await Promise.resolve();
       emitListening(child, 55443);
-      await vi.waitFor(() => expect(afterReady).toHaveBeenCalledWith(55443));
+      await vi.waitFor(() => expect(afterReady).toHaveBeenCalledWith(55443, '/data'));
       expect(manager.status).toBe('starting');
       expect(environment).toHaveBeenCalledWith('/data');
       expect(vi.mocked(spawn).mock.calls[0][2]?.env?.AIONUI_BUILTIN_ASSISTANTS_PATH).toBe('/product/assistants');
@@ -1474,6 +1474,20 @@ describe('product assistant initialization', () => {
     } finally {
       fetchSpy.mockRestore();
     }
+  });
+
+  it('does not run product database migration when the backend exits before readiness', async () => {
+    const child = makeFakeChild();
+    vi.mocked(spawn).mockReturnValue(child);
+    const afterReady = vi.fn();
+    const manager = new BackendLifecycleManager(APP_META, () => '/binary', { afterReady });
+    const starting = manager.start('/data');
+    const rejected = expect(starting).rejects.toBeInstanceOf(BackendStartupError);
+    await vi.waitFor(() => expect(child.listenerCount('exit')).toBeGreaterThan(0));
+    child.emit('exit', 1, null);
+    child.emit('close', 1, null);
+    await rejected;
+    expect(afterReady).not.toHaveBeenCalled();
   });
 
   it('reports product failures and stops the child instead of exposing an upstream catalog', async () => {

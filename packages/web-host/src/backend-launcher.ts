@@ -534,7 +534,7 @@ export class BackendLifecycleManager {
     private readonly resolveBackend: BackendBinaryResolver,
     private readonly productHooks?: {
       spawnEnvironment?: (dataDir: string) => Record<string, string>;
-      afterReady?: (port: number) => Promise<void>;
+      afterReady?: (port: number, dataDir: string) => Promise<void>;
     }
   ) {}
 
@@ -548,7 +548,7 @@ export class BackendLifecycleManager {
 
   private async initializeProduct(port: number): Promise<void> {
     try {
-      await this.productHooks?.afterReady?.(port);
+      await this.productHooks?.afterReady?.(port, this._lastDbPath);
     } catch (cause) {
       await this.stop();
       this._status = 'error';

@@ -247,15 +247,23 @@ const provisionGatewayFor = async (
       }
       const overrides = await acpConversation.getAgentOverrides.invoke({ id: agentId });
       const existing: EnvEntry[] = overrides?.env_override ?? [];
+      const effectiveConfigDir =
+        agentId === CLAUDE_AGENT_ID
+          ? configDir ||
+            expandLeadingTilde(
+              existing.find((entry) => entry.name === GATEWAY_ENV_CONFIG_DIR)?.value || DEFAULT_CONFIG_DIR,
+              home
+            )
+          : configDir;
       const env = buildEnvOverride(existing, {
         baseUrl: gw.base_url,
         apiKey: gw.api_key,
-        configDir,
+        configDir: effectiveConfigDir,
         customHeadersValue: provenance,
       });
       // PUT 是整体替换（实测：漏掉 command_override 会把它清成 null）。这里只管
       // env，command_override（受管 claude 的钉子，issue #8）必须原样带过。
-      if (agentId === CLAUDE_AGENT_ID) await prepareClaudeOfficeRole(configDir);
+      if (agentId === CLAUDE_AGENT_ID) await prepareClaudeOfficeRole(effectiveConfigDir);
       await acpConversation.setAgentOverrides.invoke({
         id: agentId,
         command_override: overrides?.command_override ?? null,
