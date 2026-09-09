@@ -22,6 +22,9 @@
  */
 
 import { afterAll, describe, expect, it, vi } from 'vitest';
+import { WebSocket as NodeWebSocket } from 'ws';
+import { get } from 'node:http';
+import { SINGLE_SESSION_ID, SINGLE_TARGET_ID } from '@process/resources/builtinMcp/cdpTargetProtocol';
 
 type FakeContents = {
   id: number;
@@ -96,8 +99,46 @@ const notClosedWithin = async (closed: Promise<CloseInfo>, ms: number): Promise<
   return winner === sentinel;
 };
 
+type HandshakeCommand = { method: string; params: Record<string, unknown>; sessionId?: string };
+
+const observeHandshake = async (port: number, token: string, commands: HandshakeCommand[]) => {
+  // Puppeteer's transport yields between frames, so inspect state at each ACK.
+  const ws = new NodeWebSocket(`ws://127.0.0.1:${port}/aionui-cdp?token=${token}`, {
+    allowSynchronousEvents: false,
+  });
+  const events: string[] = [];
+  const snapshots: string[][] = [];
+  try {
+    await new Promise<void>((resolve, reject) => {
+      ws.once('open', resolve);
+      ws.once('error', reject);
+    });
+    ws.on('message', (raw) => {
+      const message = JSON.parse(String(raw)) as { method?: string };
+      if (message.method) events.push(message.method);
+    });
+    for (const [index, command] of commands.entries()) {
+      await new Promise<void>((resolve) => {
+        const onMessage = (raw: Buffer) => {
+          const message = JSON.parse(String(raw)) as { id?: number };
+          if (message.id !== index + 1) return;
+          ws.off('message', onMessage);
+          snapshots.push([...events]);
+          resolve();
+        };
+        ws.on('message', onMessage);
+        ws.send(JSON.stringify({ id: index + 1, ...command }));
+      });
+    }
+    return snapshots;
+  } finally {
+    ws.close();
+  }
+};
+
 describe('cdpBridge — attachment transitions reset live clients (spec 007 FR-6)', () => {
   let bridge: Awaited<ReturnType<typeof startCdpBridge>> | undefined;
+  const requestBrowser = vi.fn();
   afterAll(async () => {
     await bridge?.close();
   });
@@ -105,7 +146,7 @@ describe('cdpBridge — attachment transitions reset live clients (spec 007 FR-6
   it('closes on first attach and re-attach elsewhere, never on same-target re-report, closes on destroy', async () => {
     makeContents(42);
     makeContents(43);
-    const handle = await startCdpBridge();
+    const handle = await startCdpBridge(requestBrowser);
     bridge = handle;
 
     // 1. Client connected while unattached → first attach must reset it.
@@ -163,5 +204,102 @@ describe('cdpBridge — attachment transitions reset live clients (spec 007 FR-6
     const err = (await refused).error as { message: string };
     expect(err.message).toContain('retry the same tool call');
     client.ws.close();
+  });
+
+  it('makes the page available before completing browser discovery and attachment', async () => {
+    const handle = bridge!;
+    expect(handle.attach(42)).toEqual({ ok: true });
+    const snapshots = await observeHandshake(handle.port, handle.token, [
+      { method: 'Target.setDiscoverTargets', params: { discover: true } },
+      { method: 'Target.setAutoAttach', params: { autoAttach: true, flatten: true } },
+    ]);
+    expect(snapshots[0]).toEqual(['Target.targetCreated']);
+    expect(snapshots[1]).toEqual(['Target.targetCreated', 'Target.attachedToTarget']);
+  });
+
+  it('announces a session once per connection without recursively attaching page sessions', async () => {
+    const handle = bridge!;
+    const commands = [
+      { method: 'Target.setAutoAttach', params: { autoAttach: true }, sessionId: SINGLE_SESSION_ID },
+      { method: 'Target.setAutoAttach', params: { autoAttach: true } },
+      { method: 'Target.attachToTarget', params: { targetId: SINGLE_TARGET_ID } },
+    ];
+    const expected = [[], ['Target.attachedToTarget'], ['Target.attachedToTarget']];
+    expect(await observeHandshake(handle.port, handle.token, commands)).toEqual(expected);
+    expect(await observeHandshake(handle.port, handle.token, commands)).toEqual(expected);
+  });
+
+  it('waits for the auto-opened webview before allowing Puppeteer to connect', async () => {
+    const handle = bridge!;
+    handle.detach();
+    let received = false;
+    const discovery = fetch(`http://127.0.0.1:${handle.port}/json/version`).then((res) => {
+      received = true;
+      return res.json();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(received).toBe(false);
+    handle.attach(42);
+    expect(await discovery).toHaveProperty('webSocketDebuggerUrl');
+  });
+
+  it('requests one browser for concurrent cold connections, never for diagnostics or an attached page', async () => {
+    const handle = bridge!;
+    requestBrowser.mockClear();
+    await fetch(`http://127.0.0.1:${handle.port}/json/version`);
+    handle.detach();
+    await fetch(`http://127.0.0.1:${handle.port}/json/list`);
+    expect(requestBrowser).not.toHaveBeenCalled();
+    const first = fetch(`http://127.0.0.1:${handle.port}/json/version`);
+    const second = fetch(`http://127.0.0.1:${handle.port}/json/version`);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(requestBrowser).toHaveBeenCalledTimes(1);
+    handle.attach(42);
+    await Promise.all([first, second]);
+  });
+
+  it('times out discovery if no webview arrives and allows a later connection', async () => {
+    const handle = bridge!;
+    handle.detach();
+    const realSetTimeout = globalThis.setTimeout;
+    const timer = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation((callback, delay, ...args) =>
+        realSetTimeout(callback, delay === 10_000 ? 10 : delay, ...args)
+      );
+    try {
+      const res = await fetch(`http://127.0.0.1:${handle.port}/json/version`);
+      expect(res.status).toBe(503);
+      expect(await res.text()).toContain('retry the same tool call');
+      handle.attach(42);
+      expect((await fetch(`http://127.0.0.1:${handle.port}/json/version`)).status).toBe(200);
+    } finally {
+      timer.mockRestore();
+    }
+  });
+
+  it('drops canceled discovery requests without disrupting the next attachment', async () => {
+    const handle = bridge!;
+    handle.detach();
+    const request = get(`http://127.0.0.1:${handle.port}/json/version`);
+    request.on('error', () => {});
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    request.destroy();
+    await new Promise((resolve) => request.once('close', resolve));
+    expect(handle.attach(42)).toEqual({ ok: true });
+    expect((await fetch(`http://127.0.0.1:${handle.port}/json/version`)).status).toBe(200);
+  });
+
+  it('settles pending discovery when the bridge shuts down', async () => {
+    const handle = bridge!;
+    handle.detach();
+    const discovery = fetch(`http://127.0.0.1:${handle.port}/json/version`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const closing = handle.close();
+    const response = await discovery;
+    expect(response.status).toBe(503);
+    await response.text();
+    await closing;
+    bridge = undefined;
   });
 });

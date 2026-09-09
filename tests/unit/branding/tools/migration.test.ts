@@ -58,6 +58,31 @@ describe('stored tool identity migration', () => {
     });
     expect(migrateNexworkTools(dir, root, open)).toBe(0);
   });
+  it('renames owned builtin session snapshots while preserving unrelated session tools', () => {
+    const { dir, root, db, file } = fixture();
+    const custom = { id: 'session-only', name: 'aionui-browser', transport: { type: 'stdio', command: 'custom' } };
+    db.prepare("UPDATE conversations SET extra=? WHERE id='old'").run(
+      JSON.stringify({
+        mcp_server_ids: [],
+        mcp_servers: ['aionui-browser'],
+        session_mcp_servers: [
+          { id: 'browser', name: 'aionui-browser', transport: { type: 'stdio', command: 'node' } },
+          custom,
+        ],
+      })
+    );
+    db.close();
+    migrateNexworkTools(dir, root, open);
+    const check = new DatabaseSync(file);
+    const extra = JSON.parse(String(check.prepare("SELECT extra FROM conversations WHERE id='old'").get()?.extra));
+    check.close();
+    expect(extra.session_mcp_servers).toEqual([
+      { id: 'browser', name: 'nexwork-browser', transport: { type: 'stdio', command: 'node' } },
+      custom,
+    ]);
+    expect(extra.mcp_servers).toEqual(['nexwork-browser']);
+    expect(migrateNexworkTools(dir, root, open)).toBe(0);
+  });
   it('preserves user-authored MCP metadata', () => {
     const { dir, root, db, file } = fixture();
     const before = db.prepare("SELECT * FROM mcp_servers WHERE id='user'").get();

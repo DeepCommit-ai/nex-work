@@ -357,7 +357,6 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
   }
 
   if (decision.kind === 'reply' || decision.kind === 'reply-and-emit') {
-    ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
     if (decision.kind === 'reply-and-emit') {
       for (const evt of decision.emit) {
         /**
@@ -404,6 +403,10 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
         ws.send(JSON.stringify({ method: evt.method, params: evt.params }));
       }
     }
+    // Publish targets before acknowledging discovery/attachment. Puppeteer yields between
+    // WebSocket frames and finishes connecting on the ACK; replying first lets the MCP
+    // cache an empty page list, leaving navigate_page stuck at "No page selected".
+    ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
     return;
   }
 
@@ -488,8 +491,21 @@ const writeJson = (res: ServerResponse, body: unknown) => {
  * main window never is (see the getType() check in attachInternal). Treating same-user local
  * processes as inside the trust boundary is an explicit assumption here.
  */
-export const startCdpBridge = async (): Promise<CdpBridgeHandle> => {
+export const startCdpBridge = async (onBrowserRequested?: () => void): Promise<CdpBridgeHandle> => {
   const token = randomBytes(24).toString('hex');
+  const pendingDiscovery = new Map<ServerResponse, ReturnType<typeof setTimeout>>();
+  const finishDiscovery = (res: ServerResponse, ready: boolean) => {
+    clearTimeout(pendingDiscovery.get(res));
+    pendingDiscovery.delete(res);
+    if (res.destroyed || res.writableEnded) return;
+    if (!ready) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: UNATTACHED_MESSAGE }));
+      return;
+    }
+    const wsUrl = `ws://${HOST}:${port}${WS_PATH}?token=${token}`;
+    writeJson(res, buildVersionPayload(wsUrl, process.versions.chrome ?? '0.0.0.0'));
+  };
 
   const httpServer: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${HOST}`);
@@ -497,7 +513,29 @@ export const startCdpBridge = async (): Promise<CdpBridgeHandle> => {
     const info = currentTargetInfo();
 
     if (url.pathname === '/json/version') {
-      writeJson(res, buildVersionPayload(wsUrl, process.versions.chrome ?? '0.0.0.0'));
+      // First tool use opens the webview asynchronously. Do not let Puppeteer create
+      // and cache a rejected page before that view can accept initialization commands.
+      if (attached && !attached.contents.isDestroyed()) finishDiscovery(res, true);
+      else {
+        const shouldOpen = pendingDiscovery.size === 0;
+        pendingDiscovery.set(
+          res,
+          setTimeout(() => finishDiscovery(res, false), 10_000)
+        );
+        res.once('close', () => {
+          clearTimeout(pendingDiscovery.get(res));
+          pendingDiscovery.delete(res);
+        });
+        // Native agents can emit bare tool names without MCP ownership metadata.
+        // An actual connection to this bridge is an authoritative browser request.
+        if (shouldOpen) {
+          try {
+            onBrowserRequested?.();
+          } catch {
+            finishDiscovery(res, false);
+          }
+        }
+      }
       return;
     }
     if (url.pathname === '/json/list' || url.pathname === '/json') {
@@ -540,9 +578,14 @@ export const startCdpBridge = async (): Promise<CdpBridgeHandle> => {
     port,
     token,
     attachedWebContentsId: () => (attached && !attached.contents.isDestroyed() ? attached.contents.id : null),
-    attach: attachInternal,
+    attach: (webContentsId) => {
+      const result = attachInternal(webContentsId);
+      if (result.ok) for (const res of pendingDiscovery.keys()) finishDiscovery(res, true);
+      return result;
+    },
     detach: detachInternal,
     close: async () => {
+      for (const res of pendingDiscovery.keys()) finishDiscovery(res, false);
       detachInternal();
       for (const ws of sockets) ws.close();
       sockets = new Set();

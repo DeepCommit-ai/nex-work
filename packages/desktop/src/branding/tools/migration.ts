@@ -188,8 +188,16 @@ export function migrateNexworkTools(
         const extra = JSON.parse(String(row.extra)) as Row;
         const before = json(extra);
         if (Array.isArray(extra.skills)) extra.skills = skills(extra.skills);
-        // IDs identify owned servers. Do not rename unrelated session-local servers.
-        const ids = Array.isArray(extra.mcp_server_ids) ? extra.mcp_server_ids : [];
+        // Builtin MCPs are stored as session snapshots; non-builtin servers use row IDs.
+        // Only a matching builtin row ID authorizes renaming a session-local entry.
+        const ids = Array.isArray(extra.mcp_server_ids) ? [...extra.mcp_server_ids] : [];
+        if (Array.isArray(extra.session_mcp_servers))
+          extra.session_mcp_servers = extra.session_mcp_servers.map((server: Row) => {
+            const name = mcpIds.get(String(server.id));
+            if (!name) return server;
+            ids.push(server.id);
+            return { ...server, name };
+          });
         if (Array.isArray(extra.mcp_servers))
           extra.mcp_servers = extra.mcp_servers.map((name) =>
             typeof name === 'string' && ids.some((id) => mcpIds.get(String(id)) === renameMcp(name))

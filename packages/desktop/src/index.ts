@@ -793,7 +793,9 @@ const handleAppReady = async (): Promise<void> => {
     try {
       const { startCdpBridge } = await import('./process/resources/builtinMcp/cdpBridge');
       const { setCdpBridgeHandle } = await import('./process/utils/cdpBridgeRegistry');
-      const bridge = await startCdpBridge();
+      const bridge = await startCdpBridge(() => {
+        ipcBridge.preview.requestBrowser.emit();
+      });
       setCdpBridgeHandle(bridge);
       /**
        * 回填真实端口，让设置页显示的是「连得上的地址」。

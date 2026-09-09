@@ -19,10 +19,19 @@ import React from 'react';
 import { act, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const browserRequests = vi.hoisted(() => new Set<() => void>());
 vi.mock('@/common', () => ({
   ipcBridge: {
     fileStream: { contentUpdate: { on: () => () => {} } },
-    preview: { open: { on: () => () => {} } },
+    preview: {
+      open: { on: () => () => {} },
+      requestBrowser: {
+        on: (listener: () => void) => {
+          browserRequests.add(listener);
+          return () => browserRequests.delete(listener);
+        },
+      },
+    },
     conversation: { responseStream: { on: () => () => {} } },
     fs: { getFileContent: { invoke: vi.fn() }, writeFile: { invoke: vi.fn() } },
   },
@@ -60,6 +69,30 @@ beforeEach(() => {
 });
 
 describe('PreviewContext browser tabs', () => {
+  it('opens one browser for repeated native connection requests before rendering', () => {
+    const { unmount } = renderProvider();
+    act(() => {
+      browserRequests.forEach((request) => request());
+      browserRequests.forEach((request) => request());
+    });
+    expect(browserTabs()).toHaveLength(1);
+    expect(ctx.isOpen).toBe(true);
+    unmount();
+    expect(browserRequests.size).toBe(0);
+  });
+
+  it('reopens an existing browser without replacing its page or another preview', () => {
+    renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com'));
+    const browser = browserTabs()[0];
+    act(() => ctx.openPreview('keep my draft', 'code'));
+    act(() => ctx.closePreview());
+    act(() => browserRequests.forEach((request) => request()));
+    expect(browserTabs()).toEqual([browser]);
+    expect(ctx.tabs).toHaveLength(2);
+    expect([ctx.isOpen, ctx.activeTabId]).toEqual([true, browser.id]);
+  });
+
   it('opens a blank browser tab with the placeholder title', () => {
     renderProvider();
     act(() => ctx.openBrowserTab());

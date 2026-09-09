@@ -1320,8 +1320,10 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // visible-browser design. Refs, because the subscription below deliberately
   // mounts once ([] deps) and would otherwise close over first-render values.
   const hasBrowserTabRef = useRef(false);
+  const browserOpeningRef = useRef(false);
   useEffect(() => {
     hasBrowserTabRef.current = tabs.some((tab) => tab.content_type === 'browser');
+    browserOpeningRef.current = false;
   }, [tabs]);
   const openBrowserTabRef = useRef(openBrowserTab);
   useEffect(() => {
@@ -1355,12 +1357,24 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
      * providing the channel), it must not take the whole preview panel down —
      * previewing is the primary feature, the badge is not.
      */
+    const ensureBrowserOpen = () => {
+      const browsers = tabsRef.current.filter((tab) => tab.content_type === 'browser');
+      const existing = browsers.find((tab) => tab.id === activeTabIdRef.current) ?? browsers[0];
+      if (existing) {
+        setActiveTabId(existing.id);
+        setIsOpen(true);
+      } else if (!browserOpeningRef.current) {
+        browserOpeningRef.current = true;
+        openBrowserTabRef.current();
+      }
+    };
+    const unsubscribeBrowser = ipcBridge.preview.requestBrowser?.on(ensureBrowserOpen);
     const stream = ipcBridge.conversation?.responseStream;
-    if (!stream?.on) return;
+    if (!stream?.on) return unsubscribeBrowser;
 
     const unsubscribe = stream.on((message) => {
       if (isBrowserMcpActivity(message.type, message.data)) {
-        if (!hasBrowserTabRef.current) openBrowserTabRef.current();
+        if (!hasBrowserTabRef.current) ensureBrowserOpen();
         markBrowserTabs(true);
         maybeNotifyFirstAgentBrowserUse();
         return;
@@ -1370,7 +1384,10 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      unsubscribeBrowser?.();
+    };
   }, []);
 
   const previewContextValue = useMemo(() => {

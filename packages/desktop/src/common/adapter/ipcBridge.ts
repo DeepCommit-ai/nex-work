@@ -1412,6 +1412,8 @@ export const database = {
 
 // Preview panel
 export const preview = {
+  // Electron owns the embedded browser; backend WS events cannot emit from main.
+  requestBrowser: bridge.buildEmitter<void>('preview:request-browser'),
   open: wsEmitter<{
     content: string;
     content_type: import('../types/office/preview').PreviewContentType;
