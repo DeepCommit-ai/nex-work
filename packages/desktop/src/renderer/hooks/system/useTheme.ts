@@ -11,7 +11,7 @@ import { applyTheme, seedElectronTheme, setActiveTheme } from '@/renderer/utils/
 import { getSystemPrefersDark } from '@/renderer/utils/theme/systemAppearance';
 import { startSystemThemeWatcher } from '@/renderer/utils/theme/systemThemeWatcher';
 import { BUILTIN_THEMES } from '@renderer/theme/builtinThemes';
-import { LIGHT_THEME_ID } from '@/common/theme/constants';
+import { DEFAULT_THEME_ID } from '@/common/theme/constants';
 import type { Theme } from '@/common/theme/types';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -26,7 +26,7 @@ function cacheAppearance(theme: Theme): void {
 }
 
 function getPersistedActiveId(): string {
-  return (configService.get('theme.activeId') as string) || LIGHT_THEME_ID;
+  return (configService.get('theme.activeId') as string) || DEFAULT_THEME_ID;
 }
 
 async function initActiveTheme(): Promise<Theme> {
@@ -42,7 +42,7 @@ async function initActiveTheme(): Promise<Theme> {
     return resolved;
   } catch (e) {
     console.error('init theme failed', e);
-    const fallback = resolveActiveTheme(LIGHT_THEME_ID, BUILTIN_THEMES);
+    const fallback = resolveActiveTheme(DEFAULT_THEME_ID, BUILTIN_THEMES, getSystemPrefersDark());
     applyTheme(fallback);
     return fallback;
   }
@@ -74,8 +74,8 @@ const useTheme = (): [Theme | null, (activeId: string) => Promise<void>, string 
       applyTheme(t);
       if (mounted) {
         setActive((prev) => (prev?.id === t.id ? prev : t));
-        // Best-effort: config was persisted before the broadcast, fall back to the resolved id.
-        setActiveId((configService.get('theme.activeId') as string) || t.id);
+        // An absent preference still means system mode, even when the relay sends a resolved color.
+        setActiveId(getPersistedActiveId());
       }
       cacheAppearance(t);
     });

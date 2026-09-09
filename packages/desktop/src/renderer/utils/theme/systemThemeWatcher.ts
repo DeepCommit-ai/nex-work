@@ -5,7 +5,7 @@
  */
 
 import { configService } from '@/common/config/configService';
-import { SYSTEM_THEME_ID } from '@/common/theme/constants';
+import { DEFAULT_THEME_ID, SYSTEM_THEME_ID } from '@/common/theme/constants';
 import { setActiveTheme } from './applyTheme';
 import { watchSystemPrefersDark } from './systemAppearance';
 
@@ -16,7 +16,9 @@ import { watchSystemPrefersDark } from './systemAppearance';
  */
 export function startSystemThemeWatcher(): () => void {
   return watchSystemPrefersDark(() => {
-    const activeId = configService.get('theme.activeId') as string | undefined;
+    // Do not overwrite a saved choice while the initial preference request is in flight.
+    if (!configService.isInitialized()) return;
+    const activeId = configService.get('theme.activeId') || DEFAULT_THEME_ID;
     if (activeId !== SYSTEM_THEME_ID) return;
     void setActiveTheme(SYSTEM_THEME_ID).catch((e) => console.error('re-apply system theme failed', e));
   });

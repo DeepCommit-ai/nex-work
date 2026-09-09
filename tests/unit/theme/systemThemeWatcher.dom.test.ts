@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // vi.mock factories are hoisted above const declarations — use vi.hoisted to avoid TDZ errors
-const { setActiveTheme, configGet } = vi.hoisted(() => ({
+const { setActiveTheme, isInitialized, configGet } = vi.hoisted(() => ({
   setActiveTheme: vi.fn().mockResolvedValue(undefined),
   configGet: vi.fn(),
+  isInitialized: vi.fn(() => true),
 }));
 
 vi.mock('@/renderer/utils/theme/applyTheme', () => ({ setActiveTheme }));
-vi.mock('@/common/config/configService', () => ({ configService: { get: configGet } }));
+vi.mock('@/common/config/configService', () => ({ configService: { get: configGet, isInitialized } }));
 
 import { startSystemThemeWatcher } from '@renderer/utils/theme/systemThemeWatcher';
 import { SYSTEM_THEME_ID } from '@/common/theme/constants';
@@ -27,6 +28,7 @@ function installMatchMedia() {
 describe('startSystemThemeWatcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    isInitialized.mockReturnValue(true);
   });
 
   it('re-applies the system theme on OS change while system mode is active', () => {
@@ -35,6 +37,23 @@ describe('startSystemThemeWatcher', () => {
     startSystemThemeWatcher();
     media.fire(true);
     expect(setActiveTheme).toHaveBeenCalledWith(SYSTEM_THEME_ID);
+  });
+
+  it('follows OS changes before the employee has chosen a theme', () => {
+    const media = installMatchMedia();
+    configGet.mockReturnValue(undefined);
+    startSystemThemeWatcher();
+    media.fire(true);
+    expect(setActiveTheme).toHaveBeenCalledWith(SYSTEM_THEME_ID);
+  });
+
+  it('does not overwrite an unread saved preference during startup', () => {
+    const media = installMatchMedia();
+    isInitialized.mockReturnValue(false);
+    configGet.mockReturnValue(undefined);
+    startSystemThemeWatcher();
+    media.fire(true);
+    expect(setActiveTheme).not.toHaveBeenCalled();
   });
 
   it('does nothing when a non-system theme is active', () => {

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Theme } from '@/common/theme/types';
 
 const { changedOnMock, configGetMock, setActiveThemeMock } = vi.hoisted(() => ({
-  changedOnMock: vi.fn(() => vi.fn()),
+  changedOnMock: vi.fn((_listener: (theme: Theme) => void) => vi.fn()),
   configGetMock: vi.fn(),
   setActiveThemeMock: vi.fn(),
 }));
@@ -73,6 +73,30 @@ describe('useTheme selection', () => {
     await waitFor(() => expect(result.current[0]?.appearance).toBe('light'));
     await expect(act(async () => result.current[1]('dark'))).rejects.toThrow('save failed');
 
+    expect(result.current[0]?.appearance).toBe('light');
+  });
+});
+
+describe('initial NexWork appearance', () => {
+  it('uses system dark mode on a fresh install', async () => {
+    vi.resetModules();
+    configGetMock.mockImplementation((key: string) => (key === 'theme.userThemes' ? [] : undefined));
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+    const { default: freshUseTheme } = await import('@/renderer/hooks/system/useTheme');
+    const { result } = renderHook(() => freshUseTheme());
+    await waitFor(() => expect(result.current[2]).toBe('system'));
+    expect(result.current[0]?.appearance).toBe('dark');
+    const onChanged = changedOnMock.mock.calls.at(-1)?.[0] as unknown as (theme: Theme) => void;
+    act(() => onChanged(darkTheme));
+    expect(result.current[2]).toBe('system');
+  });
+  it('preserves a saved light choice on a dark operating system', async () => {
+    vi.resetModules();
+    configGetMock.mockImplementation((key: string) => (key === 'theme.activeId' ? 'light' : []));
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+    const { default: freshUseTheme } = await import('@/renderer/hooks/system/useTheme');
+    const { result } = renderHook(() => freshUseTheme());
+    await waitFor(() => expect(result.current[2]).toBe('light'));
     expect(result.current[0]?.appearance).toBe('light');
   });
 });

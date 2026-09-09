@@ -17,7 +17,7 @@ import CssThemeModal from './CssThemeModal.tsx';
 import { BUILTIN_THEMES, DEFAULT_THEME_ID } from './presets.ts';
 import { BACKGROUND_BLOCK_START, injectBackgroundCssBlock } from './backgroundUtils.ts';
 import { resolveExtensionAssetUrl } from '@renderer/utils/platform.ts';
-import { LIGHT_THEME_ID, SYSTEM_THEME_ID } from '@/common/theme/constants';
+import { LIGHT_THEME_ID, DARK_THEME_ID, SYSTEM_THEME_ID } from '@/common/theme/constants';
 
 interface ThemePreviewPalette {
   appBg: string;
@@ -251,10 +251,10 @@ const CssThemeSettings: React.FC = () => {
   const themePreviewPalettes = useMemo(() => {
     const map = new Map<string, ThemePreviewPalette>();
     themes.forEach((cssTheme) => {
-      map.set(cssTheme.id, extractThemePreviewPalette(cssTheme.css || '', currentTheme === 'dark' ? 'dark' : 'light'));
+      map.set(cssTheme.id, extractThemePreviewPalette(cssTheme.css || '', cssTheme.appearance));
     });
     return map;
-  }, [themes, currentTheme]);
+  }, [themes]);
 
   // Virtual "Follow System" card, third in the gallery (after Light and Dark).
   // Not part of BUILTIN_THEMES — it must never enter resolution/dedup/persistence.
@@ -268,7 +268,15 @@ const CssThemeSettings: React.FC = () => {
       created_at: 0,
       updated_at: 0,
     };
-    const arr = [...themes];
+    const arr = themes.map((theme) => ({
+      ...theme,
+      name:
+        theme.id === LIGHT_THEME_ID
+          ? t('settings.lightMode')
+          : theme.id === DARK_THEME_ID
+            ? t('settings.darkMode')
+            : theme.name,
+    }));
     arr.splice(Math.min(2, arr.length), 0, systemCard);
     return arr;
   }, [themes, t]);
