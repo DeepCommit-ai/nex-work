@@ -11,6 +11,7 @@ import * as path from 'path';
 import os from 'os';
 import { getDevAppName } from '@/common/platform';
 import { applyBrandAppName } from '@/branding/appName';
+import { BRAND_NAME } from '@/branding/constants';
 import { applyGpuRecoveryFlags } from './gpuRecovery';
 
 // ============ E2E test isolation ============
@@ -24,6 +25,7 @@ const e2eUserDataDir = process.env.AIONUI_E2E_TEST === '1' ? process.env.AIONUI_
 if (e2eUserDataDir && e2eUserDataDir.trim() !== '') {
   fs.mkdirSync(e2eUserDataDir, { recursive: true });
   app.setPath('userData', e2eUserDataDir);
+  app.setName(BRAND_NAME);
 }
 
 // ============ Environment Separation ============
@@ -33,12 +35,7 @@ if (e2eUserDataDir && e2eUserDataDir.trim() !== '') {
 // 开发模式下设置独立 app 名称，userData 目录将与正式版隔离，允许同时运行
 // E2E 沙箱已显式设置 userData 时跳过，避免被 dev app 名覆盖。
 if (!app.isPackaged && !e2eUserDataDir) {
-  const devAppName = getDevAppName();
-  app.setName(devAppName);
-  // In Electron 28+, setName alone no longer updates userData path on macOS.
-  // Explicitly override userData to the dev directory.
-  const appSupportDir = path.dirname(app.getPath('userData'));
-  app.setPath('userData', path.join(appSupportDir, devAppName));
+  applyBrandAppName(app, getDevAppName());
 } else if (!e2eUserDataDir) {
   // Packaged: rename to NexWork for Electron-generated chrome (the macOS
   // About/Hide/Quit menu roles) while pinning userData to the legacy dir.

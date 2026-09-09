@@ -7,7 +7,7 @@ import metadata from '@/branding/assistants/metadata.json';
 import upstream from '@/branding/assistants/upstream.json';
 import i18nConfig from '@/common/config/i18n-config.json';
 import { planWrites } from '@/common/deptconfig/applyConfig';
-import packageJson from '../../../package.json';
+import packageJson from '../../../../package.json';
 
 describe('NexWork shipped assistants', () => {
   const corpus = buildNexworkCorpus();
@@ -46,9 +46,13 @@ describe('NexWork shipped assistants', () => {
       'officecli-pptx',
       'officecli-xlsx',
     ]);
-    expect(active.every((assistant) => (assistant.disabled_builtin_skills as string[]).includes('aionui-config'))).toBe(
-      true
-    );
+    expect(
+      active.every((assistant) =>
+        ['aionui-config', 'nexwork-config'].every((name) =>
+          (assistant.disabled_builtin_skills as string[]).includes(name)
+        )
+      )
+    ).toBe(true);
   });
 
   it('retains every other upstream assistant and its unmodified rules for history', () => {

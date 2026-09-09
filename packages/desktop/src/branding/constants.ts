@@ -22,7 +22,7 @@
  * backend binary and with already-installed user data, and changing them breaks
  * startup or orphans user data:
  *   - electron `appId: com.aionui.app`
- *   - package.json `name` / `productName` (drives `app.getName()` → userData dir)
+ *   - existing userData directory names (pin these before changing app.getName())
  *   - `AIONUI_*` environment variables
  *   - `~/.aionui`, `~/.aionui-dev` data dirs, the `AionUi-Dev` log dir
  *   - the `aionui://` protocol scheme, IPC channel names, storage/config keys

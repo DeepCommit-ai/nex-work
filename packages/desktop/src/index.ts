@@ -39,6 +39,8 @@ import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
 import { setInitialLanguage } from '@process/services/i18n';
 import { setupApplicationMenu } from './process/utils/appMenu';
 import { AUTO_UPDATE_ENABLED } from '@/branding';
+import { prepareNexworkSkills } from '@/branding/tools/resources';
+import { migrateNexworkTools } from '@/branding/tools/migration';
 import { prepareNexworkAssistants, reconcileNexworkAssistants } from '@/branding/assistants/runtime';
 import { configureNexworkClaude } from '@/branding/assistants/claudeProfile';
 import { migrateNexworkAssistantData } from '@/branding/assistants/migration';
@@ -223,10 +225,11 @@ const backendManager = new BackendLifecycleManager(
   },
   resolveBinaryPath,
   {
-    spawnEnvironment: prepareNexworkAssistants,
+    spawnEnvironment: (dataDir) => ({ ...prepareNexworkAssistants(dataDir), ...prepareNexworkSkills(dataDir) }),
     afterReady: async (port, dataDir) => {
       // Wait for backend ownership, legacy database copy, and schema upgrades first.
       migrateNexworkAssistantData(dataDir);
+      migrateNexworkTools(dataDir, prepareNexworkSkills(dataDir).AIONUI_BUILTIN_SKILLS_PATH);
       await configureNexworkClaude(port);
       await reconcileNexworkAssistants(port);
     },

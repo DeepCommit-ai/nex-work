@@ -54,8 +54,9 @@ type ToolGroupEntry = {
 };
 
 const isBrowserMcpEntry = (entry: ToolGroupEntry): boolean => {
+  const serverNames = [BUILTIN_BROWSER_MCP_NAME, 'aionui-browser'];
   const details = entry.confirmationDetails as { type?: string; server_name?: string } | undefined;
-  if (details?.type === 'mcp' && details.server_name === BUILTIN_BROWSER_MCP_NAME) return true;
+  if (details?.type === 'mcp' && serverNames.includes(details.server_name ?? '')) return true;
 
   /**
    * 兜底按工具名前缀匹配：不同引擎对 MCP 工具的命名方式不一致，有的会带
@@ -67,7 +68,7 @@ const isBrowserMcpEntry = (entry: ToolGroupEntry): boolean => {
    * beats over-detecting, but these two checks cover every known shape today.
    */
   const name = entry.name;
-  if (typeof name === 'string' && name.startsWith(`${BUILTIN_BROWSER_MCP_NAME}__`)) return true;
+  if (typeof name === 'string' && serverNames.some((server) => name.startsWith(`${server}__`))) return true;
 
   /**
    * [ENTERPRISE PATCH] spec 007 — Claude Code（直连 CLI）把 MCP 工具命名为
@@ -80,7 +81,7 @@ const isBrowserMcpEntry = (entry: ToolGroupEntry): boolean => {
    * conversations — no badge, no auto-open, every browser call dead-ends
    * unattached.
    */
-  if (typeof name === 'string' && name.startsWith(`mcp__${BUILTIN_BROWSER_MCP_NAME}__`)) return true;
+  if (typeof name === 'string' && serverNames.some((server) => name.startsWith(`mcp__${server}__`))) return true;
 
   return false;
 };

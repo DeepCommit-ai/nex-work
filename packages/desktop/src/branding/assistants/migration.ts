@@ -115,7 +115,7 @@ export function migrateNexworkAssistantData(
           ),
           default_skill_ids: json(RULE_SKILLS[key]),
           custom_skill_names: '[]',
-          default_disabled_builtin_skill_ids: '["aionui-config"]',
+          default_disabled_builtin_skill_ids: '["aionui-config","nexwork-config"]',
           ...(id === NEXWORK_ASSISTANT_ID
             ? {
                 avatar_type: 'builtin_asset',
@@ -137,11 +137,18 @@ export function migrateNexworkAssistantData(
         if (!isNexworkAssistant(id)) continue;
         const retired = new Set([
           'aionui-config',
-          ...(id === NEXWORK_ASSISTANT_ID ? ['aionui-troubleshooting', 'aionui-webui-public'] : []),
+          'nexwork-config',
+          ...(id === NEXWORK_ASSISTANT_ID
+            ? ['aionui-troubleshooting', 'aionui-webui-public', 'nexwork-troubleshooting', 'nexwork-webui-public']
+            : []),
         ]);
         const skills = (JSON.parse(String(row.resolved_skill_ids)) as string[]).filter((skill) => !retired.has(skill));
         const disabled = [
-          ...new Set([...(JSON.parse(String(row.resolved_disabled_builtin_skill_ids)) as string[]), 'aionui-config']),
+          ...new Set([
+            ...(JSON.parse(String(row.resolved_disabled_builtin_skill_ids)) as string[]),
+            'aionui-config',
+            'nexwork-config',
+          ]),
         ];
         add('conversation_assistant_snapshots', 'conversation_id', row, {
           rules_content: NEXWORK_ASSISTANT_RULES[id],

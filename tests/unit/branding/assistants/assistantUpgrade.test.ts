@@ -92,7 +92,7 @@ describe('existing installations', () => {
       name: 'Word Assistant',
       default_model_value: 'company-model',
       agent_id: 'claude',
-      default_disabled_builtin_skill_ids: '["aionui-config"]',
+      default_disabled_builtin_skill_ids: '["aionui-config","nexwork-config"]',
     });
     expect(
       result

@@ -44,7 +44,7 @@ export function buildNexworkCorpus(): Corpus {
     assistant.description_i18n = Object.fromEntries(
       Object.entries(metadata).map(([locale, values]) => [locale, values[key].description])
     );
-    assistant.disabled_builtin_skills = ['aionui-config'];
+    assistant.disabled_builtin_skills = ['aionui-config', 'nexwork-config'];
     if (id !== NEXWORK_ASSISTANT_ID) assistant.agent_ref = '2d23ff1c';
     assistant.rule_file = `rules/${id}.{locale}.md`;
     if (id === NEXWORK_ASSISTANT_ID) {

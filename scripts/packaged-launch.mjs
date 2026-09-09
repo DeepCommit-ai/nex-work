@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
+import { prepareLocalApp } from '../packages/desktop/src/branding/tools/localApp.mjs';
 
 function parseArgs(argv) {
   const flags = new Set(argv.filter((x) => x.startsWith('--')));
@@ -67,6 +68,25 @@ async function main() {
   const shouldClean = !flags.has('--no-clean');
   const passthroughArgs = values;
 
+  if (flags.has('--local')) {
+    const local = prepareLocalApp(projectRoot);
+    console.log(`[packaged-launch] ${local.executablePath}`);
+    if (dryRun) return;
+    const child = spawn(local.executablePath, [...local.args, ...passthroughArgs], {
+      cwd: local.cwd,
+      env: { ...process.env, AIONUI_DISABLE_AUTO_UPDATE: '1' },
+      stdio: 'inherit',
+      shell: false,
+    });
+    child.on('error', (error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+    child.on('exit', (code) => {
+      process.exitCode = code ?? 1;
+    });
+    return;
+  }
   const packaged = resolvePackagedApp(projectRoot);
   if (!packaged) {
     console.error('[packaged-launch] No unpacked app found under out/. Run `just build-package` first.');

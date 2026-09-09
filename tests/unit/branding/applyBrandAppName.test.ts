@@ -82,3 +82,10 @@ describe('applyBrandAppName', () => {
     expect(LEGACY_APP_DATA_DIR_NAME).toBe('AionUi');
   });
 });
+
+it('uses NexWork in development without moving the existing development data', () => {
+  const fake = createFakeApp('Electron');
+  applyBrandAppName(fake.app, 'AionUi-Dev');
+  expect(fake.getName()).toBe('NexWork');
+  expect(fake.getUserData()).toBe(path.join(APP_DATA, 'AionUi-Dev'));
+});

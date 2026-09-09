@@ -242,7 +242,7 @@ describe('builtin browser MCP node command (spec 007 FR-3)', () => {
 
   const browserServer = (command: string): IMcpServer => ({
     id: 'browser-server-id',
-    name: 'aionui-browser',
+    name: 'nexwork-browser',
     description:
       "Control AionUi's built-in browser (the side preview panel): open pages, click, type and read content. " +
       'Sign-in state is shared across tabs and preserved between sessions.',
@@ -254,7 +254,7 @@ describe('builtin browser MCP node command (spec 007 FR-3)', () => {
       args: ['/mock/builtin-mcp-browser.js'],
     },
     original_json: JSON.stringify(
-      { mcpServers: { 'aionui-browser': { command, args: ['/mock/builtin-mcp-browser.js'] } } },
+      { mcpServers: { 'nexwork-browser': { command, args: ['/mock/builtin-mcp-browser.js'] } } },
       null,
       2
     ),
@@ -267,7 +267,7 @@ describe('builtin browser MCP node command (spec 007 FR-3)', () => {
     await runBackendMigrations(configFile as never);
 
     const imported = batchImportServersMock.mock.calls.at(0)?.[0]?.servers as IMcpServer[];
-    const browser = imported.find((server) => server.name === 'aionui-browser');
+    const browser = imported.find((server) => server.name === 'nexwork-browser');
     expect(browser?.transport).toMatchObject({ type: 'stdio', command: MANAGED_NODE });
     expect(browser?.original_json).toContain(MANAGED_NODE);
   });

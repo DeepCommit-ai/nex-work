@@ -2,6 +2,15 @@
 
 This directory contains scripts for building and packaging AionUi across different platforms and architectures.
 
+## NexWork local macOS launch
+
+Run `bun run start:local` to compile and start NexWork with a branded native app
+bundle. After an existing build, use `node scripts/packaged-launch.mjs --local`.
+The launcher preserves the development data directory and does not terminate other
+Electron applications. Quit the previous NexWork instance before launching it.
+The generated `.analysis/local-launcher/…/NexWork.app` needs the repository arguments
+provided by this script; it is not an employee installation package.
+
 ## Scripts Overview
 
 | Script                    | Lines | Purpose                                         |

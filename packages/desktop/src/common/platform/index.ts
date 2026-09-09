@@ -1,5 +1,7 @@
 import path from 'path';
 import type { IPlatformServices } from './IPlatformServices';
+import { applyBrandAppName } from '@/branding/appName';
+import { BRAND_NAME } from '@/branding/constants';
 import { NodePlatformServices } from './NodePlatformServices';
 
 let _services: IPlatformServices | null = null;
@@ -40,9 +42,11 @@ export function getPlatformServices(): IPlatformServices {
         // Rollup may load this chunk before configureChromium.ts runs, so we
         // must apply the dev name here as a safety net.
         if (!app.isPackaged) {
-          const devAppName = getDevAppName();
-          app.setName(devAppName);
-          app.setPath('userData', path.join(path.dirname(app.getPath('userData')), devAppName));
+          const sandboxDir = process.env.AIONUI_E2E_TEST === '1' ? process.env.AIONUI_E2E_USER_DATA_DIR : undefined;
+          if (sandboxDir) {
+            app.setPath('userData', sandboxDir);
+            app.setName(BRAND_NAME);
+          } else applyBrandAppName(app, getDevAppName());
         }
         // Typed as IPlatformPaths so tsc enforces completeness: any new method
         // added to the interface will cause a compile error here if omitted below.

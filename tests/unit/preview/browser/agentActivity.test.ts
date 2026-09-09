@@ -92,6 +92,14 @@ describe('isBrowserMcpSettled', () => {
  * 双重 miss，浏览器活动检测对 claude 会话永远不触发，自动开面板成了死代码。
  */
 describe('direct-CLI (Claude Code) tool_call shape', () => {
+  it('recognizes the NexWork namespace on current Claude Code calls', () => {
+    expect(isBrowserMcpActivity('tool_call', { name: 'mcp__nexwork-browser__list_pages', status: 'running' })).toBe(
+      true
+    );
+    expect(isBrowserMcpSettled('tool_call', { name: 'mcp__nexwork-browser__list_pages', status: 'completed' })).toBe(
+      true
+    );
+  });
   const entry = (status: string) => ({
     call_id: 'call_1',
     name: 'mcp__aionui-browser__list_pages',

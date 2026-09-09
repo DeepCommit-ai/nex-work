@@ -33,12 +33,9 @@ export type BrandAppNameTarget = {
  * what the name happens to be at call time. It matches the literal
  * `<appData>/AionUi` that `installerLastFailure.ts` already writes to.
  *
- * WHY IT IS SAFE TO CALL THIS ONLY IN PACKAGED BUILDS: dev and E2E already pin
- * userData themselves (`AionUi-Dev` via `getDevAppName()`, or the E2E sandbox
- * dir), and those names are contracts of their own — the dev log directory
- * `~/Library/Logs/AionUi-Dev` is read by the startup benchmarks. Renaming there
- * would break dev isolation for no user-visible gain, since no user sees a dev
- * build's menu bar.
+ * Development callers pass the existing AionUi-Dev directory name explicitly.
+ * The displayed name is NexWork in both modes; storage remains isolated.
+ * E2E callers that already pinned userData must retain that explicit path.
  *
  * ORDERING: must run before ANY other `app.getPath('userData')` call, because
  * Electron caches the resolved path on first use. `configureChromium.ts` is the
@@ -52,7 +49,7 @@ export type BrandAppNameTarget = {
  * `scripts/benchmark-acp-startup.ts` — were updated to try `NexWork` too, and
  * any new external reader must do the same.
  */
-export function applyBrandAppName(app: BrandAppNameTarget): void {
-  app.setPath('userData', path.join(app.getPath('appData'), LEGACY_APP_DATA_DIR_NAME));
+export function applyBrandAppName(app: BrandAppNameTarget, dataDirectoryName = LEGACY_APP_DATA_DIR_NAME): void {
+  app.setPath('userData', path.join(app.getPath('appData'), dataDirectoryName));
   app.setName(BRAND_NAME);
 }

@@ -1,3 +1,4 @@
+import { brandToolText, renameMcp, renameMcpConfig } from '@/branding/tools/policy';
 import { ipcBridge } from '@/common';
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { assistantRuntimeKey, type AssistantAgent } from '@/common/types/agent/assistantTypes';
@@ -185,12 +186,15 @@ function normalizeLegacyMcpServer(
       server.name === BUILTIN_IMAGE_GEN_NAME ||
       BUILTIN_IMAGE_GEN_LEGACY_NAMES.includes(server.name as (typeof BUILTIN_IMAGE_GEN_LEGACY_NAMES)[number]));
 
-  if (!isLegacyImageGen) return server;
-
+  if (!server.builtin) return server;
+  const name = isLegacyImageGen ? BUILTIN_IMAGE_GEN_NAME : renameMcp(server.name);
   return {
     ...server,
-    name: BUILTIN_IMAGE_GEN_NAME,
-    builtin: true,
+    name,
+    description: server.description ? brandToolText(server.description) : server.description,
+    original_json: server.original_json
+      ? renameMcpConfig(server.original_json, server.name, name)
+      : server.original_json,
   };
 }
 

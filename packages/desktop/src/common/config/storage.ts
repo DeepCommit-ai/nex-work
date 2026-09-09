@@ -652,8 +652,12 @@ export interface IConversationMcpStatus {
 
 /** Stable ID for the built-in image generation MCP server */
 export const BUILTIN_IMAGE_GEN_ID = 'builtin-image-gen';
-export const BUILTIN_IMAGE_GEN_NAME = 'aionui-image-generation';
-export const BUILTIN_IMAGE_GEN_LEGACY_NAMES = ['AionUi Image Generation', BUILTIN_IMAGE_GEN_ID] as const;
+export const BUILTIN_IMAGE_GEN_NAME = 'nexwork-image-generation';
+export const BUILTIN_IMAGE_GEN_LEGACY_NAMES = [
+  'aionui-image-generation',
+  'AionUi Image Generation',
+  BUILTIN_IMAGE_GEN_ID,
+] as const;
 
 export interface IMcpTool {
   name: string;
