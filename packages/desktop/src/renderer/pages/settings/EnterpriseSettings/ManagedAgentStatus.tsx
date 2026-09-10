@@ -30,7 +30,7 @@ const ManagedAgentStatus: React.FC = () => {
     }
   };
   return (
-    <div className='flex flex-col gap-8px text-13px'>
+    <div className='flex flex-col gap-8px text-13px text-t-primary'>
       <Typography.Text bold>{t('settings.enterprise.managed.title')}</Typography.Text>
       <div>
         {t('settings.enterprise.managed.phaseLabel')}：{t(`settings.enterprise.managed.phase.${status.phase}`)}
