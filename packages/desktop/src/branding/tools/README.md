@@ -24,3 +24,13 @@ The launcher explicitly restores development mode before loading application cod
 because Electron detects the renamed native bundle as packaged. It is not a distributable installer. Production bundles use electron-builder's
 NexWork product/executable names. Never modify Electron's framework identifiers or
 rename the legacy data directory just to change the displayed application name.
+
+`backendWorkspace.mjs` builds the pinned upstream commit with `workspace-prefix.patch`
+and records the source, patch and binary hashes in the bundle manifest. The launcher
+sets `NEXWORK_WORKSPACE_PREFIX=nexwork`; both conversation engines then create
+`nexwork-temp-<conversation id>` directories using the original project binding and
+cleanup logic. Existing workspace paths are retained. Prepare/build commands require
+Rust 1.95.0 (CI installs it) and use a checksum-verified local binary cache. Version
+or upstream Actions overrides must first receive a reviewed source patch; packaging
+fails instead of silently losing the branding. Native macOS and Windows runners are
+used for their respective installers; Rust handles the macOS architecture target.

@@ -8,7 +8,7 @@ const cfg = (over: Partial<DeptConfig> = {}): DeptConfig => ({
   agents: ['claude', 'aionrs'],
   assistants: [{ id: 'word', agent_id: 'claude' }, { id: 'butler' }],
   model_aliases: [],
-  gateway: { base_url: 'http://gw:54000', api_key: 'sk-gw-dept', config_dir: '~/.nexwork-claude' },
+  gateway: { base_url: 'http://gw:54000', api_key: 'sk-gw-dept', config_dir: '~/.nexwork-runtime' },
   ...over,
 });
 

@@ -85,6 +85,11 @@ export function ancestorRels(relativePath: string): string[] {
   return out;
 }
 
+/** Internal engine directories are omitted from the file UI, never removed from disk. */
+export function isInternalAgentPath(relativePath: string): boolean {
+  return relativePath.split(/[\\/]/).some((part) => part === '.claude' || part === '.aionrs');
+}
+
 /**
  * Derive the "want" set: a directory is wanted (visible, so worth subscribing)
  * iff it is expanded AND every ancestor on its relative path is also expanded —
@@ -95,6 +100,7 @@ export function deriveWant(expanded: ReadonlySet<PeKey>): Set<PeKey> {
   const want = new Set<PeKey>();
   for (const key of expanded) {
     const { pe_id, relative_path } = keyToRef(key);
+    if (isInternalAgentPath(relative_path)) continue;
     const visible = ancestorRels(relative_path).every((rel) => expanded.has(peKey(pe_id, rel)));
     if (visible) want.add(key);
   }
@@ -335,7 +341,7 @@ export function buildTreeData(cache: FactCache, expanded: ReadonlySet<PeKey>, ro
     if (!entries) return undefined; // expanded but listing not yet arrived
     // Sort a copy — never mutate the cached listing.
     return entries
-      .slice()
+      .filter((entry) => entry.kind === 'file' || !isInternalAgentPath(joinRel(dirRel, entry.name)))
       .toSorted(compareEntriesForDisplay)
       .map((entry) => {
         const childRel = joinRel(dirRel, entry.name);

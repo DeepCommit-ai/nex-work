@@ -367,6 +367,22 @@ jobs:
           MSVS_VERSION: 2022
           GYP_MSVS_VERSION: 2022
 
+      - name: Set up pinned Rust for the NexWork backend
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.95.0'
+
+      - name: Avoid Git linker shadowing MSVC
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Remove-Item 'C:\Program Files\Git\usr\bin\link.exe' -Force -ErrorAction SilentlyContinue
+
+      - name: Cache branded backend
+        uses: actions/cache@v4
+        with:
+          path: .analysis/nexwork-backend/binaries
+          key: nexwork-backend-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('packages/desktop/src/branding/tools/backendWorkspace.mjs', 'packages/desktop/src/branding/tools/workspace-prefix.patch') }}
+
       - name: Prepare aioncore binary
         shell: bash
         run: node scripts/prepareAioncore.js

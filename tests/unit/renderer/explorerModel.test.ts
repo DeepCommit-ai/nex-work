@@ -788,3 +788,29 @@ describe('explorerContextMenuSections — grouped, ordered, divider-ready sectio
     for (const section of sections) expect(section.length).toBeGreaterThan(0);
   });
 });
+
+it('hides internal engine directories from snapshots and deltas without mutating disk facts', () => {
+  const root = peKey('p', '');
+  const entries = [
+    dir('.claude'),
+    { name: '.aionrs', kind: 'symlink' as const },
+    file('.gitignore'),
+    dir('.claude-notes'),
+  ];
+  let cache = applySnapshot(new Map(), root, entries);
+  cache = applyDelta(cache, root, [{ op: 'added', name: 'reports', kind: 'dir' }]);
+  cache = applySnapshot(cache, peKey('p', 'reports'), [dir('.aionrs'), file('report.docx')]);
+  const tree = buildTreeData(cache, set(root, peKey('p', 'reports')), [{ pe_id: 'p', title: 'Work' }]);
+  expect(tree[0].children?.map((node) => node.title)).toEqual(['.claude-notes', 'reports', '.gitignore']);
+  expect(tree[0].children?.find((node) => node.title === 'reports')?.children?.map((node) => node.title)).toEqual([
+    'report.docx',
+  ]);
+  expect(cache.get(root)).toContainEqual(dir('.claude'));
+});
+
+it('does not resubscribe to hidden engine folders restored from earlier UI state', () => {
+  const root = peKey('p', '');
+  expect(deriveWant(set(root, peKey('p', '.claude'), peKey('p', '.claude/skills'), peKey('p', '.aionrs')))).toEqual(
+    set(root)
+  );
+});

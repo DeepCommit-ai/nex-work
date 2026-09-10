@@ -10,7 +10,7 @@
  *
  * - `POST /api/fs/write` 不建父目录（"cannot resolve parent"）——新装机器上
  *   `builtin-skills/<名>/` 一定不存在，首次写必败；
- * - 没有任何删除口——退役 `~/.nexwork-claude/skills/` 的手工技能包做不了；
+ * - 没有任何删除口——退役 `~/.nexwork-runtime/skills/` 的手工技能包做不了；
  * - 它是**任意绝对路径**的写口，"只许写 builtin-skills 子树"的边界只能靠调用方自律。
  *
  * 所以要一个跑在宿主机上、知道 dataDir 的**受限**写口：写死只碰两棵子树，
@@ -65,7 +65,7 @@ export type DeptSkillsContext = {
   dataDir?: string;
   /**
    * 受管 Claude 的隔离目录（retire 的作用域）。测试注入用；生产不传 =
-   * `~/.nexwork-claude`——与 deptConfigService 的 DEFAULT_CONFIG_DIR、服务端
+   * `~/.nexwork-runtime`——与 deptConfigService 的 DEFAULT_CONFIG_DIR、服务端
    * 下发的 gateway.config_dir 同一默认值。写死而不是从请求体拿：删除路径
    * 绝不能是调用方输入。
    */
@@ -169,7 +169,7 @@ export function performDeptSkillAction(
 
     // retire：删除受管 Claude 全局技能目录里的同名手工技能包（双源退役）。
     // 机器级技能对**所有助手**可见，会让默认助手蹭到企业技能、破坏按助手隔离。
-    const configDir = ctx.managedConfigDir?.trim() || path.join(os.homedir(), '.nexwork-claude');
+    const configDir = ctx.managedConfigDir?.trim() || path.join(os.homedir(), '.nexwork-runtime');
     const target = resolveRetireDir(configDir, name);
     if (!target) {
       return reject(400, 'BAD_SKILL_NAME', '技能名解析越出受管 skills 子树');

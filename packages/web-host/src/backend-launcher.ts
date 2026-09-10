@@ -229,9 +229,10 @@ export function buildSpawnEnv(dirs?: BackendDirConfig): NodeJS.ProcessEnv {
   // build/Release only, and node-gyp-build skips that directory for any
   // non-empty value, aborting the agent before the ACP handshake (#4070).
   const { PREBUILDS_ONLY: _prebuildsOnly, ...parentEnv } = process.env;
-  if (!dirs) return parentEnv;
+  const brandedEnv = { ...parentEnv, NEXWORK_WORKSPACE_PREFIX: 'nexwork' };
+  if (!dirs) return brandedEnv;
   return {
-    ...parentEnv,
+    ...brandedEnv,
     AIONUI_CACHE_DIR: dirs.cacheDir,
     AIONUI_WORK_DIR: dirs.workDir,
     AIONUI_LOG_DIR: dirs.logDir,

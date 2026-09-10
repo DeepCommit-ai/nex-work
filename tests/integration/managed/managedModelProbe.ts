@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { BackendCall } from '@/process/services/managedagents/backend';
 import { prepareNexworkClaudeProfile } from '@/branding/assistants/claudeProfile';
@@ -95,7 +95,7 @@ export async function runManagedModelProbe(
     const servers = await api<Array<{ id: string; name: string; transport: unknown }>>('GET', '/api/mcp/servers');
     const management = servers.find((server) => server.name === 'nexwork-management')!;
     if (engine === 'claude') {
-      const profile = path.join(directory, 'claude-model-profile');
+      const profile = path.join(directory, 'model-runtime-profile');
       prepareNexworkClaudeProfile(profile);
       await api('PUT', '/api/agents/2d23ff1c/overrides', {
         command_override: path.resolve(
@@ -110,8 +110,6 @@ export async function runManagedModelProbe(
         ],
       });
     }
-    const workspace = path.join(directory, engine + '-dialogue');
-    mkdirSync(workspace);
     setManagedCatalogIds(['default-assistant', 'office-assistant', 'nexwork-butler']);
     const request = await prepareManagedConversation(
       'POST',
@@ -123,11 +121,28 @@ export async function runManagedModelProbe(
           conversation_overrides: { permission: engine === 'aion' ? 'yolo' : 'bypassPermissions' },
         },
         ...(engine === 'aion' ? { model: { provider_id: provider.id, model: 'claude-sonnet-4-6' } } : {}),
-        extra: { workspace },
+        extra: {},
       },
       (route) => api('GET', route)
     );
-    const conversation = await api<{ id: string }>('POST', '/api/conversations', request);
+    const conversation = await api<{
+      id: string;
+      project_id: string;
+      extra: { workspace: string; is_temporary_workspace: boolean };
+    }>('POST', '/api/conversations', request);
+    const workspace = conversation.extra.workspace;
+    if (path.basename(workspace) !== `nexwork-temp-${conversation.id}` || !conversation.extra.is_temporary_workspace)
+      throw new Error(`${engine} did not create a branded temporary workspace`);
+    if (!existsSync(path.join(workspace, engine === 'aion' ? '.aionrs' : '.claude', 'skills')))
+      throw new Error(`${engine} lost its native workspace skills directory`);
+    const detail = await api<{ project_id: string }>('GET', `/api/conversations/${conversation.id}`);
+    const project = await api<{ explorer: { entries: Array<{ role: string; display_path: string }> } }>(
+      'GET',
+      `/api/projects/${detail.project_id}`
+    );
+    if (project.explorer.entries.find((entry) => entry.role === 'workspace')?.display_path !== workspace)
+      throw new Error(`${engine} project binding differs from its workspace`);
+    console.log(`PASS: ${engine} branded workspace, native skills, temporary flag and project binding`);
     await api('POST', `/api/conversations/${conversation.id}/messages`, {
       content: '创建并注册测试助手，然后提交测试 Bug。',
     });

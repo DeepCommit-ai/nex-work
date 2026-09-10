@@ -229,6 +229,11 @@ describe('buildSpawnArgs', () => {
 });
 
 describe('buildSpawnEnv', () => {
+  it('uses branded workspace names with or without an explicit directory configuration', () => {
+    expect(buildSpawnEnv().NEXWORK_WORKSPACE_PREFIX).toBe('nexwork');
+    expect(buildSpawnEnv({ cacheDir: '/c', workDir: '/w', logDir: '/l' }).NEXWORK_WORKSPACE_PREFIX).toBe('nexwork');
+  });
+
   it('merges process.env with AIONUI_* dir vars', () => {
     const env = buildSpawnEnv({
       cacheDir: '/c',

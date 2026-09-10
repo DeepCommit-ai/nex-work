@@ -471,6 +471,19 @@ function prepareAioncore(options) {
   removeDirectorySafe(targetDir);
   ensureDirectory(targetDir);
 
+  const nexworkBuilder = path.join(projectRoot, 'packages/desktop/src/branding/tools/backendWorkspace.mjs');
+  if (fs.existsSync(nexworkBuilder)) {
+    if (actionsRunId)
+      throw new Error('NexWork requires the reviewed source patch; upstream Actions binaries cannot replace it');
+    execFileSync(process.execPath, [nexworkBuilder, projectRoot, platform, arch, tag, targetBinaryPath], {
+      stdio: 'inherit',
+    });
+    ensureExecutableMode(targetBinaryPath);
+    prepareManagedResources(targetBinaryPath, targetDir);
+    verifyPreparedAioncoreBundle(projectRoot, platform, arch);
+    return { prepared: true, dir: targetDir, sourceType: 'nexwork-source' };
+  }
+
   const localBundleDir = (process.env.AIONUI_BACKEND_LOCAL_BUNDLE_DIR || '').trim();
   if (localBundleDir) {
     const resolvedLocalBundleDir = path.resolve(localBundleDir);

@@ -15,6 +15,8 @@
  * the front-end does only the final fuzzy ranking over that already-bounded set.
  */
 
+import { isInternalAgentPath } from '../explorerModel';
+
 import { projectFileRef } from '@/common/types/chatFile';
 import type { FileOrFolderItem } from '@/renderer/utils/file/fileTypes';
 
@@ -99,7 +101,9 @@ export const scoreSearchHit = (hit: SearchHit, query: string): number => {
  */
 export const rankSearchHits = (hits: SearchHit[], query: string): SearchHit[] => {
   const q = normalize(query);
-  const scored = hits.map((hit) => ({ hit, score: q ? scoreSearchHit(hit, q) : 0 }));
+  const scored = hits
+    .filter((hit) => !isInternalAgentPath(hit.relative_path))
+    .map((hit) => ({ hit, score: q ? scoreSearchHit(hit, q) : 0 }));
   return scored
     .filter((entry) => (q ? entry.score >= 0 : true))
     .toSorted((left, right) => {

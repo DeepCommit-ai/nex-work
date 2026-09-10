@@ -143,24 +143,24 @@ describe('expandConfigDirTilde', () => {
     const { expandConfigDirTilde } = await import('./managed-claude.js');
     const { env, changed } = expandConfigDirTilde(
       [
-        { name: 'CLAUDE_CONFIG_DIR', value: '~/.nexwork-claude' },
+        { name: 'CLAUDE_CONFIG_DIR', value: '~/.nexwork-runtime' },
         { name: 'ANTHROPIC_BASE_URL', value: 'http://127.0.0.1:54000' },
       ],
       '/home/emp'
     );
     expect(changed).toBe(true);
-    expect(env[0].value).toBe('/home/emp/.nexwork-claude');
+    expect(env[0].value).toBe('/home/emp/.nexwork-runtime');
     expect(env[1].value).toBe('http://127.0.0.1:54000');
   });
 
   it('绝对路径不动、changed=false', async () => {
     const { expandConfigDirTilde } = await import('./managed-claude.js');
     const { env, changed } = expandConfigDirTilde(
-      [{ name: 'CLAUDE_CONFIG_DIR', value: '/home/emp/.nexwork-claude' }],
+      [{ name: 'CLAUDE_CONFIG_DIR', value: '/home/emp/.nexwork-runtime' }],
       '/home/emp'
     );
     expect(changed).toBe(false);
-    expect(env[0].value).toBe('/home/emp/.nexwork-claude');
+    expect(env[0].value).toBe('/home/emp/.nexwork-runtime');
   });
 });
 
@@ -240,5 +240,74 @@ describe('dev fallback — aioncore resolved from PATH', () => {
     });
 
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('managed profile migration', () => {
+  it('moves credentials and sessions intact and keeps historical paths usable', async () => {
+    const { migrateManagedProfile } = await import('./managed-claude');
+    const root = tmp();
+    const old = path.join(root, '.nexwork-claude');
+    const current = path.join(root, '.nexwork-runtime');
+    fs.mkdirSync(path.join(old, 'projects'), { recursive: true });
+    fs.writeFileSync(path.join(old, '.credentials.json'), 'test-credential', { mode: 0o600 });
+    fs.writeFileSync(path.join(old, 'projects/session.jsonl'), 'history');
+    try {
+      migrateManagedProfile(current);
+      migrateManagedProfile(current);
+      expect(fs.readFileSync(path.join(current, '.credentials.json'), 'utf8')).toBe('test-credential');
+      expect(fs.readFileSync(path.join(old, 'projects/session.jsonl'), 'utf8')).toBe('history');
+      expect(fs.realpathSync(old)).toBe(fs.realpathSync(current));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it('refuses to overwrite two existing profiles', async () => {
+    const { migrateManagedProfile } = await import('./managed-claude');
+    const root = tmp();
+    const current = path.join(root, '.nexwork-runtime');
+    fs.mkdirSync(path.join(root, '.nexwork-claude'));
+    fs.mkdirSync(current);
+    fs.writeFileSync(path.join(current, 'settings.json'), 'keep');
+    try {
+      expect(() => migrateManagedProfile(current)).toThrow('Conflicting');
+      expect(fs.readFileSync(path.join(current, 'settings.json'), 'utf8')).toBe('keep');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it('restores the previous directory if its compatibility alias cannot be created', async () => {
+    const { migrateManagedProfile } = await import('./managed-claude');
+    const root = tmp();
+    const old = path.join(root, '.nexwork-claude');
+    fs.mkdirSync(old);
+    const symlink = vi.spyOn(fs, 'symlinkSync').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    try {
+      expect(() => migrateManagedProfile(path.join(root, '.nexwork-runtime'))).toThrow('blocked');
+      expect(fs.statSync(old).isDirectory()).toBe(true);
+    } finally {
+      symlink.mockRestore();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it('normalizes legacy overrides without changing other environment entries', async () => {
+    const { expandConfigDirTilde } = await import('./managed-claude');
+    expect(
+      expandConfigDirTilde(
+        [
+          { name: 'CLAUDE_CONFIG_DIR', value: '~/.nexwork-claude' },
+          { name: 'TOKEN', value: 'test' },
+        ],
+        '/staff'
+      )
+    ).toEqual({
+      changed: true,
+      env: [
+        { name: 'CLAUDE_CONFIG_DIR', value: '/staff/.nexwork-runtime' },
+        { name: 'TOKEN', value: 'test' },
+      ],
+    });
   });
 });

@@ -57,7 +57,7 @@ export type PlannedWrite =
    */
   | { kind: 'skill.write'; name: string; content: string }
   /**
-   * 退役受管 Claude 全局技能目录里的同名手工技能包（`~/.nexwork-claude/
+   * 退役受管 Claude 全局技能目录里的同名手工技能包（`~/.nexwork-runtime/
    * skills/<name>`）。机器级技能对所有助手可见——留着它，默认助手会蹭到
    * 企业技能，按助手隔离就破了。删除口幂等（不存在 = no-op）。
    */
@@ -202,7 +202,7 @@ export const planWrites = (cfg: DeptConfig, current: CurrentState): PlannedWrite
     .filter((a) => !wantAgents.has(a.id) && a.enabled)
     .map((a) => ({ kind: 'agent.disable', id: a.id }));
 
-  // 双源退役**最后**（issue #14）：受管全局目录（~/.nexwork-claude/skills/）里的
+  // 双源退役**最后**（issue #14）：受管全局目录（~/.nexwork-runtime/skills/）里的
   // 同名手工技能包让默认助手也蹭得到技能，按助手隔离形同虚设。放在末尾，中途
   // 崩溃留下的是"新旧并存"（下次重放收敛），而不是"旧的删了新的没写"（两个
   // demo 助手当场失能）。只退役本轮下发的名字：cfg.skills 为空（老服务端）时

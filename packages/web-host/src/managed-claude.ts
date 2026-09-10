@@ -38,11 +38,33 @@ import path from 'path';
 
 export const CLAUDE_AGENT_ID = '2d23ff1c';
 
+/** Move the product-owned profile, retaining an alias for existing session snapshots. */
+export function migrateManagedProfile(directory: string): void {
+  if (!path.isAbsolute(directory) || path.basename(directory) !== '.nexwork-runtime') return;
+  const legacy = path.join(path.dirname(directory), '.nexwork-claude');
+  let old: fs.Stats;
+  try {
+    old = fs.lstatSync(legacy);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  if (old.isSymbolicLink() && fs.realpathSync(legacy) === fs.realpathSync(directory)) return;
+  if (!old.isDirectory() || fs.existsSync(directory)) throw new Error('Conflicting NexWork profile directories');
+  fs.renameSync(legacy, directory);
+  try {
+    fs.symlinkSync(directory, legacy, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    fs.renameSync(directory, legacy);
+    throw error;
+  }
+}
+
 /**
  * 展开 env_override 里 CLAUDE_CONFIG_DIR 的字面 `~`。
  *
  * 渲染层写入时可能拿不到宿主机 home（deptConfigService 的已知失败路径），
- * `~/.nexwork-claude` 会按原样落库——子进程环境变量不做 shell 展开，Claude Code
+ * `~/.nexwork-runtime` 会按原样落库——子进程环境变量不做 shell 展开，Claude Code
  * 拿到的就是个坏路径，隔离目录失效、企业技能包不可见（实测 2026-08-28）。
  * web-host 跑在宿主机上，这里每次启动自愈成绝对路径。
  */
@@ -52,9 +74,12 @@ export function expandConfigDirTilde(
 ): { env: { name: string; value: string }[]; changed: boolean } {
   let changed = false;
   const out = (env ?? []).map((e) => {
-    if (e.name === 'CLAUDE_CONFIG_DIR' && (e.value === '~' || e.value.startsWith('~/'))) {
-      changed = true;
-      return { ...e, value: path.join(homedir, e.value.slice(1).replace(/^\//, '')) };
+    if (e.name === 'CLAUDE_CONFIG_DIR') {
+      const expanded =
+        e.value === '~' || e.value.startsWith('~/') ? path.join(homedir, e.value.slice(1).replace(/^\//, '')) : e.value;
+      const value = expanded.replace(/(^|[\\/])\.nexwork-claude[\\/]?$/, '$1.nexwork-runtime');
+      changed ||= value !== e.value;
+      return { ...e, value };
     }
     return e;
   });
@@ -149,6 +174,8 @@ export async function provisionManagedClaude(opts: ProvisionManagedClaudeOptions
       return;
     }
     const { env: fixedEnv, changed: envFixed } = expandConfigDirTilde(overrides.env_override);
+    const profile = fixedEnv.find((entry) => entry.name === 'CLAUDE_CONFIG_DIR')?.value;
+    if (profile) migrateManagedProfile(profile);
     if (overrides.command_override === claudeBin && !envFixed) {
       log(`已钉在 ${claudeBin}（无变化）`);
       return;

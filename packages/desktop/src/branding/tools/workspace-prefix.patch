@@ -1,0 +1,33 @@
+diff --git a/crates/aionui-conversation/src/service.rs b/crates/aionui-conversation/src/service.rs
+index 720cf91..6c24d62 100644
+--- a/crates/aionui-conversation/src/service.rs
++++ b/crates/aionui-conversation/src/service.rs
+@@ -4890,7 +4890,13 @@ impl ConversationService {
+                 backend.as_ref(),
+             );
+ 
+-            if workspace != expected_workspace {
++            // Existing conversations keep their native directory after a product rename.
++            let legacy_workspace = auto_workspace_parent(&self.workspace_root, &row.user_id).join(format!(
++                "{}-temp-{}",
++                native_conversation_label(&context.conversation.agent_type, backend.as_ref()),
++                row.id
++            ));
++            if workspace != expected_workspace && workspace != legacy_workspace {
+                 return;
+             }
+         }
+@@ -5140,6 +5146,13 @@ fn map_create_workspace_validation_error(error: WorkspacePathValidationError) ->
+ /// name (e.g. `"aionrs"`). Falls back to the agent type's serde name
+ /// when the backend field is missing or not a string.
+ fn conversation_label(agent_type: &AgentType, backend: Option<&serde_json::Value>) -> String {
++    if std::env::var("NEXWORK_WORKSPACE_PREFIX").as_deref() == Ok("nexwork") {
++        return "nexwork".to_owned();
++    }
++    native_conversation_label(agent_type, backend)
++}
++
++fn native_conversation_label(agent_type: &AgentType, backend: Option<&serde_json::Value>) -> String {
+     if *agent_type == AgentType::Acp
+         && let Some(serde_json::Value::String(s)) = backend
+         && !s.is_empty()

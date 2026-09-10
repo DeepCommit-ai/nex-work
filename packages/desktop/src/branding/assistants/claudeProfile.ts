@@ -2,12 +2,15 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { migrateManagedProfile } from '@aionui/web-host';
+import { resolveNexworkProfilePath } from '@/common/gateway/provisionGateway';
 
 export const NEXWORK_OUTPUT_STYLE = 'NexWork';
 
 /** Install minimal product rules without changing credentials, permissions, or other settings. */
 export function prepareNexworkClaudeProfile(configDir: string): void {
   if (!path.isAbsolute(configDir)) throw new Error('Claude configuration directory must be absolute');
+  migrateManagedProfile(configDir);
   const settingsPath = path.join(configDir, 'settings.json');
   let settings: Record<string, unknown> = {};
   try {
@@ -43,8 +46,8 @@ export async function configureNexworkClaude(port: number, fetchImpl: typeof fet
   if (!data) throw new Error('Missing Claude configuration');
   const env = data.env_override ?? [];
   const existing = env.find((entry) => entry.name === 'CLAUDE_CONFIG_DIR')?.value.trim();
-  const selected = existing || path.join(os.homedir(), '.nexwork-claude');
-  const configDir = selected.startsWith('~/') ? path.join(os.homedir(), selected.slice(2)) : selected;
+  const selected = existing || path.join(os.homedir(), '.nexwork-runtime');
+  const configDir = resolveNexworkProfilePath(selected, os.homedir());
   prepareNexworkClaudeProfile(configDir);
   if (existing === configDir) return;
   const written = await fetchImpl(url, {

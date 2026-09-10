@@ -8,7 +8,7 @@ import { configFixture } from './managedFixture';
 describe('managed Claude configuration', () => {
   it.each([
     { provided: undefined, existing: '/profiles/current', expected: '/profiles/current' },
-    { provided: undefined, existing: undefined, expected: path.join(os.homedir(), '.nexwork-claude') },
+    { provided: undefined, existing: undefined, expected: path.join(os.homedir(), '.nexwork-runtime') },
     {
       provided: '~/.department-claude',
       existing: '/profiles/current',

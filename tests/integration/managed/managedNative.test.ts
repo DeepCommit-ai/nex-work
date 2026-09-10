@@ -13,6 +13,8 @@ describe.runIf(process.env.NEXWORK_MANAGED_E2E === '1')('managed catalog across 
     expect(stdout).toContain('PASS: two native clients');
     expect(stdout).toContain('PASS: actual Aion conversation');
     expect(stdout).toContain('PASS: bundled Claude Code');
+    expect(stdout).toContain('PASS: aion branded workspace');
+    expect(stdout).toContain('PASS: claude branded workspace');
     console.info(stdout);
   }, 190_000);
 });

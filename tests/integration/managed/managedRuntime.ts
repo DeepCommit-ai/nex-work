@@ -25,7 +25,7 @@ writeFileSync(
   'departments:\n  default:\n    key: sk-local-managed-gateway-probe\n'
 );
 const config = readFileSync('../cynapse/config/departments.yaml', 'utf8')
-  .replaceAll('~/.nexwork-claude', path.join(root, 'claude-profile'))
+  .replaceAll('~/.nexwork-runtime', path.join(root, '.nexwork-runtime'))
   .replace(/^(\s+base_url:).*$/gm, '$1 http://127.0.0.1:9');
 writeFileSync(path.join(root, 'departments.yaml'), config);
 const children: ChildProcess[] = [];
@@ -106,6 +106,7 @@ try {
         ...process.env,
         ...prepareNexworkAssistants(dataDir),
         AIONUI_BUILTIN_SKILLS_PATH: skillsRoot,
+        NEXWORK_WORKSPACE_PREFIX: 'nexwork',
       },
       /AIONCORE_LISTENING .*?"port":(\d+)/,
       name
@@ -128,7 +129,7 @@ try {
       command_override: path.resolve(
         `resources/bundled-claude/${process.platform}-${process.arch}/claude${process.platform === 'win32' ? '.exe' : ''}`
       ),
-      env_override: [{ name: 'CLAUDE_CONFIG_DIR', value: path.join(root, 'claude-profile') }],
+      env_override: [{ name: 'CLAUDE_CONFIG_DIR', value: path.join(root, '.nexwork-runtime') }],
     });
     const service = new ManagedAgentService({
       backend: api,

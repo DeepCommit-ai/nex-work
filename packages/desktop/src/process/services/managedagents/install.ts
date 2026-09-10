@@ -6,7 +6,7 @@ import type { IMcpServer } from '@/common/config/storage';
 import type { DeptConfig } from '@/common/deptconfig/types';
 import type { ManagedCatalog } from '@/common/deptconfig/catalog';
 import { MANAGED_BUTLER_ID, MANAGED_DEFAULT_ID } from '@/common/deptconfig/catalog';
-import { buildEnvOverride, expandLeadingTilde } from '@/common/gateway/provisionGateway';
+import { buildEnvOverride, resolveNexworkProfilePath } from '@/common/gateway/provisionGateway';
 import { buildProvenanceEnvValue } from '@/common/deptconfig/client';
 import type { EnvEntry } from '@/common/gateway/types';
 import i18nConfig from '@/common/config/i18n-config.json';
@@ -65,10 +65,10 @@ export async function provisionGateway(cfg: DeptConfig, options: InstallOptions,
     '/api/agents/2d23ff1c/overrides'
   );
   const existing = overrides.env_override ?? [];
-  const configDir = expandLeadingTilde(
+  const configDir = resolveNexworkProfilePath(
     gateway.config_dir ||
       existing.find((v) => v.name === 'CLAUDE_CONFIG_DIR')?.value ||
-      path.join(os.homedir(), '.nexwork-claude'),
+      path.join(os.homedir(), '.nexwork-runtime'),
     os.homedir()
   );
   (options.prepareClaude ?? prepareNexworkClaudeProfile)(configDir);

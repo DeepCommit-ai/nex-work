@@ -187,3 +187,17 @@ describe('searchStore cancel', () => {
     expect(getSearchSnapshot().hits).toEqual([]);
   });
 });
+
+it('reports only visible search matches in the result count', async () => {
+  const { port, calls } = makePort();
+  configureSearchStore(port);
+  startSearch(OWNER, ROOTS, 'report');
+  applySearchMatch({
+    search_id: calls[0].id,
+    matches: [hit('report.docx'), hit('.claude/report.md'), hit('.aionrs/report.md')],
+  });
+  calls[0].resolve({ limit_reached: false, total: 3 });
+  await Promise.resolve();
+  expect(getSearchSnapshot().total).toBe(1);
+  expect(getSearchSnapshot().hits.map((item) => item.name)).toEqual(['report.docx']);
+});

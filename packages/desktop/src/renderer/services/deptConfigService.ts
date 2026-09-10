@@ -35,7 +35,7 @@ import { buildProvenanceEnvValue, fetchDeptConfig, postReport, toReportBody } fr
 import { callDeptSkills } from '@/common/deptconfig/skillsChannel';
 import type { ApplyReport, DeptConfig } from '@/common/deptconfig/types';
 import type { ManagedSyncErrorCode } from '@/common/deptconfig/catalog';
-import { buildEnvOverride, expandLeadingTilde } from '@/common/gateway/provisionGateway';
+import { buildEnvOverride, resolveNexworkProfilePath } from '@/common/gateway/provisionGateway';
 import { GATEWAY_ENV_CONFIG_DIR } from '@/common/gateway/types';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import type { EnvEntry } from '@/common/gateway/types';
@@ -166,7 +166,7 @@ const executeWrite = (w: PlannedWrite, deptKey: string): Promise<unknown> => {
 /**
  * 后端宿主机的 home 目录——`~` 展开的基准。
  *
- * 波浪号展开是 shell 的功能;env 原样传给被 spawn 的 CLI,`~/.nexwork-claude`
+ * 波浪号展开是 shell 的功能;env 原样传给被 spawn 的 CLI,`~/.nexwork-runtime`
  * 会被当作 cwd 相对路径,在每个 workspace 里长出字面量 `~/` 目录(实测)。
  * agent 由后端 spawn,所以基准必须是**后端宿主机**的 home:
  * - 桌面模式:Electron 主进程的 app.getPath('home'),权威。
@@ -211,7 +211,7 @@ const provisionGatewayFor = async (
   const provenance = buildProvenanceEnvValue({ dept: cfg.dept, configVersion: cfg.version, clientId });
   // `~` 在这里展开,不在 buildEnvOverride 里:展开需要 IPC 问 home,纯逻辑层不做 IPC。
   const home = await resolveBackendHome();
-  const configDir = expandLeadingTilde(gw.config_dir ?? '', home);
+  const configDir = gw.config_dir ? resolveNexworkProfilePath(gw.config_dir, home) : '';
   if ((gw.config_dir ?? '').trim().startsWith('~') && configDir.startsWith('~')) {
     failures.push('CLAUDE_CONFIG_DIR 展开失败:拿不到后端宿主机 home,`~` 前缀按原样写入(隔离目录会落在 workspace 里)');
   }
@@ -251,7 +251,7 @@ const provisionGatewayFor = async (
       const effectiveConfigDir =
         agentId === CLAUDE_AGENT_ID
           ? configDir ||
-            expandLeadingTilde(
+            resolveNexworkProfilePath(
               existing.find((entry) => entry.name === GATEWAY_ENV_CONFIG_DIR)?.value || DEFAULT_CONFIG_DIR,
               home
             )
@@ -344,7 +344,7 @@ export const applyDeptConfig = async (serverUrl: string, deptKey: string): Promi
 
 /** Claude Code 的内置 agent id(跨安装稳定,实测过全新实例)。 */
 const CLAUDE_AGENT_ID = '2d23ff1c';
-const DEFAULT_CONFIG_DIR = '~/.nexwork-claude';
+const DEFAULT_CONFIG_DIR = '~/.nexwork-runtime';
 
 /**
  * 基线隔离:没录入企业接入的机器,也不许 Claude Code 用员工个人的 ~/.claude。
@@ -359,20 +359,15 @@ const ensureBaselineIsolation = async (): Promise<void> => {
     const overrides = await acpConversation.getAgentOverrides.invoke({ id: CLAUDE_AGENT_ID });
     const env: EnvEntry[] = overrides?.env_override ?? [];
     const existing = env.find((e) => e.name === GATEWAY_ENV_CONFIG_DIR)?.value?.trim() ?? '';
-    // 已有绝对路径(不管谁设的)绝不动;但残留的 `~` 前缀值是本函数旧版写坏的,
-    // 留着它每个 workspace 都会长出字面量 `~/` 目录——必须迁移。
-    if (existing && !existing.startsWith('~')) {
-      await prepareClaudeOfficeRole(existing);
-      return;
-    }
-    const home = await resolveBackendHome();
-    const value = expandLeadingTilde(existing || DEFAULT_CONFIG_DIR, home);
+    // Preserve custom profiles while migrating the former product-owned default.
+    const home = existing && !existing.startsWith('~') ? '' : await resolveBackendHome();
+    const value = resolveNexworkProfilePath(existing || DEFAULT_CONFIG_DIR, home);
     if (value.startsWith('~')) {
       console.warn('[enterprise] 基线隔离跳过:拿不到后端宿主机 home,不写 `~` 前缀路径');
       return;
     }
-    if (value === existing) return;
     await prepareClaudeOfficeRole(value);
+    if (value === existing) return;
     await acpConversation.setAgentOverrides.invoke({
       id: CLAUDE_AGENT_ID,
       // 同上：整体替换语义，command_override 带过，别把受管 claude 的钉子抹了。

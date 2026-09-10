@@ -24,7 +24,7 @@
 
 import { useSyncExternalStore } from 'react';
 
-import type { DirRef } from '../explorerModel';
+import { isInternalAgentPath, type DirRef } from '../explorerModel';
 import type { RpcId } from '../monitorClient';
 import { rankSearchHits, type SearchHit, searchHitKey } from './searchModel';
 
@@ -180,7 +180,7 @@ export const startSearch = (nextOwner: string, roots: DirRef[], nextQuery: strin
       activeSearchId = null;
       status = 'done';
       limitReached = Boolean(res?.limit_reached);
-      total = typeof res?.total === 'number' ? res.total : rawHits.length;
+      total = rawHits.length;
       publish();
     },
     (err: unknown) => {
@@ -201,6 +201,7 @@ export const applySearchMatch = (params: SearchMatchParams): void => {
   if (activeSearchId === null || params.search_id !== activeSearchId) return; // stale/unknown
   let changed = false;
   for (const hit of params.matches ?? []) {
+    if (isInternalAgentPath(hit.relative_path)) continue;
     const key = searchHitKey(hit);
     if (seen.has(key)) continue;
     seen.add(key);

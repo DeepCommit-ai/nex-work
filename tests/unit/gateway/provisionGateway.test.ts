@@ -256,7 +256,7 @@ describe('buildEnvOverride — provenance header env (ANTHROPIC_CUSTOM_HEADERS)'
 
 describe('expandLeadingTilde', () => {
   it('expands ~ and ~/ against the given home', () => {
-    expect(expandLeadingTilde('~/.nexwork-claude', '/Users/staff')).toBe('/Users/staff/.nexwork-claude');
+    expect(expandLeadingTilde('~/.nexwork-runtime', '/Users/staff')).toBe('/Users/staff/.nexwork-runtime');
     expect(expandLeadingTilde('~', '/Users/staff')).toBe('/Users/staff');
     expect(expandLeadingTilde('~/.x', '/Users/staff/')).toBe('/Users/staff/.x');
   });
@@ -269,7 +269,22 @@ describe('expandLeadingTilde', () => {
   });
 
   it('keeps the tilde when home is unknown so the caller can surface it', () => {
-    expect(expandLeadingTilde('~/.nexwork-claude', '')).toBe('~/.nexwork-claude');
-    expect(expandLeadingTilde('~/.nexwork-claude', '  ')).toBe('~/.nexwork-claude');
+    expect(expandLeadingTilde('~/.nexwork-runtime', '')).toBe('~/.nexwork-runtime');
+    expect(expandLeadingTilde('~/.nexwork-runtime', '  ')).toBe('~/.nexwork-runtime');
+  });
+});
+
+describe('NexWork profile path', () => {
+  it('migrates the old default on both desktop platforms', async () => {
+    const { resolveNexworkProfilePath } = await import('@/common/gateway/provisionGateway');
+    expect(resolveNexworkProfilePath('~/.nexwork-claude', '/Users/staff')).toBe('/Users/staff/.nexwork-runtime');
+    expect(resolveNexworkProfilePath('C:\\Users\\staff\\.nexwork-claude', '')).toBe(
+      'C:\\Users\\staff\\.nexwork-runtime'
+    );
+  });
+  it('preserves custom profiles and does not invent a home when it is unavailable', async () => {
+    const { resolveNexworkProfilePath } = await import('@/common/gateway/provisionGateway');
+    expect(resolveNexworkProfilePath('/company/custom-profile', '/home/staff')).toBe('/company/custom-profile');
+    expect(resolveNexworkProfilePath('~/.nexwork-claude', '')).toBe('~/.nexwork-runtime');
   });
 });

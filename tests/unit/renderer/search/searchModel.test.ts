@@ -83,3 +83,11 @@ describe('searchHitKey', () => {
     expect(searchHitKey(hit('p1', 'a.ts'))).toBe(searchHitKey(hit('p1', 'a.ts')));
   });
 });
+
+it('does not reveal internal agent files through search or mention results', () => {
+  const visible = [hit('p', '.gitignore'), hit('p', '.claude-notes/report.docx')];
+  const hidden = [hit('p', '.claude/skills/SKILL.md'), hit('p', 'nested/.aionrs/skills/SKILL.md')];
+  expect(rankSearchHits([...hidden, ...visible], '')).toEqual(expect.arrayContaining(visible));
+  expect(rankSearchHits([...hidden, ...visible], '')).toHaveLength(2);
+  expect(rankSearchHits(hidden, 'SKILL')).toEqual([]);
+});
