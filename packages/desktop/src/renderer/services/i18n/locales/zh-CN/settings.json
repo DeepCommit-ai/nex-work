@@ -1450,7 +1450,7 @@
       "pushLabel": "实时推送",
       "version": "已安装版本：{{version}}",
       "checked": "上次检查：{{at}}",
-      "schedule": "每 5 分钟检查一次。更新用于新会话，已有会话保留原版本。",
+      "schedule": "每 5 分钟检查更新；更新用于新会话，已有会话保留原版本",
       "failed": "同步需要处理，请检查连接后重试。",
       "sync": "立即同步",
       "phase": {
@@ -1461,9 +1461,59 @@
         "unauthorized": "密钥已失效"
       },
       "push": {
-        "disconnected": "定时检查可用",
+        "disconnected": "尚未连接",
         "connecting": "正在连接",
         "connected": "已连接"
+      }
+    },
+    "title": "企业接入",
+    "intro": "输入管理员提供的服务地址和部门密钥，连接后自动获取并更新助手",
+    "serverUrl": "配置服务地址",
+    "serverUrlRequired": "请填写配置服务地址",
+    "deptKey": "部门密钥",
+    "keyRequired": "请填写部门密钥",
+    "keyKeep": "已保存，留空沿用原密钥",
+    "keyPlaceholder": "向管理员领取",
+    "apply": "连接并获取助手",
+    "connection": {
+      "title": "当前连接",
+      "department": "所属部门",
+      "departmentId": "部门标识：{{dept}}",
+      "notConfigured": "尚未配置",
+      "unverified": "连接验证后显示",
+      "stale": "当前显示上次验证的部门信息，连接恢复后会重新确认",
+      "check": "检查连接",
+      "change": "更换连接",
+      "details": "技术详情",
+      "verifiedAt": "上次验证成功：{{at}}",
+      "errorCode": "错误代码：{{code}}",
+      "settings": "连接设置",
+      "saved": "连接成功，助手已更新",
+      "addressPlaceholder": "例如 https://work.example.com",
+      "statusUnavailable": "暂时无法读取连接状态，请重新打开此页",
+      "state": {
+        "unconfigured": "尚未连接",
+        "checking": "正在检查连接",
+        "connected": "已连接",
+        "unreachable": "暂时无法连接",
+        "unauthorized": "部门密钥已失效",
+        "error": "连接异常"
+      },
+      "updates": {
+        "updating": "正在更新助手",
+        "failed": "助手更新失败",
+        "ready": "助手已更新",
+        "pending": "等待获取助手"
+      },
+      "errors": {
+        "invalidConnection": "请输入有效的 http 或 https 服务地址，不包含账号、密码或查询参数",
+        "invalidKey": "部门密钥无效或已失效，请向管理员确认后重新输入",
+        "serviceUnreachable": "暂时无法连接服务，请检查网络和服务地址后重试",
+        "serviceError": "服务暂时无法处理请求，请稍后重试或联系管理员",
+        "invalidConfig": "后台提供的助手配置有问题，请联系管理员",
+        "updateFailed": "助手更新未完成，请检查连接后重试",
+        "reportFailed": "助手已安装，但更新结果暂未成功回传，请稍后检查连接",
+        "configurationDrift": "本地配置与后台记录不一致，请检查连接以重新获取配置"
       }
     }
   }

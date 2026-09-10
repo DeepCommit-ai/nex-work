@@ -1460,9 +1460,59 @@
         "unauthorized": "Clave no válida"
       },
       "push": {
-        "disconnected": "Comprobación periódica disponible",
+        "disconnected": "Sin conexión",
         "connecting": "Conectando",
         "connected": "Conectado"
+      }
+    },
+    "title": "Conexión empresarial",
+    "intro": "Introduce la dirección del servicio y la clave del departamento proporcionadas por tu administrador para recibir asistentes y actualizaciones automáticamente",
+    "serverUrl": "Dirección del servicio de configuración",
+    "serverUrlRequired": "Introduce la dirección del servicio",
+    "deptKey": "Clave del departamento",
+    "keyRequired": "Introduce la clave del departamento",
+    "keyKeep": "Guardada; deja en blanco para conservar la clave",
+    "keyPlaceholder": "Solicítala a tu administrador",
+    "apply": "Conectar y obtener asistentes",
+    "connection": {
+      "title": "Conexión actual",
+      "department": "Departamento",
+      "departmentId": "ID del departamento: {{dept}}",
+      "notConfigured": "Sin configurar",
+      "unverified": "Se muestra tras la verificación",
+      "stale": "Se muestra el último departamento verificado; se confirmará cuando se restablezca la conexión",
+      "check": "Comprobar conexión",
+      "change": "Cambiar conexión",
+      "details": "Detalles técnicos",
+      "verifiedAt": "Última verificación correcta: {{at}}",
+      "errorCode": "Código de error: {{code}}",
+      "settings": "Configuración de conexión",
+      "saved": "Conectado y asistentes actualizados",
+      "addressPlaceholder": "Por ejemplo https://work.example.com",
+      "statusUnavailable": "Estado de conexión no disponible; vuelve a abrir esta página",
+      "state": {
+        "unconfigured": "Sin conexión",
+        "checking": "Comprobando conexión",
+        "connected": "Conectado",
+        "unreachable": "Temporalmente inaccesible",
+        "unauthorized": "Clave del departamento caducada o revocada",
+        "error": "Problema de conexión"
+      },
+      "updates": {
+        "updating": "Actualizando asistentes",
+        "failed": "Error al actualizar asistentes",
+        "ready": "Asistentes actualizados",
+        "pending": "Esperando asistentes"
+      },
+      "errors": {
+        "invalidConnection": "Introduce una dirección http o https válida sin credenciales ni parámetros de consulta",
+        "invalidKey": "La clave del departamento no es válida o está revocada; consulta al administrador",
+        "serviceUnreachable": "No se puede acceder al servicio; comprueba la red y la dirección y vuelve a intentarlo",
+        "serviceError": "El servicio no puede procesar la solicitud; inténtalo más tarde o contacta al administrador",
+        "invalidConfig": "La configuración publicada no es válida; contacta al administrador",
+        "updateFailed": "La actualización no terminó; comprueba la conexión y vuelve a intentarlo",
+        "reportFailed": "Asistentes instalados, pero no se pudo enviar el informe; comprueba la conexión más tarde",
+        "configurationDrift": "La configuración local difiere del servidor; comprueba la conexión para obtenerla de nuevo"
       }
     }
   }

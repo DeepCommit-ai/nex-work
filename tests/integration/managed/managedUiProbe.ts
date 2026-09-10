@@ -32,14 +32,19 @@ export async function runManagedUiProbe(directory: string, serverUrl: string, de
     await page.evaluate(() => {
       location.hash = '/settings/enterprise';
     });
-    await page.getByPlaceholder('http://cynapse.internal:54001').fill(serverUrl);
+    await page.getByPlaceholder('例如 https://work.example.com').fill(serverUrl);
     await page.getByPlaceholder('向管理员领取').fill(deptKey);
-    await page.getByRole('button', { name: '连接并应用配置', exact: true }).click();
+    await page.getByRole('button', { name: '连接并获取助手', exact: true }).click();
+    await expect(page.getByText('部门标识：default', { exact: true })).toBeVisible({ timeout: 45000 });
+    await expect(page.getByText('助手已更新', { exact: true })).toBeVisible();
+    await expect(page.getByText(serverUrl, { exact: true })).toBeVisible();
+    await expect(page.getByText('已安装版本：', { exact: false })).toBeHidden();
+    await page.getByText('技术详情', { exact: true }).click();
     await expect(page.getByText('已安装版本：', { exact: false })).toBeVisible({ timeout: 45000 });
     await expect(page.getByText('实时推送：已连接', { exact: true })).toBeVisible({ timeout: 15000 });
     await page.screenshot({ path: path.join(directory, 'enterprise-sync.png') });
-    await page.getByRole('button', { name: '立即同步', exact: true }).click();
-    await expect(page.getByText('同步状态：已同步', { exact: true })).toBeVisible({ timeout: 15000 });
+    await page.getByRole('button', { name: '检查连接', exact: true }).click();
+    await expect(page.getByText('助手已更新', { exact: true })).toBeVisible({ timeout: 15000 });
     await page.evaluate(() => {
       location.hash = '/guid';
     });

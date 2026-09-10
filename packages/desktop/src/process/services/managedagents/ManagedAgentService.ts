@@ -7,6 +7,8 @@ import { validateConfig } from '@/common/deptconfig/applyConfig';
 import {
   parseManagedCatalog,
   type CatalogRelease,
+  type ManagedConnection,
+  type ManagedSyncErrorCode,
   type ManagedSyncResult,
   type ManagedSyncStatus,
 } from '@/common/deptconfig/catalog';
@@ -30,9 +32,29 @@ type Dependencies = {
 };
 
 class AuthenticationError extends Error {}
+class ConnectionError extends Error {
+  constructor(
+    readonly code: ManagedSyncErrorCode,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+const errorCode = (error: unknown): ManagedSyncErrorCode =>
+  error instanceof AuthenticationError
+    ? 'INVALID_KEY'
+    : error instanceof ConnectionError
+      ? error.code
+      : 'UPDATE_FAILED';
 
 function normalizeCredentials(input: Credentials): Credentials {
-  const url = new URL(input.serverUrl.trim());
+  let url: URL;
+  try {
+    url = new URL(input.serverUrl.trim());
+  } catch {
+    throw new ConnectionError('INVALID_CONNECTION', 'Invalid configuration connection');
+  }
   if (
     !['http:', 'https:'].includes(url.protocol) ||
     url.username ||
@@ -41,12 +63,17 @@ function normalizeCredentials(input: Credentials): Credentials {
     url.hash ||
     !input.deptKey.trim()
   )
-    throw new Error('Invalid configuration connection');
+    throw new ConnectionError('INVALID_CONNECTION', 'Invalid configuration connection');
   return { serverUrl: url.toString().replace(/\/+$/, ''), deptKey: input.deptKey.trim() };
 }
 
 export class ManagedAgentService {
-  private status: ManagedSyncStatus = { phase: 'idle', push: 'disconnected', assistantIds: [] };
+  private status: ManagedSyncStatus = {
+    phase: 'idle',
+    push: 'disconnected',
+    assistantIds: [],
+    connection: { state: 'unconfigured' },
+  };
   private credentials?: Credentials;
   private task?: Promise<void>;
   private connection: Promise<unknown> = Promise.resolve();
@@ -69,12 +96,29 @@ export class ManagedAgentService {
   }
 
   snapshot(): ManagedSyncStatus {
-    return { ...this.status, assistantIds: [...this.status.assistantIds] };
+    return { ...this.status, connection: { ...this.status.connection! }, assistantIds: [...this.status.assistantIds] };
   }
 
   private emit(patch: Partial<ManagedSyncStatus>): void {
     this.status = { ...this.status, ...patch };
     this.deps.onStatus?.(this.snapshot());
+  }
+
+  private emitConnection(patch: Partial<ManagedConnection>): void {
+    this.emit({ connection: { ...this.status.connection!, ...patch } });
+  }
+
+  private connectionFailed(error: unknown): void {
+    const code = errorCode(error);
+    if (code === 'INVALID_KEY') this.emitConnection({ state: 'unauthorized' });
+    else if (code === 'SERVICE_UNREACHABLE') this.emitConnection({ state: 'unreachable' });
+    else if (code === 'SERVICE_ERROR' || code === 'INVALID_CONFIG') this.emitConnection({ state: 'error' });
+  }
+
+  private async verifyIdentity(cfg: DeptConfig): Promise<void> {
+    const identity = { serverUrl: this.credentials!.serverUrl, dept: cfg.dept, verifiedAt: Date.now() };
+    this.emitConnection({ ...identity, state: 'connected' });
+    await this.deps.backend('PUT', '/api/settings/client', { 'enterprise.connectionIdentity': identity });
   }
 
   /** Restore published skills before connecting; no credentials are stored in the catalog cache. */
@@ -111,7 +155,7 @@ export class ManagedAgentService {
     }
     const settings = await this.deps.backend<Record<string, unknown>>(
       'GET',
-      '/api/settings/client?keys=enterprise.serverUrl,enterprise.deptKey,enterprise.clientId,enterprise.applyState'
+      '/api/settings/client?keys=enterprise.serverUrl,enterprise.deptKey,enterprise.clientId,enterprise.applyState,enterprise.connectionIdentity'
     );
     if ((settings['enterprise.applyState'] as { phase?: string } | undefined)?.phase === 'applying')
       this.safeToCreate = false;
@@ -123,6 +167,17 @@ export class ManagedAgentService {
       this.credentials = normalizeCredentials({
         serverUrl: settings['enterprise.serverUrl'],
         deptKey: settings['enterprise.deptKey'],
+      });
+      const identity = settings['enterprise.connectionIdentity'] as Partial<ManagedConnection> | undefined;
+      this.emitConnection({
+        state: 'checking',
+        serverUrl: this.credentials.serverUrl,
+        ...(identity?.serverUrl === this.credentials.serverUrl &&
+        typeof identity.dept === 'string' &&
+        typeof identity.verifiedAt === 'number' &&
+        Number.isFinite(identity.verifiedAt)
+          ? { dept: identity.dept, verifiedAt: identity.verifiedAt }
+          : {}),
       });
       await this.sync(true);
       if (this.status.phase !== 'unauthorized') this.startWatchers();
@@ -140,27 +195,36 @@ export class ManagedAgentService {
     try {
       const candidate = normalizeCredentials(input);
       // Authenticate and validate before retiring the old connection.
-      await this.getConfig(candidate);
+      const cfg = await this.getConfig(candidate);
       await this.task?.catch(() => {});
-      this.stopWatchers();
-      this.credentials = candidate;
-      this.stopped = false;
-      this.etag = undefined;
       if (!this.clientId) this.clientId = randomUUID();
+      const identity = { serverUrl: candidate.serverUrl, dept: cfg.dept, verifiedAt: Date.now() };
       await this.deps.backend('PUT', '/api/settings/client', {
         'enterprise.serverUrl': candidate.serverUrl,
         'enterprise.deptKey': candidate.deptKey,
         'enterprise.clientId': this.clientId,
+        'enterprise.connectionIdentity': identity,
       });
+      this.stopWatchers();
+      this.credentials = candidate;
+      this.stopped = false;
+      this.etag = undefined;
+      this.emit({ connection: { ...identity, state: 'connected' }, error: undefined, errorCode: undefined });
       const result = await this.sync(true);
       if (this.status.phase !== 'unauthorized') this.startWatchers();
       return result;
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Configuration connection failed';
       // A rejected replacement must not stop the existing valid connection.
-      if (!this.credentials)
-        this.emit({ phase: error instanceof AuthenticationError ? 'unauthorized' : 'error', error: detail });
-      return { success: false, status: this.snapshot(), error: detail };
+      if (!this.credentials) {
+        this.connectionFailed(error);
+        this.emit({
+          phase: error instanceof AuthenticationError ? 'unauthorized' : 'error',
+          error: detail,
+          errorCode: errorCode(error),
+        });
+      }
+      return { success: false, status: this.snapshot(), error: detail, errorCode: errorCode(error) };
     }
   }
 
@@ -168,6 +232,7 @@ export class ManagedAgentService {
   async sync(force = false): Promise<ManagedSyncResult> {
     if (!this.credentials || this.stopped)
       return { success: false, status: this.snapshot(), error: 'Configuration service is not connected' };
+    const retryUnauthorized = this.status.phase === 'unauthorized';
     this.pending = true;
     this.force ||= force;
     if (!this.task) {
@@ -180,9 +245,11 @@ export class ManagedAgentService {
             await this.synchronize(forced);
           } catch (error) {
             const unauthorized = error instanceof AuthenticationError;
+            this.connectionFailed(error);
             this.emit({
               phase: unauthorized ? 'unauthorized' : 'error',
               error: error instanceof Error ? error.message : 'Catalog synchronization failed',
+              errorCode: errorCode(error),
             });
             if (unauthorized) {
               this.stopWatchers();
@@ -196,10 +263,12 @@ export class ManagedAgentService {
       });
     }
     await this.task;
+    if (retryUnauthorized && this.status.phase === 'ready' && !this.stopped) this.startWatchers();
     return {
       success: this.status.phase === 'ready',
       status: this.snapshot(),
       ...(this.status.error ? { error: this.status.error } : {}),
+      ...(this.status.errorCode ? { errorCode: this.status.errorCode } : {}),
     };
   }
 
@@ -227,42 +296,74 @@ export class ManagedAgentService {
   }
 
   startupFailed(): void {
-    this.emit({ phase: 'error', error: 'Managed configuration could not be restored; synchronize to recover' });
+    this.emitConnection({ state: 'error' });
+    this.emit({
+      phase: 'error',
+      error: 'Managed configuration could not be restored; synchronize to recover',
+      errorCode: 'UPDATE_FAILED',
+    });
   }
 
   private async remote<T>(credentials: Credentials, route: string, method = 'GET', body?: unknown): Promise<T> {
-    const response = await this.fetch(`${credentials.serverUrl}${route}`, {
-      method,
-      headers: { 'X-Cynapse-Key': credentials.deptKey, 'Content-Type': 'application/json' },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(30_000),
-    });
+    let response: Response;
+    try {
+      response = await this.fetch(`${credentials.serverUrl}${route}`, {
+        method,
+        headers: { 'X-Cynapse-Key': credentials.deptKey, 'Content-Type': 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch {
+      throw new ConnectionError('SERVICE_UNREACHABLE', 'Configuration service is unreachable');
+    }
     if (response.status === 401) throw new AuthenticationError('Configuration credential is invalid or revoked');
-    if (!response.ok) throw new Error(`Configuration service ${route} failed (${response.status})`);
-    const text = await response.text();
-    if (Buffer.byteLength(text) > 3 * 1024 * 1024) throw new Error('Configuration response is too large');
-    return JSON.parse(text) as T;
+    if (!response.ok)
+      throw new ConnectionError('SERVICE_ERROR', `Configuration service ${route} failed (${response.status})`);
+    let text: string;
+    try {
+      text = await response.text();
+    } catch {
+      throw new ConnectionError('SERVICE_UNREACHABLE', 'Configuration response was interrupted');
+    }
+    try {
+      if (Buffer.byteLength(text) > 3 * 1024 * 1024) throw new Error('Configuration response is too large');
+      return JSON.parse(text) as T;
+    } catch {
+      throw new ConnectionError('INVALID_CONFIG', 'Configuration response is invalid');
+    }
   }
 
   private async getConfig(credentials: Credentials): Promise<DeptConfig> {
     const cfg = await this.remote<DeptConfig>(credentials, '/config');
-    if (!cfg.agent_catalog) throw new Error('The configuration service has not enabled managed agent publication');
-    const errors = validateConfig(cfg);
-    if (errors.length) throw new Error('The published configuration is invalid');
-    parseManagedCatalog(cfg.agent_catalog);
-    if (sha256(cfg.agent_catalog.content) !== cfg.agent_catalog.digest) throw new Error('Catalog digest mismatch');
+    try {
+      if (typeof cfg?.dept !== 'string' || !cfg.dept.trim()) throw new Error('Missing authenticated department');
+      if (!cfg.agent_catalog) throw new Error('The configuration service has not enabled managed agent publication');
+      const errors = validateConfig(cfg);
+      if (errors.length) throw new Error('The published configuration is invalid');
+      parseManagedCatalog(cfg.agent_catalog);
+      if (sha256(cfg.agent_catalog.content) !== cfg.agent_catalog.digest) throw new Error('Catalog digest mismatch');
+    } catch {
+      throw new ConnectionError('INVALID_CONFIG', 'The published configuration is invalid');
+    }
     return cfg;
   }
 
   private async synchronize(force: boolean): Promise<void> {
     const credentials = this.credentials!;
-    const head = await this.remote<{ version: string; etag: string }>(credentials, '/config/version');
+    this.emitConnection({ state: 'checking' });
     this.emit({ checkedAt: Date.now() });
-    if (!force && this.etag === head.etag && this.status.phase === 'ready') return;
+    const head = await this.remote<{ version: string; etag: string }>(credentials, '/config/version');
+    if (typeof head?.version !== 'string' || typeof head.etag !== 'string')
+      throw new ConnectionError('INVALID_CONFIG', 'Invalid configuration version');
+    if (!force && this.etag === head.etag && this.status.phase === 'ready' && this.status.connection?.dept) {
+      this.emitConnection({ state: 'connected', verifiedAt: Date.now() });
+      return;
+    }
     const cfg = await this.getConfig(credentials);
+    await this.verifyIdentity(cfg);
     const catalog = parseManagedCatalog(cfg.agent_catalog!);
     await this.leases.wait();
-    this.emit({ phase: 'syncing', error: undefined });
+    this.emit({ phase: 'syncing', error: undefined, errorCode: undefined });
     await this.deps.backend('PUT', '/api/settings/client', {
       'enterprise.applyState': { phase: 'applying', version: cfg.version, at: Date.now() },
     });
@@ -314,6 +415,7 @@ export class ManagedAgentService {
         ])
       ),
       error: undefined,
+      errorCode: undefined,
     });
     try {
       const actual = await this.deps.backend<Assistant[]>('GET', '/api/assistants');
@@ -327,10 +429,15 @@ export class ManagedAgentService {
         catalog_revision: cfg.agent_catalog!.revision,
         failures: [],
       });
-      if (!report.ok) this.emit({ error: 'Catalog installed; server comparison reported configuration drift' });
+      if (!report.ok)
+        this.emit({
+          error: 'Catalog installed; server comparison reported configuration drift',
+          errorCode: 'CONFIGURATION_DRIFT',
+        });
     } catch (error) {
       if (error instanceof AuthenticationError) throw error;
-      this.emit({ error: 'Catalog installed; reporting its status failed' });
+      this.connectionFailed(error);
+      this.emit({ error: 'Catalog installed; reporting its status failed', errorCode: 'REPORT_FAILED' });
     }
   }
 
@@ -358,6 +465,7 @@ export class ManagedAgentService {
     this.events = controller;
     this.emit({ push: 'connecting' });
     void (async () => {
+      let wasConnected = false;
       const connectTimeout = setTimeout(() => controller.abort(), 30_000);
       try {
         const response = await this.fetch(`${credentials.serverUrl}/registry/events`, {
@@ -365,23 +473,28 @@ export class ManagedAgentService {
           signal: controller.signal,
         });
         clearTimeout(connectTimeout);
+        if (this.events !== controller) return;
         if (response.status === 401) throw new AuthenticationError('Configuration credential is invalid or revoked');
         if (!response.ok) throw new Error(`Catalog events failed (${response.status})`);
         this.emit({ push: 'connected' });
+        wasConnected = true;
         void this.sync();
         await readCatalogEvents(response, controller.signal, (event) => {
           if (event === 'auth_revoked') throw new AuthenticationError('Configuration credential was revoked');
           if (event === 'catalog_changed') void this.sync();
         });
       } catch (error) {
-        if (error instanceof AuthenticationError) {
-          this.emit({ phase: 'unauthorized', error: error.message });
+        if (error instanceof AuthenticationError && this.events === controller) {
+          this.emitConnection({ state: 'unauthorized' });
+          this.emit({ phase: 'unauthorized', error: error.message, errorCode: 'INVALID_KEY' });
           this.stopWatchers();
         }
       } finally {
         clearTimeout(connectTimeout);
         if (this.events === controller && !this.stopped && this.status.phase !== 'unauthorized') {
           this.emit({ push: 'disconnected' });
+          // Check the configuration endpoint before declaring the whole service unreachable.
+          if (wasConnected) void this.sync();
           this.reconnect = setTimeout(
             () => this.openEvents(Math.min(backoff * 2, 30_000)),
             backoff * (0.8 + (this.deps.random ?? Math.random)() * 0.4)

@@ -1451,7 +1451,7 @@
       "pushLabel": "即時推送",
       "version": "已安裝版本：{{version}}",
       "checked": "上次檢查：{{at}}",
-      "schedule": "每 5 分鐘檢查一次。更新用於新對話，既有對話保留原版本。",
+      "schedule": "每 5 分鐘檢查更新；更新用於新對話，既有對話保留原版本",
       "failed": "同步需要處理，請檢查連線後重試。",
       "sync": "立即同步",
       "phase": {
@@ -1462,9 +1462,59 @@
         "unauthorized": "金鑰已失效"
       },
       "push": {
-        "disconnected": "定時檢查可用",
+        "disconnected": "尚未連線",
         "connecting": "正在連線",
         "connected": "已連線"
+      }
+    },
+    "title": "企業連線",
+    "intro": "輸入管理員提供的服務位址和部門金鑰，連線後自動取得並更新助手",
+    "serverUrl": "設定服務位址",
+    "serverUrlRequired": "請填寫設定服務位址",
+    "deptKey": "部門金鑰",
+    "keyRequired": "請填寫部門金鑰",
+    "keyKeep": "已儲存，留空沿用原金鑰",
+    "keyPlaceholder": "向管理員索取",
+    "apply": "連線並取得助手",
+    "connection": {
+      "title": "目前連線",
+      "department": "所屬部門",
+      "departmentId": "部門識別碼：{{dept}}",
+      "notConfigured": "尚未設定",
+      "unverified": "連線驗證後顯示",
+      "stale": "目前顯示上次驗證的部門資訊，連線恢復後會重新確認",
+      "check": "檢查連線",
+      "change": "更換連線",
+      "details": "技術詳細資訊",
+      "verifiedAt": "上次驗證成功：{{at}}",
+      "errorCode": "錯誤代碼：{{code}}",
+      "settings": "連線設定",
+      "saved": "連線成功，助手已更新",
+      "addressPlaceholder": "例如 https://work.example.com",
+      "statusUnavailable": "暫時無法讀取連線狀態，請重新開啟此頁",
+      "state": {
+        "unconfigured": "尚未連線",
+        "checking": "正在檢查連線",
+        "connected": "已連線",
+        "unreachable": "暫時無法連線",
+        "unauthorized": "部門金鑰已失效",
+        "error": "連線異常"
+      },
+      "updates": {
+        "updating": "正在更新助手",
+        "failed": "助手更新失敗",
+        "ready": "助手已更新",
+        "pending": "等待取得助手"
+      },
+      "errors": {
+        "invalidConnection": "請輸入有效的 http 或 https 服務位址，不含帳號、密碼或查詢參數",
+        "invalidKey": "部門金鑰無效或已失效，請向管理員確認後重新輸入",
+        "serviceUnreachable": "暫時無法連線至服務，請檢查網路和服務位址後重試",
+        "serviceError": "服務暫時無法處理請求，請稍後重試或聯絡管理員",
+        "invalidConfig": "後台提供的助手設定有問題，請聯絡管理員",
+        "updateFailed": "助手更新未完成，請檢查連線後重試",
+        "reportFailed": "助手已安裝，但更新結果尚未成功回傳，請稍後檢查連線",
+        "configurationDrift": "本機設定與後台紀錄不一致，請檢查連線以重新取得設定"
       }
     }
   }

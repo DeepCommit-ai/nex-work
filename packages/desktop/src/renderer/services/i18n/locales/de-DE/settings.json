@@ -1460,9 +1460,59 @@
         "unauthorized": "Schlüssel ungültig"
       },
       "push": {
-        "disconnected": "Regelmäßige Prüfung verfügbar",
+        "disconnected": "Nicht verbunden",
         "connecting": "Verbindung wird hergestellt",
         "connected": "Verbunden"
+      }
+    },
+    "title": "Unternehmensverbindung",
+    "intro": "Geben Sie die Serviceadresse und den Abteilungsschlüssel Ihres Administrators ein, um Assistenten automatisch zu erhalten und zu aktualisieren",
+    "serverUrl": "Adresse des Konfigurationsdienstes",
+    "serverUrlRequired": "Geben Sie die Serviceadresse ein",
+    "deptKey": "Abteilungsschlüssel",
+    "keyRequired": "Geben Sie den Abteilungsschlüssel ein",
+    "keyKeep": "Gespeichert; leer lassen, um den Schlüssel beizubehalten",
+    "keyPlaceholder": "Vom Administrator erhältlich",
+    "apply": "Verbinden und Assistenten laden",
+    "connection": {
+      "title": "Aktuelle Verbindung",
+      "department": "Abteilung",
+      "departmentId": "Abteilungs-ID: {{dept}}",
+      "notConfigured": "Nicht konfiguriert",
+      "unverified": "Wird nach Prüfung angezeigt",
+      "stale": "Die zuletzt bestätigte Abteilung wird angezeigt und nach Wiederherstellung erneut geprüft",
+      "check": "Verbindung prüfen",
+      "change": "Verbindung ändern",
+      "details": "Technische Details",
+      "verifiedAt": "Zuletzt bestätigt: {{at}}",
+      "errorCode": "Fehlercode: {{code}}",
+      "settings": "Verbindungseinstellungen",
+      "saved": "Verbunden und Assistenten aktualisiert",
+      "addressPlaceholder": "Zum Beispiel https://work.example.com",
+      "statusUnavailable": "Verbindungsstatus nicht verfügbar; öffnen Sie diese Seite erneut",
+      "state": {
+        "unconfigured": "Nicht verbunden",
+        "checking": "Verbindung wird geprüft",
+        "connected": "Verbunden",
+        "unreachable": "Vorübergehend nicht erreichbar",
+        "unauthorized": "Abteilungsschlüssel abgelaufen oder widerrufen",
+        "error": "Verbindungsproblem"
+      },
+      "updates": {
+        "updating": "Assistenten werden aktualisiert",
+        "failed": "Aktualisierung fehlgeschlagen",
+        "ready": "Assistenten aktualisiert",
+        "pending": "Warten auf Assistenten"
+      },
+      "errors": {
+        "invalidConnection": "Geben Sie eine gültige http- oder https-Adresse ohne Zugangsdaten oder Abfrageparameter ein",
+        "invalidKey": "Der Abteilungsschlüssel ist ungültig oder widerrufen; wenden Sie sich an Ihren Administrator",
+        "serviceUnreachable": "Dienst nicht erreichbar; prüfen Sie Netzwerk und Serviceadresse und versuchen Sie es erneut",
+        "serviceError": "Der Dienst kann die Anfrage nicht bearbeiten; versuchen Sie es später oder kontaktieren Sie den Administrator",
+        "invalidConfig": "Die veröffentlichte Konfiguration ist ungültig; kontaktieren Sie den Administrator",
+        "updateFailed": "Aktualisierung nicht abgeschlossen; prüfen Sie die Verbindung und versuchen Sie es erneut",
+        "reportFailed": "Assistenten installiert, aber der Bericht konnte nicht gesendet werden; prüfen Sie die Verbindung später",
+        "configurationDrift": "Lokale Konfiguration weicht vom Server ab; prüfen Sie die Verbindung, um sie erneut zu laden"
       }
     }
   }

@@ -25,6 +25,21 @@ export type ManagedLabels = Record<
   string,
   Pick<ManagedAgent, 'name_i18n' | 'description_i18n' | 'recommended_prompts' | 'recommended_prompts_i18n'>
 >;
+export type ManagedConnection = {
+  state: 'unconfigured' | 'checking' | 'connected' | 'unreachable' | 'unauthorized' | 'error';
+  serverUrl?: string;
+  dept?: string;
+  verifiedAt?: number;
+};
+export type ManagedSyncErrorCode =
+  | 'INVALID_CONNECTION'
+  | 'INVALID_KEY'
+  | 'SERVICE_UNREACHABLE'
+  | 'SERVICE_ERROR'
+  | 'INVALID_CONFIG'
+  | 'UPDATE_FAILED'
+  | 'REPORT_FAILED'
+  | 'CONFIGURATION_DRIFT';
 export type ManagedSyncStatus = {
   phase: 'idle' | 'syncing' | 'ready' | 'error' | 'unauthorized';
   push: 'disconnected' | 'connecting' | 'connected';
@@ -33,10 +48,17 @@ export type ManagedSyncStatus = {
   checkedAt?: number;
   installedAt?: number;
   error?: string;
+  errorCode?: ManagedSyncErrorCode;
+  connection?: ManagedConnection;
   assistantIds: string[];
   labels?: ManagedLabels;
 };
-export type ManagedSyncResult = { success: boolean; status: ManagedSyncStatus; error?: string };
+export type ManagedSyncResult = {
+  success: boolean;
+  status: ManagedSyncStatus;
+  error?: string;
+  errorCode?: ManagedSyncErrorCode;
+};
 
 export const MANAGED_DEFAULT_ID = 'default-assistant';
 export const MANAGED_BUTLER_ID = 'nexwork-butler';

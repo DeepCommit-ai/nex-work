@@ -1460,9 +1460,59 @@
         "unauthorized": "Anahtar geçersiz"
       },
       "push": {
-        "disconnected": "Düzenli kontrol kullanılabilir",
+        "disconnected": "Bağlı değil",
         "connecting": "Bağlanıyor",
         "connected": "Bağlı"
+      }
+    },
+    "title": "Kurumsal bağlantı",
+    "intro": "Asistanları ve güncellemeleri otomatik almak için yöneticinizin verdiği hizmet adresini ve departman anahtarını girin",
+    "serverUrl": "Yapılandırma hizmeti adresi",
+    "serverUrlRequired": "Hizmet adresini girin",
+    "deptKey": "Departman anahtarı",
+    "keyRequired": "Departman anahtarını girin",
+    "keyKeep": "Kaydedildi; mevcut anahtarı korumak için boş bırakın",
+    "keyPlaceholder": "Yöneticinizden alın",
+    "apply": "Bağlan ve asistanları al",
+    "connection": {
+      "title": "Geçerli bağlantı",
+      "department": "Departman",
+      "departmentId": "Departman kimliği: {{dept}}",
+      "notConfigured": "Yapılandırılmadı",
+      "unverified": "Doğrulamadan sonra gösterilir",
+      "stale": "Son doğrulanan departman gösteriliyor; bağlantı düzelince yeniden doğrulanacak",
+      "check": "Bağlantıyı kontrol et",
+      "change": "Bağlantıyı değiştir",
+      "details": "Teknik ayrıntılar",
+      "verifiedAt": "Son başarılı doğrulama: {{at}}",
+      "errorCode": "Hata kodu: {{code}}",
+      "settings": "Bağlantı ayarları",
+      "saved": "Bağlandı ve asistanlar güncellendi",
+      "addressPlaceholder": "Örneğin https://work.example.com",
+      "statusUnavailable": "Bağlantı durumu alınamıyor; bu sayfayı yeniden açın",
+      "state": {
+        "unconfigured": "Bağlı değil",
+        "checking": "Bağlantı kontrol ediliyor",
+        "connected": "Bağlı",
+        "unreachable": "Geçici olarak erişilemiyor",
+        "unauthorized": "Departman anahtarı geçerliliğini yitirdi",
+        "error": "Bağlantı sorunu"
+      },
+      "updates": {
+        "updating": "Asistanlar güncelleniyor",
+        "failed": "Asistan güncellemesi başarısız",
+        "ready": "Asistanlar güncellendi",
+        "pending": "Asistanlar bekleniyor"
+      },
+      "errors": {
+        "invalidConnection": "Kimlik bilgisi veya sorgu parametresi içermeyen geçerli bir http veya https adresi girin",
+        "invalidKey": "Departman anahtarı geçersiz veya iptal edilmiş; yöneticinize danışın",
+        "serviceUnreachable": "Hizmete erişilemiyor; ağı ve adresi kontrol edip yeniden deneyin",
+        "serviceError": "Hizmet isteği işleyemiyor; daha sonra deneyin veya yöneticinize danışın",
+        "invalidConfig": "Yayımlanan yapılandırma geçersiz; yöneticinize danışın",
+        "updateFailed": "Güncelleme tamamlanmadı; bağlantıyı kontrol edip yeniden deneyin",
+        "reportFailed": "Asistanlar yüklendi ancak rapor gönderilemedi; bağlantıyı daha sonra kontrol edin",
+        "configurationDrift": "Yerel yapılandırma sunucudan farklı; yeniden almak için bağlantıyı kontrol edin"
       }
     }
   }

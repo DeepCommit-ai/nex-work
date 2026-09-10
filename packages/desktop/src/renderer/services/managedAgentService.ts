@@ -56,7 +56,8 @@ export function bindManagedAgentSync(): void {
 }
 
 export function managedApplyOutcome(result: ManagedSyncResult): ApplyOutcome {
-  if (!result.success) return { status: 'failed', detail: result.error ?? 'Managed synchronization failed' };
+  if (!result.success)
+    return { status: 'failed', detail: result.error ?? 'Managed synchronization failed', errorCode: result.errorCode };
   return {
     status: 'applied',
     report: buildReport(

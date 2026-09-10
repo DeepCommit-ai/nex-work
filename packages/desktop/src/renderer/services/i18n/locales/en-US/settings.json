@@ -1460,9 +1460,59 @@
         "unauthorized": "Credential expired"
       },
       "push": {
-        "disconnected": "Polling available",
+        "disconnected": "Not connected",
         "connecting": "Connecting",
         "connected": "Connected"
+      }
+    },
+    "title": "Enterprise connection",
+    "intro": "Enter the service address and department key provided by your administrator to receive assistant updates automatically",
+    "serverUrl": "Configuration service address",
+    "serverUrlRequired": "Enter the configuration service address",
+    "deptKey": "Department key",
+    "keyRequired": "Enter the department key",
+    "keyKeep": "Saved; leave blank to keep the existing key",
+    "keyPlaceholder": "Get this from your administrator",
+    "apply": "Connect and get assistants",
+    "connection": {
+      "title": "Current connection",
+      "department": "Department",
+      "departmentId": "Department ID: {{dept}}",
+      "notConfigured": "Not configured",
+      "unverified": "Shown after verification",
+      "stale": "Showing the last verified department; it will be confirmed again when the connection recovers",
+      "check": "Check connection",
+      "change": "Change connection",
+      "details": "Technical details",
+      "verifiedAt": "Last verified: {{at}}",
+      "errorCode": "Error code: {{code}}",
+      "settings": "Connection settings",
+      "saved": "Connected and assistants updated",
+      "addressPlaceholder": "For example https://work.example.com",
+      "statusUnavailable": "Connection status is unavailable; reopen this page",
+      "state": {
+        "unconfigured": "Not connected",
+        "checking": "Checking connection",
+        "connected": "Connected",
+        "unreachable": "Temporarily unreachable",
+        "unauthorized": "Department key expired or revoked",
+        "error": "Connection problem"
+      },
+      "updates": {
+        "updating": "Updating assistants",
+        "failed": "Assistant update failed",
+        "ready": "Assistants updated",
+        "pending": "Waiting for assistants"
+      },
+      "errors": {
+        "invalidConnection": "Enter a valid http or https service address without credentials or query parameters",
+        "invalidKey": "The department key is invalid or revoked; confirm it with your administrator",
+        "serviceUnreachable": "The service is unreachable; check your network and service address, then retry",
+        "serviceError": "The service cannot process the request; retry later or contact your administrator",
+        "invalidConfig": "The published assistant configuration is invalid; contact your administrator",
+        "updateFailed": "The assistant update did not finish; check the connection and retry",
+        "reportFailed": "Assistants are installed, but the update report could not be sent; check the connection later",
+        "configurationDrift": "Local configuration differs from the server record; check the connection to retrieve it again"
       }
     }
   }

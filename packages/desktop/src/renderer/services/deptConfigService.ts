@@ -34,6 +34,7 @@ import {
 import { buildProvenanceEnvValue, fetchDeptConfig, postReport, toReportBody } from '@/common/deptconfig/client';
 import { callDeptSkills } from '@/common/deptconfig/skillsChannel';
 import type { ApplyReport, DeptConfig } from '@/common/deptconfig/types';
+import type { ManagedSyncErrorCode } from '@/common/deptconfig/catalog';
 import { buildEnvOverride, expandLeadingTilde } from '@/common/gateway/provisionGateway';
 import { GATEWAY_ENV_CONFIG_DIR } from '@/common/gateway/types';
 import { isElectronDesktop } from '@/renderer/utils/platform';
@@ -49,7 +50,7 @@ const prepareClaudeOfficeRole = async (configDir: string): Promise<void> => {
 };
 
 export type ApplyOutcome =
-  | { status: 'failed'; detail: string }
+  | { status: 'failed'; detail: string; errorCode?: ManagedSyncErrorCode }
   | {
       status: 'applied';
       report: ApplyReport;

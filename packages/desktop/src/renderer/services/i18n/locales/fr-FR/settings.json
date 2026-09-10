@@ -1460,9 +1460,59 @@
         "unauthorized": "Clé invalide"
       },
       "push": {
-        "disconnected": "Vérification périodique disponible",
+        "disconnected": "Non connecté",
         "connecting": "Connexion en cours",
         "connected": "Connecté"
+      }
+    },
+    "title": "Connexion d’entreprise",
+    "intro": "Saisissez l’adresse du service et la clé du département fournies par votre administrateur pour recevoir automatiquement les assistants et leurs mises à jour",
+    "serverUrl": "Adresse du service de configuration",
+    "serverUrlRequired": "Saisissez l’adresse du service",
+    "deptKey": "Clé du département",
+    "keyRequired": "Saisissez la clé du département",
+    "keyKeep": "Enregistrée ; laisser vide pour conserver la clé",
+    "keyPlaceholder": "À obtenir auprès de votre administrateur",
+    "apply": "Connecter et obtenir les assistants",
+    "connection": {
+      "title": "Connexion actuelle",
+      "department": "Département",
+      "departmentId": "Identifiant du département : {{dept}}",
+      "notConfigured": "Non configuré",
+      "unverified": "Affiché après vérification",
+      "stale": "Affichage du dernier département vérifié ; il sera confirmé au rétablissement de la connexion",
+      "check": "Vérifier la connexion",
+      "change": "Changer de connexion",
+      "details": "Détails techniques",
+      "verifiedAt": "Dernière vérification réussie : {{at}}",
+      "errorCode": "Code d’erreur : {{code}}",
+      "settings": "Paramètres de connexion",
+      "saved": "Connecté et assistants mis à jour",
+      "addressPlaceholder": "Par exemple https://work.example.com",
+      "statusUnavailable": "État de connexion indisponible ; rouvrez cette page",
+      "state": {
+        "unconfigured": "Non connecté",
+        "checking": "Vérification de la connexion",
+        "connected": "Connecté",
+        "unreachable": "Temporairement inaccessible",
+        "unauthorized": "Clé du département expirée ou révoquée",
+        "error": "Problème de connexion"
+      },
+      "updates": {
+        "updating": "Mise à jour des assistants",
+        "failed": "Échec de la mise à jour",
+        "ready": "Assistants à jour",
+        "pending": "En attente des assistants"
+      },
+      "errors": {
+        "invalidConnection": "Saisissez une adresse http ou https valide sans identifiants ni paramètres de requête",
+        "invalidKey": "La clé du département est invalide ou révoquée ; contactez votre administrateur",
+        "serviceUnreachable": "Service inaccessible ; vérifiez le réseau et l’adresse, puis réessayez",
+        "serviceError": "Le service ne peut pas traiter la demande ; réessayez plus tard ou contactez l’administrateur",
+        "invalidConfig": "La configuration publiée est invalide ; contactez l’administrateur",
+        "updateFailed": "Mise à jour inachevée ; vérifiez la connexion et réessayez",
+        "reportFailed": "Assistants installés, mais le rapport n’a pas pu être envoyé ; vérifiez la connexion plus tard",
+        "configurationDrift": "La configuration locale diffère du serveur ; vérifiez la connexion pour la récupérer à nouveau"
       }
     }
   }

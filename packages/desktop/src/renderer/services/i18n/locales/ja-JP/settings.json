@@ -1462,9 +1462,59 @@
         "unauthorized": "キーが無効です"
       },
       "push": {
-        "disconnected": "定期確認が有効",
+        "disconnected": "未接続",
         "connecting": "接続中",
         "connected": "接続済み"
+      }
+    },
+    "title": "企業接続",
+    "intro": "管理者から受け取ったサービスアドレスと部門キーを入力すると、アシスタントが自動で取得・更新されます",
+    "serverUrl": "設定サービスのアドレス",
+    "serverUrlRequired": "設定サービスのアドレスを入力してください",
+    "deptKey": "部門キー",
+    "keyRequired": "部門キーを入力してください",
+    "keyKeep": "保存済み：空欄なら現在のキーを使用",
+    "keyPlaceholder": "管理者から取得してください",
+    "apply": "接続してアシスタントを取得",
+    "connection": {
+      "title": "現在の接続",
+      "department": "所属部門",
+      "departmentId": "部門 ID：{{dept}}",
+      "notConfigured": "未設定",
+      "unverified": "接続確認後に表示",
+      "stale": "前回確認した部門を表示しています。接続の復旧後に再確認します",
+      "check": "接続を確認",
+      "change": "接続を変更",
+      "details": "技術情報",
+      "verifiedAt": "最終確認成功：{{at}}",
+      "errorCode": "エラーコード：{{code}}",
+      "settings": "接続設定",
+      "saved": "接続が完了し、アシスタントが更新されました",
+      "addressPlaceholder": "例：https://work.example.com",
+      "statusUnavailable": "接続状態を取得できません。このページを開き直してください",
+      "state": {
+        "unconfigured": "未接続",
+        "checking": "接続を確認中",
+        "connected": "接続済み",
+        "unreachable": "一時的に接続できません",
+        "unauthorized": "部門キーが失効しています",
+        "error": "接続に問題があります"
+      },
+      "updates": {
+        "updating": "アシスタントを更新中",
+        "failed": "アシスタントの更新に失敗",
+        "ready": "アシスタントは更新済み",
+        "pending": "アシスタントの取得待ち"
+      },
+      "errors": {
+        "invalidConnection": "認証情報やクエリを含まない、有効な http または https アドレスを入力してください",
+        "invalidKey": "部門キーが無効または失効しています。管理者に確認してください",
+        "serviceUnreachable": "サービスに接続できません。ネットワークとアドレスを確認して再試行してください",
+        "serviceError": "サービスがリクエストを処理できません。後で再試行するか管理者に連絡してください",
+        "invalidConfig": "公開されたアシスタント設定が無効です。管理者に連絡してください",
+        "updateFailed": "更新が完了していません。接続を確認して再試行してください",
+        "reportFailed": "アシスタントはインストール済みですが、結果を送信できません。後で接続を確認してください",
+        "configurationDrift": "ローカル設定がサーバーの記録と異なります。接続を確認して再取得してください"
       }
     }
   }
