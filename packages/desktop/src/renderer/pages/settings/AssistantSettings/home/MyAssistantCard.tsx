@@ -1,3 +1,4 @@
+import { isManagedAssistant } from '@/common/deptconfig/managedConversation';
 /**
  * @license
  * Copyright 2025 AionUi (aionui.com)
@@ -37,7 +38,7 @@ const MyAssistantCard: React.FC<MyAssistantCardProps> = ({
 }) => {
   const { t } = useTranslation();
   const enabled = assistant.enabled !== false;
-  const canDelete = assistant.source === 'user';
+  const canDelete = assistant.source === 'user' && !isManagedAssistant(assistant.id);
 
   const actionMenu = (
     <Menu
@@ -72,6 +73,7 @@ const MyAssistantCard: React.FC<MyAssistantCardProps> = ({
         </span>
         <span onClick={(e) => e.stopPropagation()}>
           <Switch
+            disabled={assistant.id === 'default-assistant'}
             size='small'
             data-testid={`switch-enabled-${assistant.id}`}
             checked={enabled}

@@ -1349,16 +1349,18 @@
     "solveViaChat": "Resolver via chat",
     "enabledToast": "O assistente NexWork está ativado.",
     "prompt": {
-      "createAssistant": "Ajude-me a criar um novo assistente e me oriente na configuração.",
+      "createAssistant": "Ajude-me a criar e registrar um novo assistente Claude Code no servidor de configuração.",
       "addCustomAgent": "Ajude-me a adicionar um Agent personalizado.",
       "addModel": "Ajude-me a adicionar um novo provedor de LLM e chave de API e defina-o como modelo padrão.",
       "addMcp": "Ajude-me a configurar um servidor MCP.",
       "addSkill": "Ajude-me a importar uma skill e vinculá-la a um assistente.",
       "setupRemote": "Ajude-me a configurar o acesso remoto para abrir o NexWork do celular ou pela internet.",
       "diagnose": "Tive um problema com o NexWork, ajude-me a diagnosticá-lo.\n\n[Módulo] {{module}}\n[Descrição] {{description}}\n[Anexos] veja as capturas de tela na entrada.\n\nDiagnostique a causa e me diga como corrigir.",
-      "diagnoseChatError": "Ocorreu um erro durante uma conversa no NexWork, ajude-me a diagnosticá-lo.\n\n[Erro] {{error}}\n\nDiagnostique a causa e me diga como corrigir."
+      "diagnoseChatError": "Ocorreu um erro durante uma conversa no NexWork, ajude-me a diagnosticá-lo.\n\n[Erro] {{error}}\n\nDiagnostique a causa e me diga como corrigir.",
+      "duplicateAssistant": "Crie e registre um novo assistente Claude Code baseado em {{id}} no servidor de configuração."
     },
-    "solveWithButler": "Perguntar ao assistente NexWork"
+    "solveWithButler": "Perguntar ao assistente NexWork",
+    "unavailable": "Conecte o serviço de configuração para usar o NexWork Butler."
   },
   "providerIdConflict": "O Provider ID já existe. Tente novamente.",
   "autoInjectedSkillsHint": "Carregadas automaticamente em cada conversa — não é preciso ativá-las; o agente decide quando usá-las.",
@@ -1441,6 +1443,30 @@
       "gateway": "Via gateway",
       "overridden": "Substituído manualmente",
       "unset": "Não configurado"
+    }
+  },
+  "enterprise": {
+    "managed": {
+      "title": "Atualizações de assistentes",
+      "phaseLabel": "Estado da sincronização",
+      "pushLabel": "Atualizações ao vivo",
+      "version": "Versão instalada: {{version}}",
+      "checked": "Última verificação: {{at}}",
+      "schedule": "Verificação a cada 5 minutos. Novas conversas usam as atualizações; as existentes mantêm sua versão.",
+      "failed": "Verifique a sincronização e a conexão e tente novamente.",
+      "sync": "Sincronizar agora",
+      "phase": {
+        "idle": "Desconectado",
+        "syncing": "Instalando",
+        "ready": "Atualizado",
+        "error": "Falha na sincronização",
+        "unauthorized": "Chave inválida"
+      },
+      "push": {
+        "disconnected": "Verificação periódica disponível",
+        "connecting": "Conectando",
+        "connected": "Conectado"
+      }
     }
   }
 }

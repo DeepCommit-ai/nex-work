@@ -1346,18 +1346,20 @@
     "addViaChat": "透過對話新增",
     "addManually": "手動新增",
     "solveViaChat": "透過對話排查",
-    "enabledToast": "已為你啟用 NexWork 助手",
+    "enabledToast": "已為你啟用 NexWork 管家",
     "prompt": {
-      "createAssistant": "幫我建立一個新助手，並引導我完成設定。",
+      "createAssistant": "幫我在設定後台建立並註冊新的 Claude Code 助手。",
       "addCustomAgent": "幫我新增一個自訂 Agent。",
       "addModel": "幫我新增一個新的 LLM 模型和 API Key，並設為預設模型。",
       "addMcp": "幫我設定一個 MCP 伺服器。",
       "addSkill": "幫我匯入一個技能，並綁定到助手上。",
       "setupRemote": "幫我設定遠端存取，讓我在手機或外網也能開啟 NexWork。",
       "diagnose": "我在使用 NexWork 時遇到問題，幫我排查一下。\n\n【模組】{{module}}\n【問題描述】{{description}}\n【附件】見輸入框中的截圖。\n\n請幫我診斷原因並給出解決辦法。",
-      "diagnoseChatError": "我在 NexWork 對話過程中遇到了報錯，幫我排查一下。\n\n【報錯內容】{{error}}\n\n請幫我診斷原因並給出解決辦法。"
+      "diagnoseChatError": "我在 NexWork 對話過程中遇到了報錯，幫我排查一下。\n\n【報錯內容】{{error}}\n\n請幫我診斷原因並給出解決辦法。",
+      "duplicateAssistant": "請參考 {{id}}，在設定後台建立並註冊新的 Claude Code 助手。"
     },
-    "solveWithButler": "交給 NexWork 助手解決"
+    "solveWithButler": "交給 NexWork 管家解決",
+    "unavailable": "請先連線至設定服務，再使用 NexWork 管家。"
   },
   "providerIdConflict": "Provider ID 已存在，請重試。",
   "autoInjectedSkillsHint": "每次對話都會自動載入，無需手動啟用；由智能體自行決定何時呼叫。",
@@ -1440,6 +1442,30 @@
       "gateway": "已指向閘道",
       "overridden": "手動覆寫",
       "unset": "未設定"
+    }
+  },
+  "enterprise": {
+    "managed": {
+      "title": "助手更新",
+      "phaseLabel": "同步狀態",
+      "pushLabel": "即時推送",
+      "version": "已安裝版本：{{version}}",
+      "checked": "上次檢查：{{at}}",
+      "schedule": "每 5 分鐘檢查一次。更新用於新對話，既有對話保留原版本。",
+      "failed": "同步需要處理，請檢查連線後重試。",
+      "sync": "立即同步",
+      "phase": {
+        "idle": "尚未連線",
+        "syncing": "正在安裝",
+        "ready": "已同步",
+        "error": "同步失敗",
+        "unauthorized": "金鑰已失效"
+      },
+      "push": {
+        "disconnected": "定時檢查可用",
+        "connecting": "正在連線",
+        "connected": "已連線"
+      }
     }
   }
 }

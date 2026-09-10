@@ -25,7 +25,9 @@
 import { ipcBridge } from '@/common';
 import { handleDeptSkillsIpcCall } from '@aionui/web-host';
 import { getDataPath } from '@process/utils';
+import { initManagedAgentsBridge } from '@process/services/managedagents';
 
 export function initDeptSkillsBridge(): void {
+  initManagedAgentsBridge();
   ipcBridge.deptSkills.call.provider((payload) => handleDeptSkillsIpcCall(payload, { dataDir: getDataPath() }));
 }

@@ -277,6 +277,10 @@ const provisionGatewayFor = async (
 
 /** 拉取并全量落实。每次启动无条件跑（FR-2b）；重放幂等，无变化时写集合为空。 */
 export const applyDeptConfig = async (serverUrl: string, deptKey: string): Promise<ApplyOutcome> => {
+  if (isElectronDesktop()) {
+    const { connectManagedAgents } = await import('./managedAgentService');
+    return connectManagedAgents(serverUrl, deptKey);
+  }
   const fetched = await fetchDeptConfig(serverUrl, deptKey);
   if (fetched.status === 'failed') return { status: 'failed', detail: fetched.detail };
 
@@ -403,6 +407,11 @@ let bootApplyAttempted = false;
  * 5 分钟（覆盖典型登录耗时）；到点放弃时**放得响**且不锁死，后续再有触发还能跑。
  */
 export const autoApplyOnBoot = async (): Promise<void> => {
+  if (isElectronDesktop()) {
+    const { bindManagedAgentSync } = await import('./managedAgentService');
+    bindManagedAgentSync();
+    return;
+  }
   if (bootApplyRunning || bootApplyAttempted) return;
   bootApplyRunning = true;
   try {

@@ -61,6 +61,7 @@ export type GatewaySection = {
 
 /** 服务端返回的一份部门配置。 */
 export type DeptConfig = {
+  agent_catalog?: import('./catalog').CatalogRelease;
   version: string;
   dept: string;
   /**

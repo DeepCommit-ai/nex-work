@@ -16,6 +16,8 @@ import { isSystemDefaultAssistant } from '@/renderer/pages/settings/AssistantSet
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mutate as swrMutate } from 'swr';
+import { useTalkToButler } from './useTalkToButler';
+import { isElectronDesktop } from '@/renderer/utils/platform';
 
 type UseAssistantEditorParams = {
   localeKey: string;
@@ -77,6 +79,7 @@ export const useAssistantEditor = ({
   message,
 }: UseAssistantEditorParams) => {
   const { t } = useTranslation();
+  const talkToButler = useTalkToButler();
   const previousLocaleKeyRef = useRef(localeKey);
 
   const [editVisible, setEditVisible] = useState(false);
@@ -283,6 +286,10 @@ export const useAssistantEditor = ({
   };
 
   const handleCreate = async () => {
+    if (isElectronDesktop()) {
+      await talkToButler({ prompt: t('settings.talkToButler.prompt.createAssistant') });
+      return;
+    }
     setIsCreating(true);
     setActiveAssistantId(null);
     setEditVisible(true);
@@ -313,6 +320,10 @@ export const useAssistantEditor = ({
   };
 
   const handleDuplicate = async (assistant: AssistantListItem) => {
+    if (isElectronDesktop()) {
+      await talkToButler({ prompt: t('settings.talkToButler.prompt.duplicateAssistant', { id: assistant.id }) });
+      return;
+    }
     setIsCreating(true);
     setActiveAssistantId(null);
     setEditVisible(true);

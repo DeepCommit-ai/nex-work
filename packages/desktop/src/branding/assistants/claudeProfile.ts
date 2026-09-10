@@ -2,11 +2,10 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { NEXWORK_BASE_RULES } from './prompts';
 
 export const NEXWORK_OUTPUT_STYLE = 'NexWork';
 
-/** Install the office role without changing credentials, permissions, or other settings. */
+/** Install minimal product rules without changing credentials, permissions, or other settings. */
 export function prepareNexworkClaudeProfile(configDir: string): void {
   if (!path.isAbsolute(configDir)) throw new Error('Claude configuration directory must be absolute');
   const settingsPath = path.join(configDir, 'settings.json');
@@ -22,7 +21,7 @@ export function prepareNexworkClaudeProfile(configDir: string): void {
   mkdirSync(styleDir, { recursive: true });
   writeFileSync(
     path.join(styleDir, 'nexwork.md'),
-    `---\nname: ${NEXWORK_OUTPUT_STYLE}\ndescription: NexWork enterprise office assistant\nkeep-coding-instructions: false\n---\n${NEXWORK_BASE_RULES}\n`,
+    `---\nname: ${NEXWORK_OUTPUT_STYLE}\ndescription: NexWork general assistant\nkeep-coding-instructions: false\n---\nUse the instructions and tools provided for the current conversation.\n`,
     { mode: 0o600 }
   );
   if (settings.outputStyle === NEXWORK_OUTPUT_STYLE) return;
@@ -59,5 +58,5 @@ export async function configureNexworkClaude(port: number, fetchImpl: typeof fet
       ],
     }),
   });
-  if (!written.ok) throw new Error(`Cannot configure Claude office role (${written.status})`);
+  if (!written.ok) throw new Error(`Cannot configure Claude product rules (${written.status})`);
 }

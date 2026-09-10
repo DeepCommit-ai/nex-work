@@ -157,13 +157,13 @@ describe('NexWork default assistant', () => {
   it('keeps the NexWork assistant first even with a saved old ordering', () => {
     const assistants = [
       mk('word-creator', 'builtin', 1),
-      mk('nexwork-assistant', 'builtin', 9),
+      mk('default-assistant', 'user', 9),
       mk('aionui-assistant', 'builtin', 0, false),
     ];
     expect(
-      selectableAssistants(assistants, ['aionui-assistant', 'word-creator', 'nexwork-assistant']).map(
+      selectableAssistants(assistants, ['aionui-assistant', 'word-creator', 'default-assistant']).map(
         (assistant) => assistant.id
       )
-    ).toEqual(['nexwork-assistant', 'word-creator']);
+    ).toEqual(['default-assistant', 'word-creator']);
   });
 });

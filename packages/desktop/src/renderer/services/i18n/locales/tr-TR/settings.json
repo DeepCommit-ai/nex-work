@@ -1346,16 +1346,18 @@
     "solveViaChat": "Sohbetle çöz",
     "enabledToast": "NexWork asistanı etkinleştirildi.",
     "prompt": {
-      "createAssistant": "Yeni bir asistan oluşturmama ve kurulumunda bana yol göstermene yardım et.",
+      "createAssistant": "Yapılandırma sunucusunda yeni bir Claude Code asistanı oluşturmama ve kaydetmeme yardım et.",
       "addCustomAgent": "Özel bir Agent eklememe yardım et.",
       "addModel": "Yeni bir LLM sağlayıcısı ve API anahtarı ekle, ardından varsayılan model olarak ayarla.",
       "addMcp": "Bir MCP sunucusu kurmama yardım et.",
       "addSkill": "Bir beceri içe aktarıp bir asistana eklememe yardım et.",
       "setupRemote": "Telefonumdan veya internetten NexWork’yi açabilmem için uzaktan erişimi ayarlamama yardım et.",
       "diagnose": "NexWork kullanırken bir sorunla karşılaştım, teşhis etmeme yardım et.\n\n[Modül] {{module}}\n[Açıklama] {{description}}\n[Ekler] giriş alanındaki ekran görüntülerine bakın.\n\nLütfen nedenini teşhis et ve nasıl düzelteceğimi söyle.",
-      "diagnoseChatError": "NexWork sohbeti sırasında bir hatayla karşılaştım, teşhis etmeme yardım et.\n\n[Hata] {{error}}\n\nLütfen nedenini teşhis et ve nasıl düzelteceğimi söyle."
+      "diagnoseChatError": "NexWork sohbeti sırasında bir hatayla karşılaştım, teşhis etmeme yardım et.\n\n[Hata] {{error}}\n\nLütfen nedenini teşhis et ve nasıl düzelteceğimi söyle.",
+      "duplicateAssistant": "Yapılandırma sunucusunda {{id}} temelinde yeni bir Claude Code asistanı oluştur ve kaydet."
     },
-    "solveWithButler": "NexWork asistanına sor"
+    "solveWithButler": "NexWork asistanına sor",
+    "unavailable": "NexWork Butler için yapılandırma hizmetine bağlanın."
   },
   "providerIdConflict": "Provider ID zaten var. Lütfen tekrar deneyin.",
   "autoInjectedSkillsHint": "Her sohbete otomatik olarak yüklenir — etkinleştirmeye gerek yoktur; aracı bunları ne zaman kullanacağına karar verir.",
@@ -1438,6 +1440,30 @@
       "gateway": "Ağ geçidi üzerinden",
       "overridden": "Elle geçersiz kılındı",
       "unset": "Yapılandırılmadı"
+    }
+  },
+  "enterprise": {
+    "managed": {
+      "title": "Asistan güncellemeleri",
+      "phaseLabel": "Eşitleme durumu",
+      "pushLabel": "Canlı güncellemeler",
+      "version": "Yüklü sürüm: {{version}}",
+      "checked": "Son kontrol: {{at}}",
+      "schedule": "Her 5 dakikada kontrol edilir. Yeni konuşmalar güncellemeleri kullanır; mevcut konuşmalar sürümünü korur.",
+      "failed": "Eşitlemeyi ve bağlantıyı kontrol edip tekrar deneyin.",
+      "sync": "Şimdi eşitle",
+      "phase": {
+        "idle": "Bağlı değil",
+        "syncing": "Yükleniyor",
+        "ready": "Güncel",
+        "error": "Eşitleme başarısız",
+        "unauthorized": "Anahtar geçersiz"
+      },
+      "push": {
+        "disconnected": "Düzenli kontrol kullanılabilir",
+        "connecting": "Bağlanıyor",
+        "connected": "Bağlı"
+      }
     }
   }
 }

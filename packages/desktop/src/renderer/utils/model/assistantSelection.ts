@@ -6,7 +6,7 @@
 
 import { isAionrsAssistant, type Assistant } from '@/common/types/agent/assistantTypes';
 import { can } from '@/common/capabilities/policy';
-import { NEXWORK_ASSISTANT_ID } from '@/branding/assistants/policy';
+import { MANAGED_DEFAULT_ID } from '@/common/deptconfig/catalog';
 
 /**
  * Single source of truth for which assistants appear in a *selection* list
@@ -26,7 +26,7 @@ import { NEXWORK_ASSISTANT_ID } from '@/branding/assistants/policy';
  * [ENTERPRISE PATCH] 系统默认助手:每个选择列表永远把它钉在第一位,
  * 无论 legacy 分组还是用户的自定义排序偏好——"默认"必须一眼可见。
  */
-export const DEFAULT_ASSISTANT_ID = NEXWORK_ASSISTANT_ID;
+export const DEFAULT_ASSISTANT_ID = MANAGED_DEFAULT_ID;
 
 const pinSystemDefaultFirst = (ordered: Assistant[]): Assistant[] => {
   const current = ordered.findIndex((assistant) => assistant.id === DEFAULT_ASSISTANT_ID);

@@ -1314,16 +1314,18 @@
     "solveViaChat": "Per Chat lösen",
     "enabledToast": "Der NexWork-Assistent ist aktiviert.",
     "prompt": {
-      "createAssistant": "Hilf mir, einen neuen Assistenten zu erstellen, und führe mich durch die Einrichtung.",
+      "createAssistant": "Hilf mir, im Konfigurationsbackend einen neuen Claude Code-Assistenten zu erstellen und zu registrieren.",
       "addCustomAgent": "Hilf mir, einen benutzerdefinierten Agent hinzuzufügen.",
       "addModel": "Hilf mir, einen neuen LLM-Anbieter und API-Schlüssel hinzuzufügen, und lege ihn als Standardmodell fest.",
       "addMcp": "Hilf mir, einen MCP-Server einzurichten.",
       "addSkill": "Hilf mir, einen Skill zu importieren und einem Assistenten zuzuordnen.",
       "setupRemote": "Hilf mir, den Fernzugriff einzurichten, damit ich NexWork vom Handy oder über das Internet öffnen kann.",
       "diagnose": "Ich habe ein Problem mit NexWork, hilf mir bei der Diagnose.\n\n[Modul] {{module}}\n[Beschreibung] {{description}}\n[Anhänge] siehe die Screenshots im Eingabefeld.\n\nBitte diagnostiziere die Ursache und sag mir, wie ich es behebe.",
-      "diagnoseChatError": "Während einer Unterhaltung in NexWork ist ein Fehler aufgetreten, hilf mir bei der Diagnose.\n\n[Fehler] {{error}}\n\nBitte diagnostiziere die Ursache und sag mir, wie ich es behebe."
+      "diagnoseChatError": "Während einer Unterhaltung in NexWork ist ein Fehler aufgetreten, hilf mir bei der Diagnose.\n\n[Fehler] {{error}}\n\nBitte diagnostiziere die Ursache und sag mir, wie ich es behebe.",
+      "duplicateAssistant": "Erstelle und registriere im Konfigurationsbackend einen neuen Claude Code-Assistenten auf Basis von {{id}}."
     },
-    "solveWithButler": "NexWork-Assistenten fragen"
+    "solveWithButler": "NexWork-Assistenten fragen",
+    "unavailable": "Verbinde den Konfigurationsdienst, um NexWork Butler zu nutzen."
   },
   "browserNotification": {
     "enable": "Enable browser notifications",
@@ -1438,6 +1440,30 @@
       "gateway": "Über Gateway",
       "overridden": "Manuell überschrieben",
       "unset": "Nicht konfiguriert"
+    }
+  },
+  "enterprise": {
+    "managed": {
+      "title": "Assistenten aktualisieren",
+      "phaseLabel": "Synchronisierungsstatus",
+      "pushLabel": "Live-Updates",
+      "version": "Installierte Version: {{version}}",
+      "checked": "Zuletzt geprüft: {{at}}",
+      "schedule": "Prüfung alle 5 Minuten. Neue Gespräche verwenden Updates; bestehende behalten ihre Version.",
+      "failed": "Synchronisierung prüfen. Verbindung prüfen und erneut versuchen.",
+      "sync": "Jetzt synchronisieren",
+      "phase": {
+        "idle": "Nicht verbunden",
+        "syncing": "Wird installiert",
+        "ready": "Aktuell",
+        "error": "Synchronisierung fehlgeschlagen",
+        "unauthorized": "Schlüssel ungültig"
+      },
+      "push": {
+        "disconnected": "Regelmäßige Prüfung verfügbar",
+        "connecting": "Verbindung wird hergestellt",
+        "connected": "Verbunden"
+      }
     }
   }
 }

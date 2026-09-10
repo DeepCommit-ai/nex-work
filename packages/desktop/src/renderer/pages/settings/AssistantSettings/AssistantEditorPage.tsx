@@ -1,3 +1,4 @@
+import { isManagedAssistant } from '@/common/deptconfig/managedConversation';
 import type { AssistantEditorViewModel, AssistantListItem } from './types';
 import { Button } from '@arco-design/web-react';
 import { ArrowLeft } from '@icon-park/react';
@@ -14,8 +15,9 @@ type AssistantEditorPageProps = {
 const AssistantEditorPage: React.FC<AssistantEditorPageProps> = ({ editor, activeAssistant, onBack }) => {
   const { t } = useTranslation();
   const { isCreating, actions, profile } = editor;
-  const canDelete = !isCreating && activeAssistant?.source === 'user';
-  const canSave = isCreating || Boolean(activeAssistant);
+  const managed = Boolean(activeAssistant && isManagedAssistant(activeAssistant.id));
+  const canDelete = !isCreating && activeAssistant?.source === 'user' && !managed;
+  const canSave = !managed && (isCreating || Boolean(activeAssistant));
 
   return (
     <div data-testid='assistant-editor-page' className='flex h-full min-h-0 flex-col overflow-hidden bg-transparent'>

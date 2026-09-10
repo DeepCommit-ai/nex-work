@@ -10,6 +10,13 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
+const managedMocks = vi.hoisted(() => ({ desktop: false, talk: vi.fn(async () => {}) }));
+vi.mock('@/renderer/utils/platform', async (original) => ({
+  ...(await original<typeof import('@/renderer/utils/platform')>()),
+  isElectronDesktop: () => managedMocks.desktop,
+}));
+vi.mock('@/renderer/hooks/assistant/useTalkToButler', () => ({ useTalkToButler: () => managedMocks.talk }));
+
 // Mock @/common
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -60,6 +67,10 @@ import type { AssistantListItem } from '@/renderer/pages/settings/AssistantSetti
 import { mutate as swrMutate } from 'swr';
 
 describe('useAssistantEditor', () => {
+  beforeEach(() => {
+    managedMocks.desktop = false;
+    managedMocks.talk.mockClear();
+  });
   // The shipped policy conceals bare-CLI (`generated`) assistants; these tests
   // exercise list mechanics with them visible (concealment is covered by
   // tests/unit/renderer/assistantSelection.test.ts).
@@ -331,6 +342,17 @@ describe('useAssistantEditor', () => {
     expect(result.current.defaultPermissionMode).toBe('auto');
     expect((result.current as any).defaultThoughtLevelMode).toBe('auto');
     expect(result.current.defaultMcpMode).toBe('auto');
+  });
+
+  it('uses the Butler for desktop creation so assistants enter the shared backend', async () => {
+    managedMocks.desktop = true;
+    const { result } = renderHook(() => useAssistantEditor(defaultParams));
+    await act(async () => {
+      await result.current.handleCreate();
+    });
+    expect(managedMocks.talk).toHaveBeenCalledWith({ prompt: 'settings.talkToButler.prompt.createAssistant' });
+    expect(result.current.isCreating).toBe(false);
+    expect(ipcBridge.assistants.create.invoke).not.toHaveBeenCalled();
   });
 
   it('calls handleSave for creating new assistant', async () => {

@@ -17,6 +17,8 @@ import { Alert, Button, Form, Input, Message, Typography } from '@arco-design/we
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import SettingsPageWrapper from '../components/SettingsPageWrapper';
+import { isElectronDesktop } from '@/renderer/utils/platform';
+import ManagedAgentStatus from './ManagedAgentStatus';
 
 const EnterpriseSettings: React.FC = () => {
   const { t } = useTranslation();
@@ -120,7 +122,9 @@ const EnterpriseSettings: React.FC = () => {
           </Button>
         </Form>
 
-        {state && (
+        {isElectronDesktop() && <ManagedAgentStatus />}
+
+        {!isElectronDesktop() && state && (
           <Alert
             type={state.phase === 'applied' ? 'success' : 'warning'}
             content={
@@ -140,7 +144,7 @@ const EnterpriseSettings: React.FC = () => {
           />
         )}
 
-        {outcome?.status === 'applied' && (
+        {!isElectronDesktop() && outcome?.status === 'applied' && (
           <div className='flex flex-col gap-8px text-13px'>
             <div>
               {t('settings.enterprise.summary', {

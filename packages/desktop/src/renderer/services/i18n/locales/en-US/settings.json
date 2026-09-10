@@ -1346,16 +1346,18 @@
     "solveViaChat": "Solve via chat",
     "enabledToast": "The NexWork assistant is enabled.",
     "prompt": {
-      "createAssistant": "Help me create a new assistant and walk me through setting it up.",
+      "createAssistant": "Help me create and register a new Claude Code assistant in the configuration backend.",
       "addCustomAgent": "Help me add a custom Agent.",
       "addModel": "Help me add a new LLM provider and API key, then set it as the default model.",
       "addMcp": "Help me set up an MCP server.",
       "addSkill": "Help me import a skill and attach it to an assistant.",
       "setupRemote": "Help me set up remote access so I can open NexWork from my phone or over the internet.",
       "diagnose": "I ran into a problem with NexWork, please help me diagnose it.\n\n[Module] {{module}}\n[Description] {{description}}\n[Attachments] see the screenshots in the input.\n\nPlease diagnose the cause and tell me how to fix it.",
-      "diagnoseChatError": "I ran into an error during a conversation in NexWork, please help me diagnose it.\n\n[Error] {{error}}\n\nPlease diagnose the cause and tell me how to fix it."
+      "diagnoseChatError": "I ran into an error during a conversation in NexWork, please help me diagnose it.\n\n[Error] {{error}}\n\nPlease diagnose the cause and tell me how to fix it.",
+      "duplicateAssistant": "Create and register a new Claude Code assistant based on {{id}} in the configuration backend."
     },
-    "solveWithButler": "Ask the NexWork assistant"
+    "solveWithButler": "Ask the NexWork assistant",
+    "unavailable": "Connect to the configuration service to use NexWork Butler."
   },
   "providerIdConflict": "Provider ID already exists. Please try again.",
   "autoInjectedSkillsHint": "Loaded automatically into every conversation — no need to enable them; the agent decides when to use them.",
@@ -1438,6 +1440,30 @@
       "gateway": "On gateway",
       "overridden": "Manually overridden",
       "unset": "Not configured"
+    }
+  },
+  "enterprise": {
+    "managed": {
+      "title": "Assistant updates",
+      "phaseLabel": "Sync status",
+      "pushLabel": "Live updates",
+      "version": "Installed version: {{version}}",
+      "checked": "Last checked: {{at}}",
+      "schedule": "Checks every 5 minutes. New conversations use updated content; existing conversations retain their version.",
+      "failed": "Synchronization needs attention. Check the connection and try again.",
+      "sync": "Sync now",
+      "phase": {
+        "idle": "Not connected",
+        "syncing": "Installing",
+        "ready": "Up to date",
+        "error": "Sync failed",
+        "unauthorized": "Credential expired"
+      },
+      "push": {
+        "disconnected": "Polling available",
+        "connecting": "Connecting",
+        "connected": "Connected"
+      }
     }
   }
 }

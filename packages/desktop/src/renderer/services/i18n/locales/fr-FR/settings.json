@@ -1346,16 +1346,18 @@
     "solveViaChat": "Résoudre via le chat",
     "enabledToast": "L’assistant NexWork est activé.",
     "prompt": {
-      "createAssistant": "Aidez-moi à créer un nouvel assistant et guidez-moi dans sa configuration.",
+      "createAssistant": "Aide-moi à créer et enregistrer un nouvel assistant Claude Code dans le serveur de configuration.",
       "addCustomAgent": "Aidez-moi à ajouter un agent personnalisé.",
       "addModel": "Aidez-moi à ajouter un nouveau fournisseur LLM et une clé API, puis à le définir comme modèle par défaut.",
       "addMcp": "Aidez-moi à configurer un serveur MCP.",
       "addSkill": "Aidez-moi à importer une compétence et à la joindre à un assistant.",
       "setupRemote": "Aidez-moi à configurer l'accès à distance afin que je puisse ouvrir NexWork depuis mon téléphone ou via Internet.",
       "diagnose": "J'ai rencontré un problème avec NexWork, aidez-moi à le diagnostiquer.\n\n[Module] {{module}}\n[Description] {{description}}\n[Pièces jointes] voir les captures d'écran dans l'entrée.\n\nVeuillez diagnostiquer la cause et me dire comment y remédier.",
-      "diagnoseChatError": "J'ai rencontré une erreur lors d'une conversation dans NexWork, aidez-moi à la diagnostiquer.\n\n[Erreur] {{error}}\n\nVeuillez diagnostiquer la cause et me dire comment y remédier."
+      "diagnoseChatError": "J'ai rencontré une erreur lors d'une conversation dans NexWork, aidez-moi à la diagnostiquer.\n\n[Erreur] {{error}}\n\nVeuillez diagnostiquer la cause et me dire comment y remédier.",
+      "duplicateAssistant": "Crée et enregistre un nouvel assistant Claude Code basé sur {{id}} dans le serveur de configuration."
     },
-    "solveWithButler": "Demander à l’assistant NexWork"
+    "solveWithButler": "Demander à l’assistant NexWork",
+    "unavailable": "Connectez le service de configuration pour utiliser NexWork Butler."
   },
   "providerIdConflict": "L'ID du fournisseur existe déjà. Veuillez réessayer.",
   "autoInjectedSkillsHint": "Chargé automatiquement dans chaque conversation – pas besoin de les activer ; l'agent décide quand les utiliser.",
@@ -1438,6 +1440,30 @@
       "gateway": "Via la passerelle",
       "overridden": "Remplacé manuellement",
       "unset": "Non configuré"
+    }
+  },
+  "enterprise": {
+    "managed": {
+      "title": "Mises à jour des assistants",
+      "phaseLabel": "État de synchronisation",
+      "pushLabel": "Mises à jour en direct",
+      "version": "Version installée : {{version}}",
+      "checked": "Dernière vérification : {{at}}",
+      "schedule": "Vérification toutes les 5 minutes. Les nouvelles conversations utilisent les mises à jour ; les autres conservent leur version.",
+      "failed": "Vérifiez la synchronisation et la connexion, puis réessayez.",
+      "sync": "Synchroniser",
+      "phase": {
+        "idle": "Non connecté",
+        "syncing": "Installation",
+        "ready": "À jour",
+        "error": "Échec de synchronisation",
+        "unauthorized": "Clé invalide"
+      },
+      "push": {
+        "disconnected": "Vérification périodique disponible",
+        "connecting": "Connexion en cours",
+        "connected": "Connecté"
+      }
     }
   }
 }

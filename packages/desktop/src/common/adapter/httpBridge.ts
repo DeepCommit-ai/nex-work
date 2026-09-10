@@ -7,6 +7,7 @@
  */
 
 import { refreshSession, WS_CLOSE_POLICY_VIOLATION } from './sessionRefresh';
+import { prepareManagedConversation, waitForManagedCatalog } from '@/common/deptconfig/managedConversation';
 
 // ---------------------------------------------------------------------------
 // Base URL
@@ -223,6 +224,24 @@ export async function httpRequest<T>(
   body?: unknown,
   options?: HttpRequestOptions
 ): Promise<T> {
+  const release = await waitForManagedCatalog(method, path);
+  try {
+    return await executeHttpRequest<T>(method, path, body, options);
+  } finally {
+    if (release) await release();
+  }
+}
+
+async function executeHttpRequest<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  options?: HttpRequestOptions
+): Promise<T> {
+  body = await prepareManagedConversation(method, path, body, (route) => httpRequest('GET', route));
+  if (path === '/api/assistants/default-assistant' && method === 'DELETE') throw new Error('MANAGED_DEFAULT_REQUIRED');
+  if (path === '/api/assistants/default-assistant/state' && method === 'PATCH' && body && typeof body === 'object')
+    body = { ...body, enabled: true };
   const headers: Record<string, string> = {};
 
   if (body !== undefined) {

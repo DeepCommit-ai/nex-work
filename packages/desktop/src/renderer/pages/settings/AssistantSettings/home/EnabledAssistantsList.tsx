@@ -139,6 +139,7 @@ const EnabledAssistantRow: React.FC<EnabledAssistantRowProps> = ({
           <RuntimeBadge assistant={assistant} />
         </span>
         <Switch
+          disabled={assistant.id === 'default-assistant'}
           size='small'
           data-testid={`switch-enabled-${assistant.id}`}
           checked={assistant.enabled !== false}

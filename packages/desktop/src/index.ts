@@ -43,7 +43,7 @@ import { prepareNexworkSkills } from '@/branding/tools/resources';
 import { migrateNexworkTools } from '@/branding/tools/migration';
 import { prepareNexworkAssistants, reconcileNexworkAssistants } from '@/branding/assistants/runtime';
 import { configureNexworkClaude } from '@/branding/assistants/claudeProfile';
-import { migrateNexworkAssistantData } from '@/branding/assistants/migration';
+import { startManagedAgents } from '@process/services/managedagents';
 import { startWebHost } from '@aionui/web-host';
 import { initializeZoomFactor, setupZoomForWindow } from './process/utils/zoom';
 import { hydrateWindowsProcessPath } from './process/startup/windowsPath';
@@ -216,6 +216,8 @@ let isExplicitQuit = false;
 let appReadyDone = false;
 
 let mainWindow: BrowserWindow;
+let backendDataDir = '';
+let initialBackendMigrationsCompleted = false;
 const backendManager = new BackendLifecycleManager(
   {
     version: app.getVersion(),
@@ -227,11 +229,13 @@ const backendManager = new BackendLifecycleManager(
   {
     spawnEnvironment: (dataDir) => ({ ...prepareNexworkAssistants(dataDir), ...prepareNexworkSkills(dataDir) }),
     afterReady: async (port, dataDir) => {
+      backendDataDir = dataDir;
       // Wait for backend ownership, legacy database copy, and schema upgrades first.
-      migrateNexworkAssistantData(dataDir);
       migrateNexworkTools(dataDir, prepareNexworkSkills(dataDir).AIONUI_BUILTIN_SKILLS_PATH);
       await configureNexworkClaude(port);
       await reconcileNexworkAssistants(port);
+      if (initialBackendMigrationsCompleted)
+        startManagedAgents(port, dataDir, prepareNexworkSkills(dataDir).AIONUI_BUILTIN_SKILLS_PATH);
     },
   }
 );
@@ -369,6 +373,12 @@ const scheduleBackendMigrations = (): void => {
       const { runBackendMigrations } = await import('./process/utils/runBackendMigrations');
       await runBackendMigrations(ProcessConfig);
       await reconcileNexworkAssistants(backendManager.port);
+      initialBackendMigrationsCompleted = true;
+      startManagedAgents(
+        backendManager.port,
+        backendDataDir,
+        prepareNexworkSkills(backendDataDir).AIONUI_BUILTIN_SKILLS_PATH
+      );
       console.info('[AionUi] runBackendMigrations completed');
     } catch (error) {
       console.error('[AionUi] Backend migration hook threw:', error);

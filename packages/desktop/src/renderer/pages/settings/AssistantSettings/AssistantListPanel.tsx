@@ -1,3 +1,4 @@
+import { isManagedAssistant } from '@/common/deptconfig/managedConversation';
 /**
  * AssistantListPanel — Renders the collapsible list of assistants
  * with avatar, name, enabled switch, and persistent row actions.
@@ -62,7 +63,7 @@ const SortableAssistantCard: React.FC<SortableAssistantCardProps> = ({
   sortingEnabled,
 }) => {
   const { t } = useTranslation();
-  const canDelete = assistant.source === 'user';
+  const canDelete = assistant.source === 'user' && !isManagedAssistant(assistant.id);
   const canDuplicate = assistant.source !== 'user';
   const actionMenu = (
     <Menu
@@ -188,6 +189,7 @@ const SortableAssistantCard: React.FC<SortableAssistantCardProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <Switch
+          disabled={assistant.id === 'default-assistant'}
           size='small'
           data-testid={`switch-enabled-${assistant.id}`}
           checked={assistant.enabled !== false}

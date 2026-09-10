@@ -1,3 +1,4 @@
+import { isManagedAssistant } from '@/common/deptconfig/managedConversation';
 import { ipcBridge } from '@/common';
 import type { AssistantEditorViewModel, AssistantListItem } from './types';
 import { useManagedAgentRuntimeCatalog } from '@/renderer/hooks/agent/useManagedAgents';
@@ -136,7 +137,7 @@ const AssistantEditorSections: React.FC<AssistantEditorSectionsProps> = ({ edito
 
   const isBuiltin = activeAssistant?.source === 'builtin';
   const isGenerated = activeAssistant?.source === 'generated';
-  const isReadOnlyAssistant = isBuiltin;
+  const isReadOnlyAssistant = isBuiltin || Boolean(activeAssistant && isManagedAssistant(activeAssistant.id));
   const isIdentityLocked = isBuiltin || isGenerated;
   const isDescriptionReadOnly = isBuiltin;
   const showSkills = isCreating || activeAssistant !== null;

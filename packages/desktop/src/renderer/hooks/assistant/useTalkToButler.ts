@@ -69,6 +69,11 @@ export const useTalkToButler = (): ((args: TalkToButlerArgs) => Promise<void>) =
         console.error('[talkToButler] failed to resolve/enable butler:', error);
       }
 
+      if (!selectedAssistantId) {
+        Message.error(t('settings.talkToButler.unavailable'));
+        return;
+      }
+
       globalNavigate('/guid', {
         state: {
           selectedAssistantId,

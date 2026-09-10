@@ -15,6 +15,8 @@
 import type { IConfirmation } from '@/common/chat/chatLib';
 import type { AcpSlashCommandApiItem } from '@/common/chat/slash/types';
 import { bridge } from '@/common/platform/bridge';
+import type { ManagedSyncResult, ManagedSyncStatus } from '@/common/deptconfig/catalog';
+import { filterManagedAssistants, localizeManagedAssistant } from '@/common/deptconfig/managedConversation';
 import { buildListTasksPath } from './teamTaskPath';
 import type { OpenDialogOptions } from 'electron';
 import type {
@@ -167,10 +169,13 @@ export const shell = {
 // ---------------------------------------------------------------------------
 
 export const assistants = {
-  list: httpGet<Assistant[], void>('/api/assistants'),
-  get: httpGet<AssistantDetail, { id: string; locale?: string }>(
-    ({ id, locale }) =>
-      `/api/assistants/${encodeURIComponent(id)}${locale ? `?locale=${encodeURIComponent(locale)}` : ''}`
+  list: withResponseMap(httpGet<Assistant[], void>('/api/assistants'), filterManagedAssistants),
+  get: withResponseMap(
+    httpGet<AssistantDetail, { id: string; locale?: string }>(
+      ({ id, locale }) =>
+        `/api/assistants/${encodeURIComponent(id)}${locale ? `?locale=${encodeURIComponent(locale)}` : ''}`
+    ),
+    localizeManagedAssistant
   ),
   create: httpPost<Assistant, CreateAssistantRequest>('/api/assistants'),
   update: httpPut<Assistant, UpdateAssistantRequest>((p) => `/api/assistants/${p.id}`),
@@ -183,6 +188,17 @@ export const assistants = {
     }
   ),
   import: httpPost<ImportAssistantsResult, ImportAssistantsRequest>('/api/assistants/import'),
+};
+
+/** Desktop-owned managed catalog lifecycle. All windows share this instance. */
+export const managedAgents = {
+  acquire: bridge.buildProvider<ManagedSyncResult & { lease?: string }, void>('enterprise.agents.acquire'),
+  release: bridge.buildProvider<void, { lease: string }>('enterprise.agents.release'),
+  connect: bridge.buildProvider<ManagedSyncResult, { serverUrl: string; deptKey: string }>('enterprise.agents.connect'),
+  sync: bridge.buildProvider<ManagedSyncResult, void>('enterprise.agents.sync'),
+  ready: bridge.buildProvider<ManagedSyncResult, void>('enterprise.agents.ready'),
+  status: bridge.buildProvider<ManagedSyncStatus, void>('enterprise.agents.status'),
+  changed: bridge.buildEmitter<ManagedSyncStatus>('enterprise.agents.changed'),
 };
 
 // ---------------------------------------------------------------------------
