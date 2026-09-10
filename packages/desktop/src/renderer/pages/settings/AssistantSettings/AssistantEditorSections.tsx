@@ -34,6 +34,7 @@ const AssistantEditorSections: React.FC<AssistantEditorSectionsProps> = ({ edito
   const { t, i18n } = useTranslation();
   const localeKey = i18n.language;
   const engineSettingsVisible = useCapability('agent.settingsVisible');
+  const modelSelectable = useCapability('model.userSelectable');
   const managedAgentRuntimeCatalog = useManagedAgentRuntimeCatalog();
   const agentLogos = useAgentLogos();
   const { providers, getAvailableModels } = useModelProviderList();
@@ -345,7 +346,7 @@ const AssistantEditorSections: React.FC<AssistantEditorSectionsProps> = ({ edito
 
   return (
     <div className='flex flex-col gap-16px pb-24px'>
-      {isBuiltin && activeAssistant ? (
+      {isBuiltin && activeAssistant && engineSettingsVisible && modelSelectable ? (
         <div
           className='rounded-12px border border-border-2 bg-fill-1 px-14px py-12px text-13px leading-20px text-t-secondary md:rounded-16px'
           data-testid='assistant-builtin-readonly-banner'

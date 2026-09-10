@@ -6,7 +6,8 @@
 
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import DefaultsSection from '@/renderer/pages/settings/AssistantSettings/editor/DefaultsSection';
 
 vi.mock('react-i18next', () => ({
@@ -100,6 +101,20 @@ const renderDefaultsSection = () =>
   );
 
 describe('DefaultsSection option descriptions', () => {
+  beforeEach(() => setPolicy(normalizePolicy({ capabilities: { 'model.userSelectable': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
+  it('hides model names and option tooltips under the employee policy', () => {
+    setPolicy(STATIC_POLICY);
+    const { container } = renderDefaultsSection();
+
+    expect(screen.queryByText('Default')).not.toBeInTheDocument();
+    expect(
+      container.querySelector('[data-tooltip-content="Use the default model currently configured by the CLI"]')
+    ).toBeNull();
+    expect(screen.getByText('Bypass Permissions')).toBeInTheDocument();
+  });
+
   it('renders default model descriptions in option tooltips', () => {
     renderDefaultsSection();
 

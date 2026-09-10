@@ -6,7 +6,8 @@
 
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import DefaultsSection from '@/renderer/pages/settings/AssistantSettings/editor/DefaultsSection';
 
 vi.mock('react-i18next', () => ({
@@ -114,6 +115,9 @@ const renderDefaultsSection = (overrides: Partial<React.ComponentProps<typeof De
   );
 
 describe('DefaultsSection dropdown search', () => {
+  beforeEach(() => setPolicy(normalizePolicy({ capabilities: { 'model.userSelectable': true } }, 'static')));
+  afterEach(() => setPolicy(STATIC_POLICY));
+
   it('enables search on model, skills and MCP selects when options exceed the threshold', () => {
     renderDefaultsSection();
 

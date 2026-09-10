@@ -189,7 +189,9 @@ const backendOption = (id: string, runtimeKey: string, name = runtimeKey) => ({
 describe('AssistantEditorSections', () => {
   afterEach(() => setPolicy(STATIC_POLICY));
   beforeEach(() => {
-    setPolicy(normalizePolicy({ capabilities: { 'agent.settingsVisible': true } }, 'static'));
+    setPolicy(
+      normalizePolicy({ capabilities: { 'agent.settingsVisible': true, 'model.userSelectable': true } }, 'static')
+    );
     mockLanguage = 'en-US';
     mockResolvedLanguage = 'en-US';
     showOpenInvokeMock.mockReset();
@@ -229,6 +231,42 @@ describe('AssistantEditorSections', () => {
       />
     );
     expect(screen.queryByTestId('assistant-card-engine')).not.toBeInTheDocument();
+  });
+
+  it.each(['default-assistant', 'nexwork-butler', 'office-assistant', 'registered-assistant'])(
+    'hides the published model for %s under the employee policy',
+    (id) => {
+      setPolicy(STATIC_POLICY);
+      renderWithProviders(
+        <AssistantEditorSections
+          editor={createEditor({
+            isCreating: false,
+            defaults: {
+              model: { mode: 'fixed', setMode: vi.fn(), value: 'private-model-id', setValue: vi.fn() },
+            },
+          })}
+          activeAssistant={{ id, name: id, source: 'user', enabled: true, sort_order: 0 }}
+        />
+      );
+
+      const defaultsCard = screen.getByTestId('assistant-card-defaults');
+      expect(defaultsCard).not.toHaveTextContent(/Model|private-model-id|Remember last used only takes effect/);
+      expect(screen.queryByTestId('select-assistant-default-model')).not.toBeInTheDocument();
+      expect(within(defaultsCard).getByText('Permission')).toBeInTheDocument();
+    }
+  );
+
+  it('does not advertise hidden model or engine settings for an offline builtin assistant', () => {
+    setPolicy(STATIC_POLICY);
+    renderWithProviders(
+      <AssistantEditorSections
+        editor={createEditor({ isCreating: false })}
+        activeAssistant={{ id: 'default-assistant', name: 'Default', source: 'builtin', enabled: true, sort_order: 0 }}
+      />
+    );
+
+    expect(screen.queryByTestId('assistant-builtin-readonly-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('select-assistant-default-model')).not.toBeInTheDocument();
   });
 
   it('renders all default configuration rows in a single card', () => {

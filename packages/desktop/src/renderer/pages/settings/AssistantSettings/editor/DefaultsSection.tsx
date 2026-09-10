@@ -1,6 +1,7 @@
 import type { BuiltinAutoSkill, SkillInfo } from '../types';
 import type { IMcpServer } from '@/common/config/storage';
 import { DROPDOWN_SEARCH_THRESHOLD } from '@/renderer/components/agent/runtimeSelectorOptions';
+import { useCapability } from '@/renderer/hooks/useCapability';
 import { Button, Select, Tooltip } from '@arco-design/web-react';
 import { Brain, Lightning, LinkCloud, Shield, Toolkit } from '@icon-park/react';
 import React from 'react';
@@ -107,6 +108,7 @@ const DefaultsSection: React.FC<DefaultsSectionProps> = ({
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const modelSelectable = useCapability('model.userSelectable');
   const canEditDefaultModelAndPermission = !isReadOnlyAssistant || isBuiltin;
   const canEditDefaultSkillsAndMcps = !isReadOnlyAssistant;
   const hasFixedThoughtLevelValue =
@@ -124,52 +126,54 @@ const DefaultsSection: React.FC<DefaultsSectionProps> = ({
       testId='assistant-card-defaults'
     >
       <div className='space-y-16px'>
-        <ConfigRow
-          icon={<LinkCloud theme='outline' size='14' />}
-          label={t('settings.assistantDefaultModelLabel', { defaultValue: 'Model' })}
-          hint={t('settings.assistantDefaultConfigHint', {
-            defaultValue:
-              'Remember last used only takes effect after this assistant has recorded a previous selection.',
-          })}
-        >
-          <Select
-            key={`assistant-default-model-${localeKey}`}
-            getPopupContainer={getEditorSelectPopupContainer}
-            value={defaultModelMode === 'fixed' && defaultModelValue ? defaultModelValue : AUTO_SELECT_VALUE}
-            onChange={(value) => {
-              const nextValue = value as string;
-              if (nextValue === AUTO_SELECT_VALUE) {
-                setDefaultModelMode('auto');
-                setDefaultModelValue('');
-                return;
-              }
-              setDefaultModelMode('fixed');
-              setDefaultModelValue(nextValue);
-            }}
-            disabled={!canEditDefaultModelAndPermission}
-            allowClear={false}
-            showSearch={modelOptions.length > DROPDOWN_SEARCH_THRESHOLD}
-            filterOption={filterSelectOption}
-            placeholder={t('settings.assistantSelectDefaultModel', { defaultValue: 'Select a model' })}
-            notFoundContent={t('settings.assistantNoAvailableModels', {
-              defaultValue: 'No available models configured',
+        {modelSelectable && (
+          <ConfigRow
+            icon={<LinkCloud theme='outline' size='14' />}
+            label={t('settings.assistantDefaultModelLabel', { defaultValue: 'Model' })}
+            hint={t('settings.assistantDefaultConfigHint', {
+              defaultValue:
+                'Remember last used only takes effect after this assistant has recorded a previous selection.',
             })}
-            data-testid='select-assistant-default-model'
           >
-            <Select.Option value={AUTO_SELECT_VALUE}>{autoDefaultOptionLabel}</Select.Option>
-            {modelOptions.map((option) => (
-              <Select.Option key={`${localeKey}-${option.key}`} value={option.value} data-label={option.label}>
-                {option.description ? (
-                  <Tooltip content={option.description} position='right'>
+            <Select
+              key={`assistant-default-model-${localeKey}`}
+              getPopupContainer={getEditorSelectPopupContainer}
+              value={defaultModelMode === 'fixed' && defaultModelValue ? defaultModelValue : AUTO_SELECT_VALUE}
+              onChange={(value) => {
+                const nextValue = value as string;
+                if (nextValue === AUTO_SELECT_VALUE) {
+                  setDefaultModelMode('auto');
+                  setDefaultModelValue('');
+                  return;
+                }
+                setDefaultModelMode('fixed');
+                setDefaultModelValue(nextValue);
+              }}
+              disabled={!canEditDefaultModelAndPermission}
+              allowClear={false}
+              showSearch={modelOptions.length > DROPDOWN_SEARCH_THRESHOLD}
+              filterOption={filterSelectOption}
+              placeholder={t('settings.assistantSelectDefaultModel', { defaultValue: 'Select a model' })}
+              notFoundContent={t('settings.assistantNoAvailableModels', {
+                defaultValue: 'No available models configured',
+              })}
+              data-testid='select-assistant-default-model'
+            >
+              <Select.Option value={AUTO_SELECT_VALUE}>{autoDefaultOptionLabel}</Select.Option>
+              {modelOptions.map((option) => (
+                <Select.Option key={`${localeKey}-${option.key}`} value={option.value} data-label={option.label}>
+                  {option.description ? (
+                    <Tooltip content={option.description} position='right'>
+                      <span className='block min-w-0 truncate'>{option.label}</span>
+                    </Tooltip>
+                  ) : (
                     <span className='block min-w-0 truncate'>{option.label}</span>
-                  </Tooltip>
-                ) : (
-                  <span className='block min-w-0 truncate'>{option.label}</span>
-                )}
-              </Select.Option>
-            ))}
-          </Select>
-        </ConfigRow>
+                  )}
+                </Select.Option>
+              ))}
+            </Select>
+          </ConfigRow>
+        )}
 
         <ConfigRow
           icon={<Shield theme='outline' size='14' />}
