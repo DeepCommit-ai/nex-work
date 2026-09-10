@@ -9,7 +9,7 @@ import type { Theme } from '@/common/theme/types';
 import { ipcBridge } from '@/common';
 import { uuid } from '@/common/utils';
 import { useThemeContext } from '@renderer/hooks/context/ThemeContext.tsx';
-import { Button, Message, Modal } from '@arco-design/web-react';
+import { Message, Modal } from '@arco-design/web-react';
 import { EditTwo, CheckOne } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -343,14 +343,6 @@ const CssThemeSettings: React.FC = () => {
   );
 
   /**
-   * 打开添加主题弹窗 / Open add theme modal
-   */
-  const handleAddTheme = useCallback(() => {
-    setEditingTheme(null);
-    setModalVisible(true);
-  }, []);
-
-  /**
    * 打开编辑主题弹窗 / Open edit theme modal
    */
   const handleEditTheme = useCallback((theme: Theme, e: React.MouseEvent) => {
@@ -448,9 +440,6 @@ const CssThemeSettings: React.FC = () => {
       {/* 标题栏 / Header */}
       <div className='flex items-start md:items-center justify-between gap-8px flex-wrap'>
         <span className='text-14px text-t-secondary leading-22px'>{t('settings.cssTheme.selectOrCustomize')}</span>
-        <Button type='primary' size='small' className='!h-32px !rounded-8px !px-14px !m-0' onClick={handleAddTheme}>
-          {t('settings.cssTheme.addManually')}
-        </Button>
       </div>
 
       {/* 主题卡片列表 / Theme card list.
