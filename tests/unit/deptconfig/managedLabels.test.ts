@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
   filterManagedAssistants,
+  assertManagedEngineEditAllowed,
   isManagedAssistant,
   prepareManagedConversation,
   setManagedCatalogIds,
 } from '@/common/deptconfig/managedConversation';
 
 describe('published assistant identities', () => {
+  it('protects core engines before connection and registered engines after catalog installation', () => {
+    setManagedCatalogIds([]);
+    expect(isManagedAssistant('nexwork-butler')).toBe(true);
+    setManagedCatalogIds(['team-helper']);
+    expect(() => assertManagedEngineEditAllowed('PATCH', '/api/assistants/team-helper', { agent_id: 'aion' })).toThrow(
+      'READ_ONLY'
+    );
+    expect(() =>
+      assertManagedEngineEditAllowed('PATCH', '/api/assistants/team-helper/state', { enabled: false })
+    ).not.toThrow();
+  });
+
   it('restores server localization even when native user records have no localized fields', () => {
     setManagedCatalogIds(['office-assistant'], {
       'office-assistant': { name_i18n: { 'zh-CN': '办公助手' }, description_i18n: { 'zh-CN': '处理办公文件' } },

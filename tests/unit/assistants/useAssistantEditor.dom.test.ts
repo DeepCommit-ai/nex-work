@@ -74,7 +74,14 @@ describe('useAssistantEditor', () => {
   // The shipped policy conceals bare-CLI (`generated`) assistants; these tests
   // exercise list mechanics with them visible (concealment is covered by
   // tests/unit/renderer/assistantSelection.test.ts).
-  beforeEach(() => setPolicy(normalizePolicy({ version: 'test', capabilities: { 'cli.visible': true } }, 'static')));
+  beforeEach(() =>
+    setPolicy(
+      normalizePolicy(
+        { version: 'test', capabilities: { 'cli.visible': true, 'agent.settingsVisible': true } },
+        'static'
+      )
+    )
+  );
   afterEach(() => setPolicy(STATIC_POLICY));
 
   const mockAssistantDetail = {
@@ -447,6 +454,57 @@ describe('useAssistantEditor', () => {
     expect(loadAssistantsMock).toHaveBeenCalled();
     expect(swrMutate).toHaveBeenCalledWith('assistants.list');
     expect(swrMutate).toHaveBeenCalledWith('guid.assistant.detail.a1.en');
+  });
+
+  it('loads the server engine but ignores employee edits and omits engine changes when saving', async () => {
+    setPolicy(STATIC_POLICY);
+    const assistant: AssistantListItem = {
+      id: 'a1',
+      name: 'Assistant',
+      source: 'user',
+      enabled: true,
+      sort_order: 1,
+      agent_id: 'agent-claude',
+    };
+    const { result } = renderHook(() => useAssistantEditor({ ...defaultParams, activeAssistant: assistant }));
+    await act(async () => {
+      await result.current.handleEdit(assistant);
+    });
+    act(() => {
+      result.current.setEditAgent('agent-gemini');
+    });
+    expect(result.current.editAgent).toBe('agent-claude');
+    expect(result.current.defaultModelValue).toBe('gemini-2.5-pro');
+    await act(async () => {
+      await result.current.handleSave();
+    });
+    expect(ipcBridge.assistants.update.invoke).toHaveBeenCalledWith(
+      expect.not.objectContaining({ agent_id: expect.anything() })
+    );
+  });
+
+  it('does not write a published assistant even when an editor callback is invoked directly', async () => {
+    const assistant: AssistantListItem = {
+      id: 'nexwork-butler',
+      name: 'Butler',
+      source: 'user',
+      enabled: true,
+      sort_order: 1,
+      agent_id: 'agent-claude',
+    };
+    const { result } = renderHook(() => useAssistantEditor({ ...defaultParams, activeAssistant: assistant }));
+    await act(async () => {
+      await result.current.handleEdit(assistant);
+    });
+    act(() => {
+      result.current.setEditAgent('agent-gemini');
+    });
+    await act(async () => {
+      await result.current.handleSave();
+    });
+    expect(result.current.editAgent).toBe('agent-claude');
+    expect(ipcBridge.assistants.update.invoke).not.toHaveBeenCalled();
+    expect(ipcBridge.fs.writeAssistantRule.invoke).not.toHaveBeenCalled();
   });
 
   it('clears model and permission defaults when the main agent changes', async () => {

@@ -448,6 +448,18 @@ describe('httpBridge', () => {
   });
 
   describe('httpRequest', () => {
+    it.each(['default-assistant', 'office-assistant', 'nexwork-butler'])(
+      'blocks engine writes to %s before making a request',
+      async (id) => {
+        const fetchSpy = vi.fn();
+        vi.stubGlobal('fetch', fetchSpy);
+        await expect(httpRequest('PUT', `/api/assistants/${id}`, { agent_id: 'another-engine' })).rejects.toThrow(
+          'MANAGED_ENGINE_READ_ONLY'
+        );
+        expect(fetchSpy).not.toHaveBeenCalled();
+      }
+    );
+
     it('performs fetch and unwraps data envelope', async () => {
       const fetchSpy = vi.fn().mockResolvedValue(
         new Response(JSON.stringify({ data: { result: 'ok' } }), {

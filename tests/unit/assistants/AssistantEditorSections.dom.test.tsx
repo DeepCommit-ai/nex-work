@@ -1,5 +1,6 @@
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { normalizePolicy, setPolicy, STATIC_POLICY } from '@/common/capabilities/policy';
 import { ConfigProvider } from '@arco-design/web-react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -186,7 +187,9 @@ const backendOption = (id: string, runtimeKey: string, name = runtimeKey) => ({
 });
 
 describe('AssistantEditorSections', () => {
+  afterEach(() => setPolicy(STATIC_POLICY));
   beforeEach(() => {
+    setPolicy(normalizePolicy({ capabilities: { 'agent.settingsVisible': true } }, 'static'));
     mockLanguage = 'en-US';
     mockResolvedLanguage = 'en-US';
     showOpenInvokeMock.mockReset();
@@ -209,6 +212,23 @@ describe('AssistantEditorSections', () => {
         },
       },
     ];
+  });
+
+  it('hides the engine section under the employee capability policy', () => {
+    setPolicy(STATIC_POLICY);
+    renderWithProviders(<AssistantEditorSections editor={createEditor()} activeAssistant={null} />);
+    expect(screen.queryByTestId('assistant-card-engine')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('select-assistant-agent')).not.toBeInTheDocument();
+  });
+
+  it.each(['default-assistant', 'office-assistant', 'nexwork-butler'])('never exposes engine controls for %s', (id) => {
+    renderWithProviders(
+      <AssistantEditorSections
+        editor={createEditor({ isCreating: false })}
+        activeAssistant={{ id, name: id, source: 'user', enabled: true, sort_order: 0 }}
+      />
+    );
+    expect(screen.queryByTestId('assistant-card-engine')).not.toBeInTheDocument();
   });
 
   it('renders all default configuration rows in a single card', () => {

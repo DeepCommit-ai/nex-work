@@ -18,6 +18,8 @@ import { useTranslation } from 'react-i18next';
 import { mutate as swrMutate } from 'swr';
 import { useTalkToButler } from './useTalkToButler';
 import { isElectronDesktop } from '@/renderer/utils/platform';
+import { can } from '@/common/capabilities/policy';
+import { isManagedAssistant } from '@/common/deptconfig/managedConversation';
 
 type UseAssistantEditorParams = {
   localeKey: string;
@@ -81,6 +83,7 @@ export const useAssistantEditor = ({
   const { t } = useTranslation();
   const talkToButler = useTalkToButler();
   const previousLocaleKeyRef = useRef(localeKey);
+  const editingAssistantIdRef = useRef<string | null>(null);
 
   const [editVisible, setEditVisible] = useState(false);
   const [editName, setEditName] = useState('');
@@ -218,6 +221,8 @@ export const useAssistantEditor = ({
 
   const setEditAgent = useCallback(
     (nextAgent: string) => {
+      const id = editingAssistantIdRef.current ?? activeAssistant?.id;
+      if (!can('agent.settingsVisible') || (id && isManagedAssistant(id))) return;
       if (editAgent === nextAgent) {
         return;
       }
@@ -225,10 +230,11 @@ export const useAssistantEditor = ({
       resetModelAndPermissionDefaults();
       setEditAgentState(nextAgent);
     },
-    [editAgent, resetModelAndPermissionDefaults]
+    [activeAssistant?.id, editAgent, resetModelAndPermissionDefaults]
   );
 
   const handleEdit = async (assistant: AssistantListItem) => {
+    editingAssistantIdRef.current = assistant.id;
     setIsCreating(false);
     setActiveAssistantId(assistant.id);
     setEditVisible(true);
@@ -237,7 +243,7 @@ export const useAssistantEditor = ({
     setEditDescription(assistant.description || '');
     setEditAvatar(assistant.avatar || '');
     setEditAvatarPreview(undefined);
-    setEditAgent(assistant.agent_id || '');
+    setEditAgentState(assistant.agent_id || '');
     resetDefaultConfigState();
     resetSkillEditorState();
 
@@ -256,7 +262,7 @@ export const useAssistantEditor = ({
       );
       setEditAvatar(detail.profile.avatar || '');
       setEditAvatarPreview(undefined);
-      setEditAgent(detail.engine.agent_id || assistant.agent_id || '');
+      setEditAgentState(detail.engine.agent_id || assistant.agent_id || '');
       setEditContext(detail.rules.content || '');
       setEditRecommendedPromptsText(resolveLocalizedRecommendedPrompts(detail, localeKey).join('\n'));
       setDefaultModelMode(detail.defaults.model.mode === 'fixed' ? 'fixed' : 'auto');
@@ -299,7 +305,8 @@ export const useAssistantEditor = ({
     setEditContext('');
     setEditAvatar('\u{1F916}');
     setEditAvatarPreview(undefined);
-    setEditAgent('');
+    editingAssistantIdRef.current = null;
+    setEditAgentState('');
     resetDefaultConfigState();
     resetSkillEditorState();
 
@@ -332,7 +339,8 @@ export const useAssistantEditor = ({
     setEditDescription(assistant.description_i18n?.[localeKey] || assistant.description || '');
     setEditAvatar(assistant.avatar || '\u{1F916}');
     setEditAvatarPreview(undefined);
-    setEditAgent(assistant.agent_id || '');
+    editingAssistantIdRef.current = null;
+    setEditAgentState(assistant.agent_id || '');
     resetDefaultConfigState();
     resetSkillEditorState();
 
@@ -385,6 +393,12 @@ export const useAssistantEditor = ({
 
   const handleSave = async () => {
     try {
+      const editedId = editingAssistantIdRef.current ?? activeAssistant?.id;
+      if (!isCreating && editedId && isManagedAssistant(editedId)) {
+        message.error(t('common.readOnly'));
+        return;
+      }
+      const engineUpdate = can('agent.settingsVisible') ? { agent_id: editAgent || undefined } : {};
       if (!editName.trim()) {
         message.error(t('settings.assistantNameRequired', { defaultValue: 'Assistant name is required' }));
         return;
@@ -466,7 +480,7 @@ export const useAssistantEditor = ({
           name: editName,
           description: editDescription || undefined,
           avatar: editAvatar || undefined,
-          agent_id: editAgent || undefined,
+          agent_id: can('agent.settingsVisible') ? editAgent || undefined : '2d23ff1c',
           enabled_skills: selectedSkills,
           custom_skill_names: finalCustomSkills,
           disabled_builtin_skills: disabledBuiltinSkills.length > 0 ? disabledBuiltinSkills : undefined,
@@ -486,7 +500,7 @@ export const useAssistantEditor = ({
         if (isBuiltinAssistant(activeAssistant)) {
           updateRequest = {
             id: activeAssistant.id,
-            agent_id: editAgent || undefined,
+            ...engineUpdate,
             defaults: {
               model:
                 defaultModelMode === 'fixed'
@@ -518,7 +532,7 @@ export const useAssistantEditor = ({
             name: editName,
             description: editDescription || undefined,
             avatar: editAvatar || undefined,
-            agent_id: editAgent || undefined,
+            ...engineUpdate,
             enabled_skills: selectedSkills,
             custom_skill_names: finalCustomSkills,
             disabled_builtin_skills: disabledBuiltinSkills.length > 0 ? disabledBuiltinSkills : undefined,

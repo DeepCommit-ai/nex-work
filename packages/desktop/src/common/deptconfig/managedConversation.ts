@@ -1,5 +1,6 @@
 /** A desktop-provided gate keeps new conversations outside catalog installation windows. */
 import type { ManagedLabels } from '@/common/deptconfig/catalog';
+import { MANAGED_CORE_IDS } from '@/common/deptconfig/catalog';
 import type { AssistantDetail } from '@/common/types/agent/assistantTypes';
 import type { IMcpServer } from '@/common/config/storage';
 type Release = () => Promise<void>;
@@ -12,7 +13,15 @@ export function setManagedCatalogIds(ids: readonly string[], localized: ManagedL
   labels = localized;
 }
 export function isManagedAssistant(id: string): boolean {
-  return visibleIds?.has(id) ?? id === 'default-assistant';
+  return MANAGED_CORE_IDS.some((coreId) => coreId === id) || (visibleIds?.has(id) ?? false);
+}
+
+/** Employee edits cannot replace the engine of a published assistant. */
+export function assertManagedEngineEditAllowed(method: string, route: string, body: unknown): void {
+  if (!['PUT', 'PATCH'].includes(method) || !body || typeof body !== 'object') return;
+  const match = /^\/api\/assistants\/([^/?]+)(?:\?.*)?$/.exec(route);
+  if (match && isManagedAssistant(decodeURIComponent(match[1])) && ('agent_id' in body || 'engine' in body))
+    throw new Error('MANAGED_ENGINE_READ_ONLY');
 }
 export function filterManagedAssistants<T extends { id: string }>(items: T[]): T[] {
   return visibleIds

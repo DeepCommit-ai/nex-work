@@ -7,7 +7,11 @@
  */
 
 import { refreshSession, WS_CLOSE_POLICY_VIOLATION } from './sessionRefresh';
-import { prepareManagedConversation, waitForManagedCatalog } from '@/common/deptconfig/managedConversation';
+import {
+  assertManagedEngineEditAllowed,
+  prepareManagedConversation,
+  waitForManagedCatalog,
+} from '@/common/deptconfig/managedConversation';
 
 // ---------------------------------------------------------------------------
 // Base URL
@@ -238,6 +242,7 @@ async function executeHttpRequest<T>(
   body?: unknown,
   options?: HttpRequestOptions
 ): Promise<T> {
+  assertManagedEngineEditAllowed(method, path, body);
   body = await prepareManagedConversation(method, path, body, (route) => httpRequest('GET', route));
   if (path === '/api/assistants/default-assistant' && method === 'DELETE') throw new Error('MANAGED_DEFAULT_REQUIRED');
   if (path === '/api/assistants/default-assistant/state' && method === 'PATCH' && body && typeof body === 'object')
