@@ -26,6 +26,7 @@ import {
   getTempPath,
   hasElectronAppPath,
   verifyDirectoryFiles,
+  resolveCliSafePath,
 } from './utils';
 import { runLegacyDatabaseMigrations } from '@process/services/database/runLegacyDatabaseMigrations';
 import { BUILTIN_IMAGE_GEN_ID } from '../resources/builtinMcp/constants';
@@ -59,7 +60,8 @@ const mkdirSync = (path: string) => {
  * 迁移老版本数据从temp目录到userData/config目录
  */
 const migrateLegacyData = async () => {
-  const oldDir = getTempPath(); // 老的temp目录
+  const legacyTemp = path.join(getPlatformServices().paths.getTempDir(), 'aionui');
+  const oldDir = existsSync(legacyTemp) ? legacyTemp : getTempPath();
   const newDir = getConfigPath(); // 新的userData/config目录
 
   try {
@@ -238,7 +240,7 @@ const envFile = JsonFileBuilder<IEnvStorageRefer>(path.join(getHomePage(), STORA
 
 const dirConfig = envFile.getSync('aionui.dir');
 
-const cacheDir = dirConfig?.cacheDir || getHomePage();
+const cacheDir = resolveCliSafePath(dirConfig?.cacheDir || getHomePage(), getHomePage());
 
 const configFile = JsonFileBuilder<ILegacyConfigStorageRefer>(path.join(cacheDir, STORAGE_PATH.config));
 type ConversationHistoryData = Record<string, TMessage[]>;
@@ -380,6 +382,16 @@ const initStorage = async () => {
   // 3. 初始化存储系统
   ConfigStorage.interceptor(configFile);
   EnvStorage.interceptor(envFile);
+  if (dirConfig) {
+    const { cacheDir: currentCache, workDir: currentWork, logDir: currentLog } = getSystemDir();
+    if (dirConfig.cacheDir !== currentCache || dirConfig.workDir !== currentWork || dirConfig.logDir !== currentLog)
+      await envFile.set('aionui.dir', {
+        ...dirConfig,
+        cacheDir: currentCache,
+        workDir: currentWork,
+        logDir: currentLog,
+      });
+  }
   mark('3. storage interceptors');
 
   mark('4. MCP config initialization skipped');
@@ -440,7 +452,7 @@ export const getSystemDir = () => {
     cacheDir: cacheDir,
     // getDataPath() returns CLI-safe path (symlink on macOS) to avoid spaces
     // getDataPath() 返回 CLI 安全路径（macOS 上的符号链接）以避免空格问题
-    workDir: dirConfig?.workDir || getDataPath(),
+    workDir: resolveCliSafePath(dirConfig?.workDir || getDataPath(), getDataPath()),
     logDir,
     platform: process.platform as PlatformType,
     arch: process.arch as ArchitectureType,

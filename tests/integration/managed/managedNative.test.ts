@@ -15,6 +15,9 @@ describe.runIf(process.env.NEXWORK_MANAGED_E2E === '1')('managed catalog across 
     expect(stdout).toContain('PASS: bundled Claude Code');
     expect(stdout).toContain('PASS: aion branded workspace');
     expect(stdout).toContain('PASS: claude branded workspace');
+    if (process.env.NEXWORK_MANAGED_UI === '1') {
+      expect(stdout).toContain('PASS: Electron data root, saved directory defaults and historical paths migrated');
+    }
     console.info(stdout);
   }, 190_000);
 });

@@ -5,7 +5,8 @@
   "description": "WebUI host package - spawns backend and reverse-proxies to it; serves static files (no Electron dependency)",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./data-directories": "./src/runtime/dataDirectories.ts"
   },
   "scripts": {
     "test": "vitest run",

@@ -38,7 +38,7 @@ if (!app.isPackaged && !e2eUserDataDir) {
   applyBrandAppName(app, getDevAppName());
 } else if (!e2eUserDataDir) {
   // Packaged: rename to NexWork for Electron-generated chrome (the macOS
-  // About/Hide/Quit menu roles) while pinning userData to the legacy dir.
+  // About/Hide/Quit menu roles) after migrating the owned userData directory.
   applyBrandAppName(app);
 }
 

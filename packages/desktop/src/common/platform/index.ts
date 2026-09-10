@@ -12,7 +12,7 @@ let _services: IPlatformServices | null = null;
  */
 export function getDevAppName(): string {
   const isMultiInstance = process.env.AIONUI_MULTI_INSTANCE === '1';
-  return isMultiInstance ? 'AionUi-Dev-2' : 'AionUi-Dev';
+  return isMultiInstance ? 'NexWork-Dev-2' : 'NexWork-Dev';
 }
 
 export function registerPlatformServices(services: IPlatformServices): void {
@@ -38,16 +38,14 @@ export function getPlatformServices(): IPlatformServices {
       } else {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { app, net } = require('electron') as typeof import('electron');
-        // Dev isolation: set app name before any getPath('userData') call.
+        // Apply directory migration before any getPath('userData') call in either mode.
         // Rollup may load this chunk before configureChromium.ts runs, so we
-        // must apply the dev name here as a safety net.
-        if (!app.isPackaged) {
-          const sandboxDir = process.env.AIONUI_E2E_TEST === '1' ? process.env.AIONUI_E2E_USER_DATA_DIR : undefined;
-          if (sandboxDir) {
-            app.setPath('userData', sandboxDir);
-            app.setName(BRAND_NAME);
-          } else applyBrandAppName(app, getDevAppName());
-        }
+        // must migrate here too, including production, as an idempotent safety net.
+        const sandboxDir = process.env.AIONUI_E2E_TEST === '1' ? process.env.AIONUI_E2E_USER_DATA_DIR : undefined;
+        if (sandboxDir) {
+          app.setPath('userData', sandboxDir);
+          app.setName(BRAND_NAME);
+        } else applyBrandAppName(app, app.isPackaged ? BRAND_NAME : getDevAppName());
         // Typed as IPlatformPaths so tsc enforces completeness: any new method
         // added to the interface will cause a compile error here if omitted below.
         const paths: import('./IPlatformServices').IPlatformPaths = {

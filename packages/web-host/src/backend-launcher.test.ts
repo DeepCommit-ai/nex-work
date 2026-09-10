@@ -24,14 +24,14 @@ vi.mock('node:net', () => ({
   connect: vi.fn(),
 }));
 
-vi.mock('./agent-process-registry.js', () => ({
+vi.mock('./runtime/agentProcessRegistry.js', () => ({
   cleanupRegisteredAgentProcesses: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { spawn } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
 import { connect, createServer } from 'node:net';
-import { cleanupRegisteredAgentProcesses } from './agent-process-registry.js';
+import { cleanupRegisteredAgentProcesses } from './runtime/agentProcessRegistry.js';
 import {
   buildSpawnArgs,
   buildSpawnEnv,

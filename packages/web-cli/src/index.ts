@@ -2,7 +2,7 @@ import { startWebHost, startStaticServer } from '@aionui/web-host';
 import type { WebHostHandle, StaticServerHandle } from '@aionui/web-host';
 import { setTimeout as delay } from 'node:timers/promises';
 import fs from 'node:fs';
-import os from 'node:os';
+import { resolveNexworkWebDirectory } from '@aionui/web-host/data-directories';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openBrowserUrl, shouldAutoOpenBrowser } from './browser.js';
@@ -94,7 +94,7 @@ function resolveDataDir(flags: Map<string, string | true>): string {
   if (typeof override === 'string') return path.resolve(override);
   const envOverride = process.env.AIONUI_DATA_DIR;
   if (envOverride) return path.resolve(envOverride);
-  return path.join(os.homedir(), '.aionui-web');
+  return resolveNexworkWebDirectory({ production: true });
 }
 
 function resolveLogDir(flags: Map<string, string | true>, dataDir: string): string {
@@ -386,13 +386,13 @@ Options for start:
   --remote                Bind 0.0.0.0 instead of 127.0.0.1
   --open                  Force opening the local URL in a browser
   --no-open               Disable automatic browser opening
-  --data-dir <path>       Override data dir (default: ~/.aionui-web)
+  --data-dir <path>       Override data dir (default: ~/.nexwork-web)
   --log-dir <path>        Override log dir (default: <data-dir>/logs)
   --static-dir <path>     Override static assets dir
   --backend-bin <path>    Override backend binary path
 
 Options for resetpass:
-  --data-dir <path>       Which data dir to reset (default: ~/.aionui-web)
+  --data-dir <path>       Which data dir to reset (default: ~/.nexwork-web)
   --backend-bin <path>    Override backend binary path
 
 Environment variables:

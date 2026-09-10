@@ -1,5 +1,5 @@
 import { _electron as electron, expect } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { localAppBootstrap, prepareLocalApp } from '../../../packages/desktop/src/branding/tools/localApp.mjs';
 
@@ -7,11 +7,30 @@ import { localAppBootstrap, prepareLocalApp } from '../../../packages/desktop/sr
 export async function runManagedUiProbe(directory: string, serverUrl: string, deptKey: string): Promise<void> {
   const root = process.cwd();
   const home = path.join(directory, 'ui-home');
-  const data = path.join(directory, 'ui-data');
+  const appData = path.join(directory, 'ui-app-data');
+  const previousData = path.join(appData, 'AionUi-Dev');
+  const data = path.join(appData, 'NexWork-Dev');
   mkdirSync(home);
-  mkdirSync(data);
+  mkdirSync(path.join(previousData, 'config'), { recursive: true });
+  mkdirSync(path.join(previousData, 'aionui'));
+  const previousWork = path.join(home, '.aionui-dev');
+  const previousConfig = path.join(home, '.aionui-config-dev');
+  symlinkSync(path.join(previousData, 'aionui'), previousWork, 'dir');
+  symlinkSync(path.join(previousData, 'config'), previousConfig, 'dir');
+  writeFileSync(path.join(previousWork, 'migration-check.txt'), 'historical workspace content');
+  writeFileSync(
+    path.join(previousConfig, '.aionui-env'),
+    Buffer.from(
+      encodeURIComponent(JSON.stringify({ 'aionui.dir': { workDir: previousWork, cacheDir: previousConfig } }))
+    ).toString('base64')
+  );
   const launch = path.join(directory, 'ui-launch.cjs');
-  writeFileSync(launch, `require('electron').app.setPath('home',${JSON.stringify(home)});\n` + localAppBootstrap(root));
+  writeFileSync(
+    launch,
+    `require('electron').app.setPath('home',${JSON.stringify(home)});\n` +
+      `require('electron').app.setPath('appData',${JSON.stringify(appData)});\n` +
+      localAppBootstrap(root)
+  );
   const app = await electron.launch({
     executablePath: prepareLocalApp(root).executablePath,
     args: [launch],
@@ -20,7 +39,8 @@ export async function runManagedUiProbe(directory: string, serverUrl: string, de
       ...process.env,
       NODE_ENV: 'production',
       AIONUI_E2E_TEST: '1',
-      AIONUI_E2E_USER_DATA_DIR: data,
+      // Exercise the real root migration within an isolated appData/home pair.
+      AIONUI_E2E_USER_DATA_DIR: '',
       AIONUI_DISABLE_AUTO_UPDATE: '1',
       AIONUI_BACKEND_BIN: path.join(root, `resources/bundled-aioncore/${process.platform}-${process.arch}/aioncore`),
     },
@@ -29,6 +49,19 @@ export async function runManagedUiProbe(directory: string, serverUrl: string, de
   try {
     const page = await app.firstWindow();
     await page.waitForFunction(() => document.body.innerText.includes('NexWork'), { timeout: 45000 });
+    expect(await app.evaluate(({ app: nativeApp }) => nativeApp.getPath('userData'))).toBe(data);
+    await page.evaluate(() => {
+      location.hash = '/settings/system';
+    });
+    await expect(page.getByText(path.join(home, '.nexwork-dev'), { exact: true })).toBeVisible({ timeout: 15000 });
+    const saved = JSON.parse(
+      decodeURIComponent(Buffer.from(readFileSync(path.join(data, 'config/.aionui-env'), 'utf8'), 'base64').toString())
+    ) as Record<string, { workDir: string; cacheDir: string }>;
+    expect(saved['aionui.dir'].workDir).toBe(path.join(home, '.nexwork-dev'));
+    expect(saved['aionui.dir'].cacheDir).toBe(path.join(home, '.nexwork-config-dev'));
+    expect(readFileSync(path.join(previousWork, 'migration-check.txt'), 'utf8')).toBe('historical workspace content');
+    expect(realpathSync(previousData)).toBe(realpathSync(data));
+    console.log('PASS: Electron data root, saved directory defaults and historical paths migrated');
     await page.evaluate(() => {
       location.hash = '/settings/enterprise';
     });

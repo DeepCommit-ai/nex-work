@@ -11,6 +11,7 @@ import { existsSync, lstatSync, mkdirSync, readlinkSync, realpathSync, symlinkSy
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { migrateNexworkDirectory } from '@aionui/web-host/data-directories';
 export const hasElectronAppPath = (): boolean => {
   return typeof process.versions.electron === 'string';
 };
@@ -29,7 +30,7 @@ const getElectronPathOrFallback = (name: 'temp' | 'home' | 'userData'): string =
 
 export const getTempPath = () => {
   const rootPath = getElectronPathOrFallback('temp');
-  return path.join(rootPath, 'aionui');
+  return path.join(rootPath, 'nexwork');
 };
 
 /**
@@ -64,14 +65,14 @@ const ensureCliSafeSymlink = (targetPath: string, symlinkName: string): string =
         }
         return symlinkPath;
       }
-      // Wrong target, remove and recreate
-      unlinkSync(symlinkPath);
+      // A different target may belong to the user; use the canonical product path.
+      return targetPath;
     } else if (stats.isDirectory()) {
       // Real directory exists, don't touch it
       return targetPath;
     } else {
-      // Regular file blocking the symlink path (#841), remove it
-      unlinkSync(symlinkPath);
+      // Never delete a user file merely to create a convenience alias.
+      return targetPath;
     }
   } catch {
     // Symlink doesn't exist, create it
@@ -82,7 +83,7 @@ const ensureCliSafeSymlink = (targetPath: string, symlinkName: string): string =
     if (!existsSync(targetPath)) {
       mkdirSync(targetPath, { recursive: true });
     }
-    symlinkSync(targetPath, symlinkPath);
+    symlinkSync(targetPath, symlinkPath, process.platform === 'win32' ? 'junction' : 'dir');
     return symlinkPath;
   } catch (error) {
     return targetPath;
@@ -91,26 +92,26 @@ const ensureCliSafeSymlink = (targetPath: string, symlinkName: string): string =
 
 /**
  * Get data path, using CLI-safe symlink on macOS.
- * Release builds use ~/.aionui; dev builds use ~/.aionui-dev.
+ * Release builds use ~/.nexwork; dev builds use ~/.nexwork-dev.
  * 获取数据目录路径，macOS 上使用符号链接。
- * Release 使用 ~/.aionui，Dev 模式使用 ~/.aionui-dev。
+ * Release 使用 ~/.nexwork，Dev 模式使用 ~/.nexwork-dev。
  */
 export const getDataPath = (): string => {
   const rootPath = getElectronPathOrFallback('userData');
-  const dataPath = path.join(rootPath, 'aionui');
-  return ensureCliSafeSymlink(dataPath, getEnvAwareName('.aionui'));
+  const dataPath = migrateNexworkDirectory(path.join(rootPath, 'aionui'), path.join(rootPath, 'nexwork'));
+  return ensureCliSafeSymlink(dataPath, getEnvAwareName('.nexwork'));
 };
 
 /**
  * Get config path, using CLI-safe symlink on macOS.
- * Release builds use ~/.aionui-config; dev builds use ~/.aionui-config-dev.
+ * Release builds use ~/.nexwork-config; dev builds use ~/.nexwork-config-dev.
  * 获取配置目录路径，macOS 上使用符号链接。
- * Release 使用 ~/.aionui-config，Dev 模式使用 ~/.aionui-config-dev。
+ * Release 使用 ~/.nexwork-config，Dev 模式使用 ~/.nexwork-config-dev。
  */
 export const getConfigPath = (): string => {
   const rootPath = getElectronPathOrFallback('userData');
   const configPath = path.join(rootPath, 'config');
-  return ensureCliSafeSymlink(configPath, getEnvAwareName('.aionui-config'));
+  return ensureCliSafeSymlink(configPath, getEnvAwareName('.nexwork-config'));
 };
 
 /**

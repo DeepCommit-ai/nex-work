@@ -19,11 +19,11 @@ injection paths. The source corpus must be refreshed deliberately with that upgr
 
 On macOS, `localApp.mjs` creates an isolated, ad-hoc signed NexWork development
 launcher from the installed Electron runtime. Run it through `bun run start:local`;
-it loads the repository build and retains the existing development data location.
+it loads the repository build and migrates existing development data into the NexWork directory.
 The launcher explicitly restores development mode before loading application code,
 because Electron detects the renamed native bundle as packaged. It is not a distributable installer. Production bundles use electron-builder's
 NexWork product/executable names. Never modify Electron's framework identifiers or
-rename the legacy data directory just to change the displayed application name.
+bypass the data-directory migration when changing the displayed application name.
 
 `backendWorkspace.mjs` builds the pinned upstream commit with `workspace-prefix.patch`
 and records the source, patch and binary hashes in the bundle manifest. The launcher
@@ -34,3 +34,11 @@ Rust 1.95.0 (CI installs it) and use a checksum-verified local binary cache. Ver
 or upstream Actions overrides must first receive a reviewed source patch; packaging
 fails instead of silently losing the branding. Native macOS and Windows runners are
 used for their respective installers; Rust handles the macOS architecture target.
+
+`@aionui/web-host` shares `runtime/dataDirectories.ts` across the desktop and standalone launchers. It migrates owned desktop/standalone data roots before startup and
+retains legacy aliases for historical absolute paths. A fresh desktop uses
+`NexWork[-Dev[-2]]/nexwork`, with `~/.nexwork[-dev[-2]]` and
+`~/.nexwork-config[-dev[-2]]` aliases on macOS. Standalone web hosts use the separate
+`~/.nexwork-web[-dev[-2]]` root. Custom paths and conflicting existing data are
+preserved. The backend database filename and legacy import/storage keys remain
+protocol contracts; migration does not edit database contents or conversation paths.

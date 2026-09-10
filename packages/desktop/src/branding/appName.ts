@@ -4,6 +4,7 @@
  */
 
 import path from 'path';
+import { migrateNexworkDirectory } from '@aionui/web-host/data-directories';
 import { BRAND_NAME, LEGACY_APP_DATA_DIR_NAME } from './constants';
 
 /**
@@ -17,39 +18,15 @@ export type BrandAppNameTarget = {
 };
 
 /**
- * Renames the Electron app to NexWork **without moving the user's data.**
- *
- * Electron derives `app.getPath('userData')` from `app.getName()`, so calling
- * `setName('NexWork')` on its own would silently relocate userData from
- * `<appData>/AionUi` to `<appData>/NexWork` — orphaning the config, the local
- * database, and the `~/.aionui` / `~/.aionui-config` symlinks that are built on
- * top of it (see `getDataPath()` / `getConfigPath()` in process/utils/utils.ts).
- * So userData is pinned to the legacy directory *first*, and only then is the
- * name changed; `setPath` registers an explicit override that a later `setName`
- * does not disturb.
- *
- * `appData` is used rather than `path.dirname(getPath('userData'))` because it is
- * the parent Electron itself derives userData from, so the pin does not depend on
- * what the name happens to be at call time. It matches the literal
- * `<appData>/AionUi` that `installerLastFailure.ts` already writes to.
- *
- * Development callers pass the existing AionUi-Dev directory name explicitly.
- * The displayed name is NexWork in both modes; storage remains isolated.
- * E2E callers that already pinned userData must retain that explicit path.
- *
- * ORDERING: must run before ANY other `app.getPath('userData')` call, because
- * Electron caches the resolved path on first use. `configureChromium.ts` is the
- * first import in `src/index.ts` precisely so this window exists.
- *
- * Known, intended side effect: on macOS `app.getPath('logs')` follows the app
- * name, so packaged builds now log to `~/Library/Logs/NexWork` instead of
- * `~/Library/Logs/AionUi`. Logs are diagnostic, not user data. In-app readers
- * go through `getLogsDir()` and follow automatically; the two out-of-app
- * readers that hardcode the directory — `scripts/benchmark-startup.ts` and
- * `scripts/benchmark-acp-startup.ts` — were updated to try `NexWork` too, and
- * any new external reader must do the same.
+ * Migrate the owned user-data root before Electron caches it, then apply the display name.
+ * Existing data stays reachable through legacy aliases; development roots remain isolated.
+ * Explicit E2E user-data overrides bypass this function at the call site.
  */
-export function applyBrandAppName(app: BrandAppNameTarget, dataDirectoryName = LEGACY_APP_DATA_DIR_NAME): void {
-  app.setPath('userData', path.join(app.getPath('appData'), dataDirectoryName));
+export function applyBrandAppName(app: BrandAppNameTarget, dataDirectoryName = BRAND_NAME): void {
+  const currentName = dataDirectoryName.replace(/^AionUi/, BRAND_NAME);
+  const previousName = currentName.replace(/^NexWork/, LEGACY_APP_DATA_DIR_NAME);
+  const appData = app.getPath('appData');
+  const userData = migrateNexworkDirectory(path.join(appData, previousName), path.join(appData, currentName));
+  app.setPath('userData', userData);
   app.setName(BRAND_NAME);
 }

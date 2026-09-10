@@ -12,9 +12,9 @@ import { getPlatformServices } from '@/common/platform';
  * Used to isolate symlink and directory names between environments.
  *
  * @example
- * getEnvAwareName('.aionui')        // release → '.aionui',        dev → '.aionui-dev'
- * getEnvAwareName('.aionui-config') // release → '.aionui-config', dev → '.aionui-config-dev'
- * // with AIONUI_MULTI_INSTANCE=1:  dev → '.aionui-dev-2'
+ * getEnvAwareName('.nexwork')        // release → '.nexwork',        dev → '.nexwork-dev'
+ * getEnvAwareName('.nexwork-config') // release → '.nexwork-config', dev → '.nexwork-config-dev'
+ * // with AIONUI_MULTI_INSTANCE=1:  dev → '.nexwork-dev-2'
  */
 export function getEnvAwareName(baseName: string): string {
   if (getPlatformServices().paths.isPackaged() === true) return baseName;

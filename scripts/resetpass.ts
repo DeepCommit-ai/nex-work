@@ -25,6 +25,7 @@
 
 import { execSync } from 'child_process';
 import fs from 'fs';
+import { resolveNexworkWebDirectory } from '@aionui/web-host/data-directories';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -63,20 +64,14 @@ function getFlag(name: string): string | undefined {
 /**
  * Same resolution as scripts/webui.ts:resolveBackendDataDir — keep both in sync
  * so `bun run webui` and `bun run resetpass` always target the same SQLite DB.
- * See the comment there for why the default is `~/.aionui-web*` (not `~/.aionui*`).
+ * See the comment there for why the default is `~/.nexwork-web*` (not `~/.nexwork*`).
  */
 function resolveWorkDir(): string {
-  const override = getFlag('--data-dir') ?? process.env.AIONUI_DATA_DIR;
-  if (override && override.trim().length > 0) {
-    const resolved = path.resolve(override);
-    fs.mkdirSync(resolved, { recursive: true });
-    return resolved;
-  }
-  const suffix =
-    process.env.NODE_ENV === 'production' ? '' : process.env.AIONUI_MULTI_INSTANCE === '1' ? '-dev-2' : '-dev';
-  const dir = path.join(os.homedir(), `.aionui-web${suffix}`);
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  return resolveNexworkWebDirectory({
+    override: getFlag('--data-dir') ?? process.env.AIONUI_DATA_DIR,
+    production: process.env.NODE_ENV === 'production',
+    multiInstance: process.env.AIONUI_MULTI_INSTANCE === '1',
+  });
 }
 
 function resolveBackendBinary(): string {

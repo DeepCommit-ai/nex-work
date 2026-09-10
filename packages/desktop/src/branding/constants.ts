@@ -22,9 +22,7 @@
  * backend binary and with already-installed user data, and changing them breaks
  * startup or orphans user data:
  *   - electron `appId: com.aionui.app`
- *   - existing userData directory names (pin these before changing app.getName())
  *   - `AIONUI_*` environment variables
- *   - `~/.aionui`, `~/.aionui-dev` data dirs, the `AionUi-Dev` log dir
  *   - the `aionui://` protocol scheme, IPC channel names, storage/config keys
  *   - GitHub owner/repo and update feed URLs
  */
@@ -48,13 +46,7 @@ export const LEGACY_BRAND_PATTERN = /Aion\s?U[Ii]/g;
  */
 export const DEFAULT_UI_LANGUAGE = 'zh-CN';
 
-/**
- * The `<appData>/…` directory name packaged builds keep their data in.
- *
- * Deliberately still `AionUi`: it is where every existing install's config,
- * database and `~/.aionui*` symlinks already live. Renaming it would orphan
- * them. See `applyBrandAppName()` in `appName.ts`.
- */
+/** Previous user-data root name, retained only for migration and installer compatibility. */
 export const LEGACY_APP_DATA_DIR_NAME = 'AionUi';
 
 /**

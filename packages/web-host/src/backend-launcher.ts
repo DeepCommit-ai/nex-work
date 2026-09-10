@@ -11,7 +11,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
 import { connect, createServer, type Socket } from 'node:net';
-import { cleanupRegisteredAgentProcesses } from './agent-process-registry.js';
+import { cleanupRegisteredAgentProcesses } from './runtime/agentProcessRegistry.js';
 import type { AppMetadata, BackendBinaryResolver } from './types.js';
 
 type BackendStatus = 'stopped' | 'starting' | 'running' | 'error';
