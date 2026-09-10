@@ -1,4 +1,5 @@
 import { isManagedAssistant } from '@/common/deptconfig/managedConversation';
+import { MANAGED_DEFAULT_ID } from '@/common/deptconfig/catalog';
 import { useCapability } from '@/renderer/hooks/useCapability';
 import { ipcBridge } from '@/common';
 import type { AssistantEditorViewModel, AssistantListItem } from './types';
@@ -416,23 +417,25 @@ const AssistantEditorSections: React.FC<AssistantEditorSectionsProps> = ({ edito
         readOnlyLabel={readOnlyLabel}
       />
 
-      <PromptsSection
-        isReadOnly={isReadOnlyAssistant}
-        recommendedPromptItems={recommendedPromptItems}
-        addingPrompt={addingPrompt}
-        setAddingPrompt={setAddingPrompt}
-        newPromptDraft={newPromptDraft}
-        setNewPromptDraft={setNewPromptDraft}
-        editingPromptIndex={editingPromptIndex}
-        setEditingPromptIndex={setEditingPromptIndex}
-        editingPromptDraft={editingPromptDraft}
-        setEditingPromptDraft={setEditingPromptDraft}
-        onAddPrompt={handleAddPrompt}
-        onBeginPromptEdit={handleBeginPromptEdit}
-        onSavePromptEdit={handleSavePromptEdit}
-        onDeletePrompt={handleDeletePrompt}
-        readOnlyLabel={readOnlyLabel}
-      />
+      {activeAssistant?.id !== MANAGED_DEFAULT_ID && (
+        <PromptsSection
+          isReadOnly={isReadOnlyAssistant}
+          recommendedPromptItems={recommendedPromptItems}
+          addingPrompt={addingPrompt}
+          setAddingPrompt={setAddingPrompt}
+          newPromptDraft={newPromptDraft}
+          setNewPromptDraft={setNewPromptDraft}
+          editingPromptIndex={editingPromptIndex}
+          setEditingPromptIndex={setEditingPromptIndex}
+          editingPromptDraft={editingPromptDraft}
+          setEditingPromptDraft={setEditingPromptDraft}
+          onAddPrompt={handleAddPrompt}
+          onBeginPromptEdit={handleBeginPromptEdit}
+          onSavePromptEdit={handleSavePromptEdit}
+          onDeletePrompt={handleDeletePrompt}
+          readOnlyLabel={readOnlyLabel}
+        />
+      )}
 
       {engineSettingsVisible && !(activeAssistant && isManagedAssistant(activeAssistant.id)) && (
         <div

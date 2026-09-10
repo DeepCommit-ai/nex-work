@@ -94,7 +94,15 @@ export class ManagedAgentService {
         installedAt: cached.installedAt,
         assistantIds: catalog.agents.map((a) => a.id),
         labels: Object.fromEntries(
-          catalog.agents.map((a) => [a.id, { name_i18n: a.name_i18n, description_i18n: a.description_i18n }])
+          catalog.agents.map((a) => [
+            a.id,
+            {
+              name_i18n: a.name_i18n,
+              description_i18n: a.description_i18n,
+              recommended_prompts: a.recommended_prompts ?? [],
+              recommended_prompts_i18n: a.recommended_prompts_i18n ?? {},
+            },
+          ])
         ),
       });
     } catch (error) {
@@ -295,7 +303,15 @@ export class ManagedAgentService {
       installedAt,
       assistantIds: ids,
       labels: Object.fromEntries(
-        catalog.agents.map((a) => [a.id, { name_i18n: a.name_i18n, description_i18n: a.description_i18n }])
+        catalog.agents.map((a) => [
+          a.id,
+          {
+            name_i18n: a.name_i18n,
+            description_i18n: a.description_i18n,
+            recommended_prompts: a.recommended_prompts ?? [],
+            recommended_prompts_i18n: a.recommended_prompts_i18n ?? {},
+          },
+        ])
       ),
       error: undefined,
     });

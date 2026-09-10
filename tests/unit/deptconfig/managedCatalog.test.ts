@@ -17,6 +17,34 @@ const temporary = (): string => {
 };
 
 describe('published catalog validation', () => {
+  it('accepts old catalogs without recommendations and new localized recommendations', () => {
+    const catalog = catalogFixture();
+    expect(parseManagedCatalog(releaseFixture(1, catalog)).agents[1].recommended_prompts).toBeUndefined();
+    catalog.agents[1].recommended_prompts = ['Create a report'];
+    catalog.agents[1].recommended_prompts_i18n = { 'zh-CN': ['生成一份报告'] };
+    expect(parseManagedCatalog(releaseFixture(2, catalog)).agents[1].recommended_prompts_i18n).toEqual({
+      'zh-CN': ['生成一份报告'],
+    });
+  });
+
+  it.each([null, 'not-an-array', [''], [42], ['中'.repeat(342)], Array(13).fill('Prompt')])(
+    'rejects malformed recommended prompts: %j',
+    (value) => {
+      const catalog = catalogFixture();
+      Object.assign(catalog.agents[1], { recommended_prompts: value });
+      expect(() => parseManagedCatalog(releaseFixture(1, catalog))).toThrow('assistant');
+    }
+  );
+
+  it('rejects invalid recommendation locales and recommendations for the default assistant', () => {
+    const catalog = catalogFixture();
+    catalog.agents[1].recommended_prompts_i18n = { invalid: ['Prompt'] };
+    expect(() => parseManagedCatalog(releaseFixture(1, catalog))).toThrow('assistant');
+    delete catalog.agents[1].recommended_prompts_i18n;
+    catalog.agents[0].recommended_prompts_i18n = { 'zh-CN': ['不应显示'] };
+    expect(() => parseManagedCatalog(releaseFixture(1, catalog))).toThrow('recommended');
+  });
+
   it('accepts bundled avatar identifiers and rejects untrusted image locations', () => {
     const catalog = catalogFixture();
     catalog.agents[1].avatar = 'office-documents';

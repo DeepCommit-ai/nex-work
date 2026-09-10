@@ -224,7 +224,7 @@ const DefaultsSection: React.FC<DefaultsSectionProps> = ({
           </Select>
         </ConfigRow>
 
-        {showThoughtLevelDefault ? (
+        {modelSelectable && showThoughtLevelDefault ? (
           <ConfigRow
             icon={<Brain theme='outline' size='14' />}
             label={t('settings.assistantDefaultThoughtLevelLabel', { defaultValue: 'Thought Level' })}

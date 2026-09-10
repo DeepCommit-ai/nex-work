@@ -3,11 +3,41 @@ import {
   filterManagedAssistants,
   assertManagedEngineEditAllowed,
   isManagedAssistant,
+  localizeManagedAssistant,
   prepareManagedConversation,
   setManagedCatalogIds,
 } from '@/common/deptconfig/managedConversation';
+import type { AssistantDetail } from '@/common/types/agent/assistantTypes';
 
 describe('published assistant identities', () => {
+  it('uses published recommendations for lists and details and clears removed translations', () => {
+    const original = {
+      id: 'office-assistant',
+      profile: {},
+      prompts: { recommended: ['Old'], recommended_i18n: {} },
+    } as AssistantDetail;
+    setManagedCatalogIds(['office-assistant'], {
+      'office-assistant': {
+        name_i18n: {},
+        description_i18n: {},
+        recommended_prompts: ['Create Word'],
+        recommended_prompts_i18n: { 'zh-CN': ['生成 Word 报告'] },
+      },
+    });
+    expect(localizeManagedAssistant(original).prompts.recommended_i18n).toEqual({ 'zh-CN': ['生成 Word 报告'] });
+    expect(filterManagedAssistants([{ id: 'office-assistant', prompts_i18n: {} }])[0].prompts_i18n).toEqual({
+      'zh-CN': ['生成 Word 报告'],
+    });
+    setManagedCatalogIds(['office-assistant'], {
+      'office-assistant': {
+        name_i18n: {},
+        description_i18n: {},
+        recommended_prompts: [],
+        recommended_prompts_i18n: {},
+      },
+    });
+    expect(localizeManagedAssistant(original).prompts).toEqual({ recommended: [], recommended_i18n: {} });
+  });
   it('protects core engines before connection and registered engines after catalog installation', () => {
     setManagedCatalogIds([]);
     expect(isManagedAssistant('nexwork-butler')).toBe(true);

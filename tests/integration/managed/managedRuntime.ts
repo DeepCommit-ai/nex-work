@@ -11,6 +11,8 @@ import { installCatalog } from '@/process/services/managedagents/install';
 import { runManagedModelProbe } from './managedModelProbe';
 import { runManagedUiProbe } from './managedUiProbe';
 import type { Assistant, AssistantDetail } from '@/common/types/agent/assistantTypes';
+import type { ManagedAgent } from '@/common/deptconfig/catalog';
+import { localizeManagedAssistant, setManagedCatalogIds } from '@/common/deptconfig/managedConversation';
 
 const root = mkdtempSync(path.join(tmpdir(), 'nexwork-managed-e2e-'));
 console.log('Evidence directory:', root);
@@ -183,6 +185,10 @@ try {
         const detail = await api<AssistantDetail>('GET', `/api/assistants/${agent.id}?locale=${locale}`);
         if (!detail.rules.content.includes('NexWork managed catalog revision 1'))
           throw new Error(`Missing installed rules ${agent.id}/${locale}`);
+        setManagedCatalogIds(service.snapshot().assistantIds, service.snapshot().labels);
+        const items = localizeManagedAssistant(detail).prompts.recommended_i18n?.[locale] ?? [];
+        if (items.length !== (agent.id === 'default-assistant' ? 0 : 3))
+          throw new Error(`Missing published recommendations ${agent.id}/${locale}`);
       }
     }
     clients.push({ api, dataDir, service });
@@ -230,7 +236,13 @@ try {
   const skill = path.join(source, 'skills/officecli-docx.md');
   writeFileSync(skill, readFileSync(skill, 'utf8') + '\n发布测试技能三。\n');
   const manifestPath = path.join(source, 'manifest.json');
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { agents: Array<{ id: string; avatar?: string }> };
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { agents: ManagedAgent[] };
+  const originalButler = await first.api<AssistantDetail>('GET', '/api/assistants/nexwork-butler');
+  const originalButlerLabels = first.service.snapshot().labels?.['nexwork-butler'];
+  manifest.agents.find((agent) => agent.id === 'nexwork-butler')!.recommended_prompts = ['发布后的管家推荐'];
+  manifest.agents.find((agent) => agent.id === 'nexwork-butler')!.recommended_prompts_i18n = {
+    'zh-CN': ['发布后的管家推荐'],
+  };
   manifest.agents.find((agent) => agent.id === 'default-assistant')!.avatar = 'office-documents';
   manifest.agents.find((agent) => agent.id === 'office-assistant')!.avatar = 'nexwork-logo';
   writeFileSync(manifestPath, JSON.stringify(manifest));
@@ -243,9 +255,23 @@ try {
   if (restored.profile.avatar) throw new Error('Rollback did not clear a newly added avatar');
   const restoredOffice = await first.api<AssistantDetail>('GET', '/api/assistants/office-assistant');
   if (restoredOffice.profile.avatar !== 'office-documents') throw new Error('Previous Office avatar was not restored');
+  const restoredButler = await first.api<AssistantDetail>('GET', '/api/assistants/nexwork-butler');
+  if (JSON.stringify(restoredButler.prompts) !== JSON.stringify(originalButler.prompts))
+    throw new Error('Previous recommendations were not restored');
+  if (JSON.stringify(first.service.snapshot().labels?.['nexwork-butler']) !== JSON.stringify(originalButlerLabels))
+    throw new Error('Failed installation replaced published recommendation translations');
   const recovery = await first.service.sync(true);
   if (!recovery.success) throw new Error('Installation did not recover: ' + recovery.error);
   await until(() => services.every((s) => s.snapshot().revision === 3), 'Push of prompt and skill update');
+  for (const client of clients) {
+    const detail = await client.api<AssistantDetail>('GET', '/api/assistants/nexwork-butler');
+    setManagedCatalogIds(client.service.snapshot().assistantIds, client.service.snapshot().labels);
+    if (
+      JSON.stringify(localizeManagedAssistant(detail).prompts.recommended_i18n) !==
+      JSON.stringify({ 'zh-CN': ['发布后的管家推荐'] })
+    )
+      throw new Error('Pushed recommendations did not replace previous localized suggestions');
+  }
   const after = db.query('SELECT * FROM conversation_assistant_snapshots WHERE conversation_id=?').get(conversation.id);
   if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('Historical snapshot was changed');
   const workspace2 = path.join(first.dataDir, 'workspace2');

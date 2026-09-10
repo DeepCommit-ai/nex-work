@@ -25,13 +25,39 @@ export function assertManagedEngineEditAllowed(method: string, route: string, bo
 }
 export function filterManagedAssistants<T extends { id: string }>(items: T[]): T[] {
   return visibleIds
-    ? items.filter((item) => visibleIds!.has(item.id)).map((item) => ({ ...item, ...labels[item.id] }))
+    ? items
+        .filter((item) => visibleIds!.has(item.id))
+        .map((item) => {
+          const published = labels[item.id];
+          return published
+            ? {
+                ...item,
+                name_i18n: published.name_i18n,
+                description_i18n: published.description_i18n,
+                ...(published.recommended_prompts !== undefined ? { prompts: published.recommended_prompts } : {}),
+                ...(published.recommended_prompts_i18n !== undefined
+                  ? { prompts_i18n: published.recommended_prompts_i18n }
+                  : {}),
+              }
+            : item;
+        })
     : items;
 }
 
 /** The pinned backend intentionally omits localization for user-owned records. */
 export function localizeManagedAssistant(detail: AssistantDetail): AssistantDetail {
-  return labels[detail.id] ? { ...detail, profile: { ...detail.profile, ...labels[detail.id] } } : detail;
+  const published = labels[detail.id];
+  return published
+    ? {
+        ...detail,
+        profile: { ...detail.profile, name_i18n: published.name_i18n, description_i18n: published.description_i18n },
+        prompts: {
+          ...detail.prompts,
+          recommended: published.recommended_prompts ?? detail.prompts.recommended,
+          recommended_i18n: published.recommended_prompts_i18n ?? detail.prompts.recommended_i18n,
+        },
+      }
+    : detail;
 }
 
 export function setManagedConversationGate(wait: () => Promise<Release | void>): void {

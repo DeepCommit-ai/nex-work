@@ -2,91 +2,91 @@
   "en-US": {
     "default-assistant": {
       "name": "Default assistant",
-      "description": "Handle everyday work and general tasks.",
+      "description": "Start any task with the default assistant",
       "prompts": []
     }
   },
   "zh-CN": {
     "default-assistant": {
       "name": "默认助手",
-      "description": "处理日常工作与通用任务。",
+      "description": "所有任务都可以从默认助手开始",
       "prompts": []
     }
   },
   "zh-TW": {
     "default-assistant": {
       "name": "預設助手",
-      "description": "處理日常工作與通用任務。",
+      "description": "所有任務都可以從預設助手開始",
       "prompts": []
     }
   },
   "ja-JP": {
     "default-assistant": {
       "name": "既定のアシスタント",
-      "description": "日常業務や一般的なタスクを支援します。",
+      "description": "どんなタスクも既定のアシスタントから始められます",
       "prompts": []
     }
   },
   "ko-KR": {
     "default-assistant": {
       "name": "기본 도우미",
-      "description": "일상 업무와 일반 작업을 처리합니다.",
+      "description": "모든 작업을 기본 도우미에서 시작할 수 있습니다",
       "prompts": []
     }
   },
   "tr-TR": {
     "default-assistant": {
       "name": "Varsayılan asistan",
-      "description": "Günlük işleri ve genel görevleri yürütür.",
+      "description": "Her işe varsayılan asistanla başlayabilirsiniz",
       "prompts": []
     }
   },
   "ru-RU": {
     "default-assistant": {
       "name": "Основной помощник",
-      "description": "Выполняет повседневные и общие задачи.",
+      "description": "Начните любую задачу с основного помощника",
       "prompts": []
     }
   },
   "uk-UA": {
     "default-assistant": {
       "name": "Основний помічник",
-      "description": "Виконує повсякденні та загальні завдання.",
+      "description": "Почніть будь-яке завдання з основного помічника",
       "prompts": []
     }
   },
   "pt-BR": {
     "default-assistant": {
       "name": "Assistente padrão",
-      "description": "Cuida do trabalho diário e de tarefas gerais.",
+      "description": "Comece qualquer tarefa com o assistente padrão",
       "prompts": []
     }
   },
   "de-DE": {
     "default-assistant": {
       "name": "Standardassistent",
-      "description": "Erledigt alltägliche und allgemeine Aufgaben.",
+      "description": "Beginne jede Aufgabe mit dem Standardassistenten",
       "prompts": []
     }
   },
   "es-ES": {
     "default-assistant": {
       "name": "Asistente predeterminado",
-      "description": "Resuelve el trabajo diario y las tareas generales.",
+      "description": "Empieza cualquier tarea con el asistente predeterminado",
       "prompts": []
     }
   },
   "fr-FR": {
     "default-assistant": {
       "name": "Assistant par défaut",
-      "description": "Traite le travail quotidien et les tâches générales.",
+      "description": "Commencez toute tâche avec l’assistant par défaut",
       "prompts": []
     }
   },
   "fa-IR": {
     "default-assistant": {
       "name": "دستیار پیش‌فرض",
-      "description": "انجام کارهای روزمره و وظایف عمومی.",
+      "description": "هر کاری را می‌توانید با دستیار پیش‌فرض آغاز کنید",
       "prompts": []
     }
   }

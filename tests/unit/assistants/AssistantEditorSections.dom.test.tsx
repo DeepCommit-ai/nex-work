@@ -671,6 +671,53 @@ describe('AssistantEditorSections', () => {
     expect(screen.queryByTestId('select-assistant-default-thought-level')).not.toBeInTheDocument();
   });
 
+  it('hides advertised thought levels under the employee policy', () => {
+    setPolicy(STATIC_POLICY);
+    mockManagedAgentRuntimeCatalog = [
+      {
+        id: 'agent-claude',
+        config_options: {
+          config_options: [
+            {
+              id: 'reasoning_effort',
+              category: 'thought_level',
+              type: 'select',
+              current_value: 'high',
+              options: [{ value: 'high', name: 'High' }],
+            },
+          ],
+        },
+      },
+    ];
+    renderWithProviders(
+      <AssistantEditorSections
+        editor={createEditor({
+          agent: {
+            value: 'agent-claude',
+            setValue: vi.fn(),
+            availableBackends: [backendOption('agent-claude', 'claude')],
+          },
+        })}
+        activeAssistant={null}
+      />
+    );
+    expect(screen.queryByText('Thought Level')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('select-assistant-default-thought-level')).not.toBeInTheDocument();
+  });
+
+  it('omits the recommendations card for the default assistant even with stale suggestions', () => {
+    renderWithProviders(
+      <AssistantEditorSections
+        editor={createEditor({
+          prompts: { text: 'Old recommendation', setText: vi.fn() },
+        })}
+        activeAssistant={{ id: 'default-assistant', name: 'Default', source: 'user', enabled: true, sort_order: 0 }}
+      />
+    );
+    expect(screen.queryByTestId('assistant-card-prompts')).not.toBeInTheDocument();
+    expect(screen.queryByText('Old recommendation')).not.toBeInTheDocument();
+  });
+
   it('renders only the auto thought level default when the thought_level catalog has no concrete option values', () => {
     mockManagedAgentRuntimeCatalog = [
       {

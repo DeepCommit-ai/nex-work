@@ -385,6 +385,39 @@ describe('GuidPage', () => {
     expect(capturedGuidInputCardProps.at(-1)?.placeholder).toBe('conversation.welcome.placeholder');
   });
 
+  it('starts with the default assistant description without suggested prompts', () => {
+    agentSelectionMock.selectedAssistantId = 'default-assistant';
+    agentSelectionMock.assistants = [
+      {
+        ...agentSelectionMock.assistants[0],
+        id: 'default-assistant',
+        description_i18n: { 'en-US': 'Start any task with the default assistant' },
+        prompts: ['Old recommendation'],
+      },
+    ];
+    render(<GuidPage />);
+    expect(capturedGuidInputCardProps.at(-1)?.placeholder).toBe('Start any task with the default assistant');
+    expect(screen.queryByText('Old recommendation')).not.toBeInTheDocument();
+    expect(screen.queryByText('Try these example prompts:')).not.toBeInTheDocument();
+  });
+
+  it('updates published suggestions immediately without reusing cached detail or generic fallbacks', () => {
+    agentSelectionMock.selectedAssistantId = 'office-assistant';
+    const template = { ...agentSelectionMock.assistants[0], id: 'office-assistant' };
+    agentSelectionMock.assistants = [{ ...template, prompts_i18n: { 'en-US': ['Published suggestion'] } }];
+    swrMock.useSWRMock.mockImplementation((key: string | null) => ({
+      data: key?.startsWith('guid.assistant.detail.') ? assistantDetailFixture : null,
+    }));
+    const { rerender } = render(<GuidPage />);
+    expect(screen.getByRole('button', { name: 'Published suggestion' })).toBeInTheDocument();
+    agentSelectionMock.assistants = [{ ...template, prompts_i18n: { 'en-US': ['Updated suggestion'] } }];
+    rerender(<GuidPage />);
+    expect(screen.getByRole('button', { name: 'Updated suggestion' })).toBeInTheDocument();
+    agentSelectionMock.assistants = [{ ...template, prompts: [], prompts_i18n: {} }];
+    rerender(<GuidPage />);
+    expect(screen.queryByText('Try these example prompts:')).not.toBeInTheDocument();
+  });
+
   it('keeps the existing replace contract for ordinary Guid prefills', () => {
     locationMock.state = { prefillPrompt: 'Replace with this prompt' };
     guidInputMock.setInput.mockClear();

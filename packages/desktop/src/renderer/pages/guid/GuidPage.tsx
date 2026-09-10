@@ -5,6 +5,8 @@
  */
 
 import { ipcBridge } from '@/common';
+import { MANAGED_DEFAULT_ID } from '@/common/deptconfig/catalog';
+import { isManagedAssistant } from '@/common/deptconfig/managedConversation';
 import { buildGuidSlashCommands } from '@/common/chat/slash/guidSlashCommands';
 import type { SlashCommandItem } from '@/common/chat/slash/types';
 import type { IMcpServer, TProviderWithModel } from '@/common/config/storage';
@@ -358,7 +360,15 @@ const GuidPage: React.FC = () => {
     selectedAssistantRecord?.description_i18n?.['en-US']?.trim() ||
     selectedAssistantRecord?.description?.trim();
   const selectedAssistantPrompts = useMemo(() => {
-    if (!selectedAssistantId) return [];
+    if (!selectedAssistantId || selectedAssistantId === MANAGED_DEFAULT_ID) return [];
+    // The list is refreshed on catalog activation; a cached detail can still belong to an older revision.
+    if (isManagedAssistant(selectedAssistantId))
+      return (
+        selectedAssistantRecord?.prompts_i18n?.[localeKey] ??
+        selectedAssistantRecord?.prompts_i18n?.['en-US'] ??
+        selectedAssistantRecord?.prompts ??
+        []
+      );
     const resolvedPrompts =
       selectedAssistantDetail?.prompts.recommended_i18n?.[localeKey] ||
       selectedAssistantDetail?.prompts.recommended_i18n?.['en-US'] ||

@@ -7,6 +7,8 @@ export type ManagedAgent = {
   name_i18n: Record<string, string>;
   description: string;
   description_i18n: Record<string, string>;
+  recommended_prompts?: string[];
+  recommended_prompts_i18n?: Record<string, string[]>;
   engine: 'claude-code' | 'aion';
   mandatory: boolean;
   rules: string;
@@ -19,7 +21,10 @@ export type ManagedCatalog = {
   skills: Record<string, ManagedSkill>;
 };
 export type CatalogRelease = { revision: number; digest: string; content: string; published_at: number };
-export type ManagedLabels = Record<string, Pick<ManagedAgent, 'name_i18n' | 'description_i18n'>>;
+export type ManagedLabels = Record<
+  string,
+  Pick<ManagedAgent, 'name_i18n' | 'description_i18n' | 'recommended_prompts' | 'recommended_prompts_i18n'>
+>;
 export type ManagedSyncStatus = {
   phase: 'idle' | 'syncing' | 'ready' | 'error' | 'unauthorized';
   push: 'disconnected' | 'connecting' | 'connected';
@@ -44,6 +49,14 @@ const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const strings = (value: unknown): value is Record<string, string> =>
   record(value) && Object.values(value).every((v) => typeof v === 'string');
+const prompts = (value: unknown): value is string[] =>
+  Array.isArray(value) &&
+  value.length <= 12 &&
+  value.every((v) => typeof v === 'string' && v.trim() && new TextEncoder().encode(v).length <= 1024);
+const localizedPrompts = (value: unknown): value is Record<string, string[]> =>
+  record(value) &&
+  Object.keys(value).length <= 40 &&
+  Object.entries(value).every(([locale, items]) => /^[a-z]{2,3}-[A-Za-z]{2,4}$/.test(locale) && prompts(items));
 
 /** Validate before any filesystem or backend mutation. Hash verification belongs to the host. */
 export function parseManagedCatalog(release: CatalogRelease): ManagedCatalog {
@@ -79,6 +92,8 @@ export function parseManagedCatalog(release: CatalogRelease): ManagedCatalog {
       typeof agent.description !== 'string' ||
       !strings(agent.name_i18n) ||
       !strings(agent.description_i18n) ||
+      (agent.recommended_prompts !== undefined && !prompts(agent.recommended_prompts)) ||
+      (agent.recommended_prompts_i18n !== undefined && !localizedPrompts(agent.recommended_prompts_i18n)) ||
       typeof agent.rules !== 'string' ||
       agent.engine !== (agent.id === MANAGED_BUTLER_ID ? 'aion' : 'claude-code') ||
       agent.mandatory !== (agent.id === MANAGED_DEFAULT_ID) ||
@@ -88,6 +103,12 @@ export function parseManagedCatalog(release: CatalogRelease): ManagedCatalog {
       throw new Error('Invalid managed assistant');
     if (agent.id === MANAGED_DEFAULT_ID && agent.rules.trim())
       throw new Error('Default assistant has a dedicated role');
+    if (
+      agent.id === MANAGED_DEFAULT_ID &&
+      ((agent.recommended_prompts as string[] | undefined)?.length ||
+        Object.values((agent.recommended_prompts_i18n ?? {}) as Record<string, string[]>).some((items) => items.length))
+    )
+      throw new Error('Default assistant has recommended prompts');
     ids.add(agent.id);
   }
   if (!MANAGED_CORE_IDS.every((id) => ids.has(id))) throw new Error('A required assistant is missing');

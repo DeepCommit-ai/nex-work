@@ -36,8 +36,8 @@ const restoreBody = (d: AssistantDetail): CreateAssistantRequest => ({
   custom_skill_names: d.capabilities.custom_skill_names ?? [],
   disabled_builtin_skills: d.capabilities.default_disabled_builtin_skill_ids ?? [],
   defaults: d.defaults,
-  recommended_prompts: d.prompts.recommended,
-  recommended_prompts_i18n: d.prompts.recommended_i18n,
+  recommended_prompts: d.prompts.recommended ?? [],
+  recommended_prompts_i18n: d.prompts.recommended_i18n ?? {},
 });
 
 /** Preserve local command overrides while applying the server's supported engines and gateway. */
@@ -168,8 +168,8 @@ export async function installCatalog(
         enabled_skills: skills,
         custom_skill_names: [],
         disabled_builtin_skills: ['aionui-config', 'nexwork-config'],
-        recommended_prompts: [],
-        recommended_prompts_i18n: {},
+        recommended_prompts: agent.recommended_prompts ?? [],
+        recommended_prompts_i18n: agent.recommended_prompts_i18n ?? {},
         defaults: {
           ...old?.defaults,
           skills: { mode: 'fixed', value: skills },
@@ -205,6 +205,7 @@ export async function installCatalog(
       if (
         detail.rules.content !== expectedRules ||
         (agent.avatar !== undefined && detail.profile.avatar !== agent.avatar) ||
+        JSON.stringify(detail.prompts.recommended ?? []) !== JSON.stringify(agent.recommended_prompts ?? []) ||
         detail.engine.agent_id !== (agent.engine === 'aion' ? '632f31d2' : '2d23ff1c') ||
         JSON.stringify([...(detail.capabilities.default_skill_ids ?? [])].toSorted()) !==
           JSON.stringify(agent.skills.map((name) => names[name]).toSorted())
@@ -253,7 +254,8 @@ export async function installCatalog(
     }
     if (failures.length)
       throw new CatalogRestorationError(
-        `Catalog installation and restoration failed: ${[...new Set(failures)].join(', ')}`
+        `Catalog installation and restoration failed: ${[...new Set(failures)].join(', ')}`,
+        { cause: error }
       );
     throw error;
   }
