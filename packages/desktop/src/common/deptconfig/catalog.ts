@@ -3,6 +3,7 @@ export type ManagedSkill = { files: Record<string, string> };
 export type ManagedAgent = {
   id: string;
   name: string;
+  avatar?: 'nexwork-logo' | 'office-documents';
   name_i18n: Record<string, string>;
   description: string;
   description_i18n: Record<string, string>;
@@ -74,6 +75,7 @@ export function parseManagedCatalog(release: CatalogRelease): ManagedCatalog {
       ids.has(agent.id) ||
       typeof agent.name !== 'string' ||
       !agent.name.trim() ||
+      (agent.avatar !== undefined && agent.avatar !== 'nexwork-logo' && agent.avatar !== 'office-documents') ||
       typeof agent.description !== 'string' ||
       !strings(agent.name_i18n) ||
       !strings(agent.description_i18n) ||

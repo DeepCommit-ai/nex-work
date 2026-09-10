@@ -30,6 +30,7 @@ export class CatalogRestorationError extends Error {}
 
 const restoreBody = (d: AssistantDetail): CreateAssistantRequest => ({
   ...d.profile,
+  avatar: d.profile.avatar ?? '',
   agent_id: d.engine.agent_id,
   enabled_skills: d.capabilities.default_skill_ids ?? [],
   custom_skill_names: d.capabilities.custom_skill_names ?? [],
@@ -159,6 +160,7 @@ export async function installCatalog(
       const body: CreateAssistantRequest = {
         id: agent.id,
         name: agent.name,
+        avatar: agent.avatar ?? old?.profile.avatar ?? '',
         name_i18n: agent.name_i18n,
         description: agent.description,
         description_i18n: agent.description_i18n,
@@ -202,6 +204,7 @@ export async function installCatalog(
       const expectedRules = composeManagedRules(catalog, agent.rules, names, cfg.agent_catalog!.revision);
       if (
         detail.rules.content !== expectedRules ||
+        (agent.avatar !== undefined && detail.profile.avatar !== agent.avatar) ||
         detail.engine.agent_id !== (agent.engine === 'aion' ? '632f31d2' : '2d23ff1c') ||
         JSON.stringify([...(detail.capabilities.default_skill_ids ?? [])].toSorted()) !==
           JSON.stringify(agent.skills.map((name) => names[name]).toSorted())

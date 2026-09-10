@@ -332,6 +332,7 @@ describe('GuidPage', () => {
     agentSelectionMock.currentAgentModeOptions = [];
     agentSelectionMock.currentAcpCachedModelInfo = null;
     agentSelectionMock.selectedAssistantBackend = 'aionrs';
+    agentSelectionMock.selectedAssistantId = 'bare-aionrs';
     agentSelectionMock.setSelectedAcpModel.mockReset();
     agentSelectionMock.setSelectedMode.mockReset();
     agentSelectionMock.assistants = [
@@ -356,6 +357,32 @@ describe('GuidPage', () => {
         deletable: false,
       },
     ];
+  });
+
+  it('switches the input description immediately with the selected assistant and keeps the draft', () => {
+    const template = agentSelectionMock.assistants[0];
+    agentSelectionMock.assistants = [
+      {
+        ...template,
+        id: 'office-assistant',
+        description_i18n: { 'en-US': 'Create Word, PowerPoint and Excel files.' },
+      },
+      { ...template, id: 'nexwork-butler', description_i18n: { 'en-US': 'Get NexWork help and register assistants.' } },
+    ];
+    agentSelectionMock.selectedAssistantId = 'office-assistant';
+    guidInputMock.input = 'Keep this unfinished request';
+    const { rerender } = render(<GuidPage />);
+    expect(capturedGuidInputCardProps.at(-1)?.placeholder).toBe('Create Word, PowerPoint and Excel files.');
+    agentSelectionMock.selectedAssistantId = 'nexwork-butler';
+    rerender(<GuidPage />);
+    expect(capturedGuidInputCardProps.at(-1)?.placeholder).toBe('Get NexWork help and register assistants.');
+    expect(capturedGuidInputCardProps.at(-1)?.input).toBe('Keep this unfinished request');
+    guidInputMock.input = '';
+  });
+
+  it('uses the general hint when the selected assistant has no description', () => {
+    render(<GuidPage />);
+    expect(capturedGuidInputCardProps.at(-1)?.placeholder).toBe('conversation.welcome.placeholder');
   });
 
   it('keeps the existing replace contract for ordinary Guid prefills', () => {

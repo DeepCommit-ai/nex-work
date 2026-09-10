@@ -17,6 +17,15 @@ const temporary = (): string => {
 };
 
 describe('published catalog validation', () => {
+  it('accepts bundled avatar identifiers and rejects untrusted image locations', () => {
+    const catalog = catalogFixture();
+    catalog.agents[1].avatar = 'office-documents';
+    catalog.agents[2].avatar = 'nexwork-logo';
+    expect(parseManagedCatalog(releaseFixture(1, catalog)).agents[2].avatar).toBe('nexwork-logo');
+    Object.assign(catalog.agents[2], { avatar: '/Users/employee/private.png' });
+    expect(() => parseManagedCatalog(releaseFixture(1, catalog))).toThrow('assistant');
+  });
+
   it('requires the default and reserves Aion for the Butler', () => {
     const catalog = catalogFixture();
     catalog.agents[1].engine = 'aion';

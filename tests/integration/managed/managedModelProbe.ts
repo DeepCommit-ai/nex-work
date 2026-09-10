@@ -135,9 +135,9 @@ export async function runManagedModelProbe(
     writeFileSync(path.join(directory, engine + '-model-traffic.json'), JSON.stringify(traffic, null, 2));
     if (engine === 'claude') {
       const serialized = JSON.stringify(traffic);
-      if (!serialized.includes('NexWork Office assistant') || !serialized.includes('officecli-docx-nw-'))
+      if (!serialized.includes('你是 NexWork 办公助手') || !serialized.includes('officecli-docx-nw-'))
         throw new Error('Claude did not receive the published Office prompt and versioned skills');
-      if (serialized.includes('NexWork Butler')) throw new Error('Claude received the Butler role');
+      if (serialized.includes('你是 NexWork 管家')) throw new Error('Claude received the Butler role');
       console.log('PASS: bundled Claude Code received the published Office prompt and versioned skills');
       return;
     }
@@ -145,7 +145,7 @@ export async function runManagedModelProbe(
       throw new Error(`Native Aion did not return both management tool results (${traffic.length} model requests)`);
     if ([...results].some((result) => result.includes('"is_error":true')))
       throw new Error('Native management tool failed');
-    if (!JSON.stringify(traffic).includes('NexWork Butler'))
+    if (!JSON.stringify(traffic).includes('你是 NexWork 管家'))
       throw new Error('Native Aion did not receive the server-owned Butler role');
     console.log(
       'PASS: actual Aion conversation executed register_agent and submit_bug; tool results returned to model'

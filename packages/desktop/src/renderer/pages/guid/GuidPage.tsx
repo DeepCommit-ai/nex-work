@@ -353,6 +353,10 @@ const GuidPage: React.FC = () => {
     const candidates = new Set([selectedId, `builtin-${strippedId}`, strippedId]);
     return agentSelection.assistants.find((item) => candidates.has(item.id));
   }, [agentSelection.assistants, selectedAssistantId, agentSelection.selectedAssistantId]);
+  const selectedAssistantDescription =
+    selectedAssistantRecord?.description_i18n?.[localeKey]?.trim() ||
+    selectedAssistantRecord?.description_i18n?.['en-US']?.trim() ||
+    selectedAssistantRecord?.description?.trim();
   const selectedAssistantPrompts = useMemo(() => {
     if (!selectedAssistantId) return [];
     const resolvedPrompts =
@@ -716,7 +720,7 @@ const GuidPage: React.FC = () => {
             onPaste={guidInput.onPaste}
             onFocus={guidInput.handleTextareaFocus}
             onBlur={guidInput.handleTextareaBlur}
-            placeholder={typewriterPlaceholder || t('conversation.welcome.placeholder')}
+            placeholder={selectedAssistantDescription || typewriterPlaceholder || t('conversation.welcome.placeholder')}
             isInputActive={guidInput.isInputFocused}
             isFileDragging={guidInput.isFileDragging}
             activeBorderColor={activeBorderColor}

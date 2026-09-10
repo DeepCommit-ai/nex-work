@@ -6,11 +6,19 @@
 
 import { can } from '@/common/capabilities/policy';
 import { resolveBackendAssetUrl } from '@/renderer/utils/platform';
+import brandIcon from '@renderer/assets/logos/brand/app.png';
 
 export type AssistantAvatar =
   | { kind: 'image'; value: string }
   | { kind: 'emoji'; value: string }
   | { kind: 'fallback' };
+
+/** Stable catalog identifiers resolve to assets shipped with this client. */
+export function resolveBuiltinAssistantAvatar(value: string): string | undefined {
+  if (value === 'nexwork-logo') return brandIcon;
+  if (value === 'office-documents') return resolveBackendAssetUrl('/api/assistants/word-creator/avatar');
+  return undefined;
+}
 
 export function isBackendRelativeAssetPath(value: string): boolean {
   return value.startsWith('/api/') || value.startsWith('/assets/');
@@ -56,6 +64,8 @@ export function isVendorLogoPath(value: string | null | undefined): boolean {
 export function resolveAssistantAvatar(avatar: string | undefined): AssistantAvatar {
   const value = avatar?.trim();
   if (!value) return { kind: 'fallback' };
+  const builtin = resolveBuiltinAssistantAvatar(value);
+  if (builtin) return { kind: 'image', value: builtin };
   if (isVendorLogoPath(value) && !can('cli.visible')) return { kind: 'fallback' };
 
   if (isLikelyLocalFilePath(value)) {

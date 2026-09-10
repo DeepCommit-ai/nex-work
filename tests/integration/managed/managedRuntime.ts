@@ -158,6 +158,13 @@ try {
       active.map((a) => ({ id: a.id, engine: a.agent_id }))
     );
     for (const agent of active) {
+      const expectedAvatar =
+        agent.id === 'office-assistant'
+          ? 'office-documents'
+          : agent.id === 'nexwork-butler'
+            ? 'nexwork-logo'
+            : undefined;
+      if (agent.avatar !== expectedAvatar) throw new Error(`Incorrect published avatar for ${agent.id}`);
       for (const locale of [
         'zh-CN',
         'en-US',
@@ -222,12 +229,20 @@ try {
   writeFileSync(office, readFileSync(office, 'utf8') + '\n发布测试版本三。\n');
   const skill = path.join(source, 'skills/officecli-docx.md');
   writeFileSync(skill, readFileSync(skill, 'utf8') + '\n发布测试技能三。\n');
+  const manifestPath = path.join(source, 'manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { agents: Array<{ id: string; avatar?: string }> };
+  manifest.agents.find((agent) => agent.id === 'default-assistant')!.avatar = 'office-documents';
+  manifest.agents.find((agent) => agent.id === 'office-assistant')!.avatar = 'nexwork-logo';
+  writeFileSync(manifestPath, JSON.stringify(manifest));
   failNextOfficeWrite = true;
   await remote('/registry/publish', { request_id: 'probe-publish-003' });
   await until(() => first.service.snapshot().phase === 'error', 'Injected installation failure');
   if (first.service.snapshot().revision !== 2) throw new Error('Failed installation advanced the installed revision');
   const restored = await first.api<AssistantDetail>('GET', '/api/assistants/default-assistant?locale=zh-CN');
   if (!restored.rules.content.includes('catalog revision 2')) throw new Error('Previous prompt was not restored');
+  if (restored.profile.avatar) throw new Error('Rollback did not clear a newly added avatar');
+  const restoredOffice = await first.api<AssistantDetail>('GET', '/api/assistants/office-assistant');
+  if (restoredOffice.profile.avatar !== 'office-documents') throw new Error('Previous Office avatar was not restored');
   const recovery = await first.service.sync(true);
   if (!recovery.success) throw new Error('Installation did not recover: ' + recovery.error);
   await until(() => services.every((s) => s.snapshot().revision === 3), 'Push of prompt and skill update');

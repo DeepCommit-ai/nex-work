@@ -27,6 +27,7 @@ import {
   isLikelyLocalFilePath,
   isVendorLogoPath,
   resolveAssistantAvatar,
+  resolveBuiltinAssistantAvatar,
 } from '@/renderer/utils/model/assistantAvatar';
 import type { ManagedAgent } from '@/renderer/utils/model/agentTypes';
 import { resolveBackendAssetUrl } from '@/renderer/utils/platform';
@@ -88,6 +89,8 @@ export function useAgentLogos(): AgentLogoMap {
 
 function normalizeLogoUrl(logo: string): string | null {
   const value = logo.trim();
+  const builtin = resolveBuiltinAssistantAvatar(value);
+  if (builtin) return builtin;
   if (!value || isLikelyLocalFilePath(value)) return null;
   if (value.startsWith('/') && !isBackendRelativeAssetPath(value)) return null;
 

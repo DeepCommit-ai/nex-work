@@ -5,6 +5,7 @@ import {
   isBackendRelativeAssetPath,
   isLikelyLocalFilePath,
   isVendorLogoPath,
+  resolveBuiltinAssistantAvatar,
 } from '@/renderer/utils/model/assistantAvatar';
 import type { AssistantListItem, AvailableBackend } from './types';
 import type { ManagedAgent } from '@/renderer/utils/model/agentTypes';
@@ -60,6 +61,8 @@ export const isEmoji = (str: string): boolean => {
 export const resolveAvatarImageSrc = (avatar: string | undefined): string | undefined => {
   const value = avatar?.trim();
   if (!value) return undefined;
+  const builtin = resolveBuiltinAssistantAvatar(value);
+  if (builtin) return builtin;
   if (isVendorLogoPath(value) && !can('cli.visible')) return undefined;
 
   if (isLikelyLocalFilePath(value)) return undefined;
