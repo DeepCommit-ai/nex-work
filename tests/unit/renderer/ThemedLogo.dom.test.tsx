@@ -6,6 +6,7 @@
 
 import { act, render, screen } from '@testing-library/react';
 import React from 'react';
+import brandIcon from '@renderer/assets/logos/brand/app.png';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ThemedLogo, {
   detectTintableLogo,
@@ -85,6 +86,24 @@ describe('detectTintableLogo', () => {
 });
 
 describe('ThemedLogo', () => {
+  it('keeps cropped NexWork avatars accessible with independent clipping across instances', () => {
+    render(
+      <>
+        <ThemedLogo src={brandIcon} alt='NexWork Butler' />
+        <ThemedLogo src={brandIcon} alt='Second Butler' />
+      </>
+    );
+    const avatars = [
+      screen.getByRole('img', { name: 'NexWork Butler' }),
+      screen.getByRole('img', { name: 'Second Butler' }),
+    ];
+    const clips = avatars.map((avatar) => avatar.querySelector('clipPath')?.id);
+    expect(clips.every(Boolean) && new Set(clips).size === 2).toBe(true);
+    for (const [index, avatar] of avatars.entries()) {
+      expect(avatar.querySelector('image')?.getAttribute('clip-path')).toBe(`url(#${clips[index]})`);
+    }
+  });
+
   it('re-renders a currentColor svg as a tinted mask with the accessible name', async () => {
     stubFetch(() => Promise.resolve(svgResponse('<svg fill="currentColor"></svg>')));
     const { container } = render(<ThemedLogo src={uniqueSvgUrl()} alt='OpenAI logo' />);

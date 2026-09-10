@@ -123,8 +123,11 @@ export class ManagedAgentService {
 
   /** Restore published skills before connecting; no credentials are stored in the catalog cache. */
   async bootstrap(): Promise<void> {
+    let hadCache = false;
     try {
-      const cached = JSON.parse(readFileSync(this.cache, 'utf8')) as {
+      const content = readFileSync(this.cache, 'utf8');
+      hadCache = true;
+      const cached = JSON.parse(content) as {
         release: CatalogRelease;
         version: string;
         installedAt: number;
@@ -150,8 +153,10 @@ export class ManagedAgentService {
         ),
       });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+      if (hadCache || (error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        this.safeToCreate = false;
         this.emit({ phase: 'error', error: 'Cached catalog needs synchronization' });
+      }
     }
     const settings = await this.deps.backend<Record<string, unknown>>(
       'GET',

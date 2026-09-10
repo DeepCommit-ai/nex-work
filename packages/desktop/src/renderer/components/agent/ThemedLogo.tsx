@@ -20,7 +20,8 @@
  */
 
 import { LinkCloud } from '@icon-park/react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
+import brandIcon from '@renderer/assets/logos/brand/app.png';
 
 /**
  * Per-URL detection cache. A boolean is a settled result; a promise is an
@@ -106,8 +107,32 @@ export type ThemedLogoProps = {
 
 const ThemedLogo: React.FC<ThemedLogoProps> = ({ src, alt, className, style, title, fallback = null }) => {
   const tintable = useTintableLogo(src);
+  const avatarClipId = useId();
 
   if (!src) return <>{fallback}</>;
+
+  // Assistant avatars display the original inner panel without the app icon's cream margin.
+  // An SVG viewport preserves the source pixels and works at every avatar size.
+  if (src === brandIcon) {
+    return (
+      <svg
+        viewBox='104 104 816 816'
+        role={alt ? 'img' : undefined}
+        aria-label={alt || undefined}
+        aria-hidden={alt ? undefined : true}
+        className={className}
+        style={style}
+      >
+        {title ? <title>{title}</title> : null}
+        <defs>
+          <clipPath id={avatarClipId}>
+            <rect x='104' y='104' width='816' height='816' rx='184' />
+          </clipPath>
+        </defs>
+        <image href={src} width='1024' height='1024' clipPath={`url(#${avatarClipId})`} />
+      </svg>
+    );
+  }
 
   // Detection still in flight — render nothing visible (avoids the black
   // flash of a tintable SVG rendered through <img> before detection settles).

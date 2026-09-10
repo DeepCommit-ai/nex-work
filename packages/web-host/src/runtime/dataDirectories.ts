@@ -11,7 +11,12 @@ export function migrateNexworkDirectory(previous: string, current: string): stri
     return current;
   }
   try {
-    fs.lstatSync(previous);
+    const legacy = fs.lstatSync(previous);
+    // Resetting the new data directory can leave our compatibility link dangling.
+    if (legacy.isSymbolicLink() && path.resolve(path.dirname(previous), fs.readlinkSync(previous)) === current) {
+      fs.mkdirSync(current, { recursive: true });
+      return current;
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     fs.mkdirSync(current, { recursive: true });

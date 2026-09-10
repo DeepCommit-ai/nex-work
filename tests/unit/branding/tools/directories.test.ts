@@ -16,6 +16,23 @@ afterEach(() => {
 });
 
 describe('owned directory migration', () => {
+  it('recreates a reset NexWork directory behind its owned compatibility link', () => {
+    const root = temporary();
+    const old = path.join(root, 'old');
+    const current = path.join(root, 'new');
+    fs.symlinkSync(current, old, process.platform === 'win32' ? 'junction' : 'dir');
+    expect(migrateNexworkDirectory(old, current)).toBe(current);
+    expect(fs.realpathSync(old)).toBe(fs.realpathSync(current));
+  });
+  it('does not create the target of an unrelated dangling legacy link', () => {
+    const root = temporary();
+    const old = path.join(root, 'old');
+    const unrelated = path.join(root, 'unrelated');
+    fs.symlinkSync(unrelated, old, process.platform === 'win32' ? 'junction' : 'dir');
+    expect(() => migrateNexworkDirectory(old, path.join(root, 'new'))).toThrow();
+    expect(fs.existsSync(unrelated)).toBe(false);
+  });
+
   it('keeps nested data and existing absolute paths reachable', () => {
     const root = temporary();
     const oldRoot = path.join(root, 'AionUi-Dev');

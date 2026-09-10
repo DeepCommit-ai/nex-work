@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ManagedAgentService } from '@process/services/managedagents/ManagedAgentService';
@@ -84,6 +84,7 @@ function setup(stored = false) {
     rmSync(root, { recursive: true, force: true });
   });
   return {
+    root,
     service,
     install,
     installed,
@@ -113,6 +114,18 @@ function setup(stored = false) {
 }
 
 describe('desktop synchronization lifecycle', () => {
+  it('blocks new conversations with a damaged offline cache until repair succeeds', async () => {
+    const s = setup(true);
+    mkdirSync(path.join(s.root, 'nexwork-managed'));
+    writeFileSync(path.join(s.root, 'nexwork-managed/installed.json'), '{corrupt');
+    s.offline(true);
+    await s.service.bootstrap();
+    expect((await s.service.waitReady()).success).toBe(false);
+    s.offline(false);
+    await s.service.sync(true);
+    expect((await s.service.waitReady()).success).toBe(true);
+  });
+
   it('keeps the active authenticated identity when a replacement key is rejected', async () => {
     const s = setup();
     await s.service.connect({ serverUrl: 'http://config.test', deptKey: 'test-key' });

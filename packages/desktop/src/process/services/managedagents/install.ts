@@ -174,7 +174,7 @@ export async function installCatalog(
           ...old?.defaults,
           skills: { mode: 'fixed', value: skills },
           mcps: { mode: 'fixed', value: agent.id === MANAGED_BUTLER_ID ? [...commonMcps, managementId] : commonMcps },
-          ...(spec?.fixed_model ? { model: { mode: 'fixed', value: spec.fixed_model } } : {}),
+          model: spec?.fixed_model ? { mode: 'fixed', value: spec.fixed_model } : { mode: 'auto' },
         },
       };
       if (old) {

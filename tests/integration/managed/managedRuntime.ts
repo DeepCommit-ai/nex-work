@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -91,6 +91,14 @@ try {
     if (!response.ok) throw new Error(`${route} ${response.status}: ${JSON.stringify(result)}`);
     return result;
   };
+  await remote('/healthz');
+  const contractCheck = spawnSync('bun', ['../cynapse/deploy/stack/check-client.ts', process.cwd()], {
+    input: JSON.stringify({ serverUrl, deptKey }),
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+  if (contractCheck.status !== 0) throw new Error(`Deployment client contract failed: ${contractCheck.stderr}`);
+  console.log('PASS: deployment client contract', contractCheck.stdout.trim());
   const clients = [];
   let failNextOfficeWrite = false;
   for (const name of ['employee-a', 'employee-b']) {
@@ -195,6 +203,14 @@ try {
     clients.push({ api, dataDir, service });
   }
   const first = clients[0];
+  await first.api('PUT', '/api/assistants/office-assistant', {
+    defaults: { model: { mode: 'fixed', value: 'retired-server-model' } },
+  });
+  const reapplied = await first.service.sync(true);
+  if (!reapplied.success) throw new Error('Could not reapply model policy');
+  const resetModel = await first.api<AssistantDetail>('GET', '/api/assistants/office-assistant');
+  if (resetModel.defaults.model.mode !== 'auto' || resetModel.defaults.model.value)
+    throw new Error('Removed server model pin remains active');
   const workspace = path.join(first.dataDir, 'workspace');
   mkdirSync(workspace);
   const conversation = await first.api<{ id: string }>('POST', '/api/conversations', {
