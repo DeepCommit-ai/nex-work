@@ -314,7 +314,13 @@ export class ManagedAgentService {
     try {
       response = await this.fetch(`${credentials.serverUrl}${route}`, {
         method,
-        headers: { 'X-Cynapse-Key': credentials.deptKey, 'Content-Type': 'application/json' },
+        headers: {
+          'X-Cynapse-Key': credentials.deptKey,
+          'Content-Type': 'application/json',
+          // The released client shares department keys and only understands the static
+          // contract; cynapse serves agent_catalog to clients that ask for it.
+          'X-NexWork-Capabilities': 'agent-catalog',
+        },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: AbortSignal.timeout(30_000),
       });

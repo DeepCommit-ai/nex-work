@@ -88,6 +88,7 @@ function setup(stored = false) {
     service,
     install,
     installed,
+    fetcher,
     requests,
     settings,
     rejectUrl: (url: string) => {
@@ -124,6 +125,17 @@ describe('desktop synchronization lifecycle', () => {
     s.offline(false);
     await s.service.sync(true);
     expect((await s.service.waitReady()).success).toBe(true);
+  });
+
+  it('declares catalog support so a shared department key is not served the release contract', async () => {
+    const s = setup();
+    await s.service.connect({ serverUrl: 'http://config.test', deptKey: 'test-key' });
+    const declared = vi
+      .mocked(s.fetcher)
+      .mock.calls.filter(([url]) => /\/config(\/version)?$/.test(String(url)))
+      .map(([, init]) => new Headers(init?.headers).get('X-NexWork-Capabilities'));
+    expect(declared.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(declared)).toEqual(new Set(['agent-catalog']));
   });
 
   it('keeps the active authenticated identity when a replacement key is rejected', async () => {
