@@ -41,6 +41,17 @@ function verifyBundledResources(resourcesDir, electronPlatformName, targetArch) 
     );
   }
 
+  // spec 011: managed skills call the bundled interpreter; a package without it breaks them offline.
+  const pythonKey = `${claudePlat}-${targetArch}`;
+  const pythonExe = claudePlat === 'win32' ? 'python.exe' : path.join('bin', 'python3');
+  for (const relative of [pythonExe, 'VERSION']) {
+    if (!fs.existsSync(path.join(resourcesDir, 'bundled-python', pythonKey, relative))) {
+      result.missing.push(
+        `bundled-python/${pythonKey}/${relative}（先跑 node packages/shared-scripts/src/prepare-python.js --platform ${claudePlat} --arch ${targetArch}）`
+      );
+    }
+  }
+
   if (result.missing.length > 0) {
     console.error(`   Missing bundled resources: ${result.missing.join(', ')}`);
     throw new Error(`Packaged app is missing required bundled resource(s): ${result.missing.join(', ')}`);

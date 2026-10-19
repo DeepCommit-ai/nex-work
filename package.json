@@ -263,6 +263,18 @@
     "node": ">=22 <25"
   },
   "aioncoreVersion": "v0.1.72",
+  "bundledPython": {
+    "version": "3.12.15",
+    "release": "20261001",
+    "sha256": {
+      "darwin-arm64": "10cab8f6ed6202fdd81637aa6eda4af8d5b7eaa8fc42f9df3c6bea4923de0d93",
+      "darwin-x64": "d101ac54bc34afff54741406261325dc896b7b646a36a58fff4845ef0a00b2ce",
+      "linux-arm64": "0b35f4dc08d58534eb82e024989e2db9873885dccd4f2a316ff55c0cec146123",
+      "linux-x64": "7bb1659e3235077b7f63d5b6eb6ce653c6fcd6c5041e9d5f73b42ce10421464d",
+      "win32-arm64": "2b7d0422475973a90fb0817e9062a00ee745c46a3376c46e7a397ab0e345881e",
+      "win32-x64": "52124cee54126f3f360eaa378288f6f64c402c983a3c14c95eff67f4af986aaa"
+    }
+  },
   "claudeCodeVersion": "2.1.235",
   "electronRebuild": {
     "electronVersion": "^37.3.1"

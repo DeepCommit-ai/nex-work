@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { deriveClaudeBinaryPath, provisionManagedClaude, resolveBundledClaudeCandidates } from './managed-claude.js';
+import {
+  BUNDLED_PYTHON_ENV,
+  deriveClaudeBinaryPath,
+  provisionManagedClaude,
+  resolveBundledClaudeCandidates,
+  resolveBundledPythonCandidates,
+  withBundledPython,
+} from './managed-claude.js';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'managed-claude-test-'));
 
@@ -309,5 +316,101 @@ describe('managed profile migration', () => {
         { name: 'TOKEN', value: 'test' },
       ],
     });
+  });
+});
+
+describe('bundled Python (spec 011)', () => {
+  /** Adds bundled-python/<plat-arch>/bin/python3 beside the other bundled runtimes. */
+  function addPython(root: string) {
+    const dir = path.join(root, 'bundled-python', 'linux-x64', 'bin');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'python3'), '#!/bin/sh\n', { mode: 0o755 });
+    return path.join(dir, 'python3');
+  }
+
+  function recordingFetch(current: {
+    command_override: string | null;
+    env_override: { name: string; value: string }[];
+  }) {
+    const puts: { command_override: string; env_override: { name: string; value: string }[] }[] = [];
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') puts.push(JSON.parse(String(init.body)));
+      return { ok: true, json: async () => ({ data: current }) };
+    }) as unknown as typeof fetch;
+    return { fetchImpl, puts };
+  }
+
+  const options = (aioncore: string, fetchImpl: typeof fetch) => ({
+    aioncoreBinaryPath: aioncore,
+    backendPort: 1234,
+    fetchImpl,
+    platform: 'linux' as const,
+    arch: 'x64',
+    cwd: '/nonexistent',
+  });
+
+  it('lists the distribution layout first, then the repo-root dev fallback', () => {
+    expect(
+      resolveBundledPythonCandidates('/app/resources/bundled-aioncore/linux-x64/aioncore', 'linux', 'x64', '/repo')
+    ).toEqual([
+      '/app/resources/bundled-python/linux-x64/bin/python3',
+      path.resolve('/repo', 'resources', 'bundled-python', 'linux-x64', 'bin', 'python3'),
+    ]);
+  });
+
+  it('writes NEXWORK_PYTHON with the pin, keeping the gateway entries', async () => {
+    const root = tmp();
+    const aioncore = makeLayout(root);
+    const python = addPython(root);
+    const gateway = [{ name: 'ANTHROPIC_BASE_URL', value: 'http://gw:54000' }];
+    const { fetchImpl, puts } = recordingFetch({ command_override: null, env_override: gateway });
+
+    await provisionManagedClaude(options(aioncore, fetchImpl));
+
+    expect(puts).toHaveLength(1);
+    expect(puts[0].env_override).toEqual([...gateway, { name: BUNDLED_PYTHON_ENV, value: python }]);
+  });
+
+  it('does not PUT when the pin and NEXWORK_PYTHON are already current', async () => {
+    const root = tmp();
+    const aioncore = makeLayout(root);
+    const python = addPython(root);
+    const { fetchImpl, puts } = recordingFetch({
+      command_override: path.join(root, 'bundled-claude', 'linux-x64', 'claude'),
+      env_override: [{ name: BUNDLED_PYTHON_ENV, value: python }],
+    });
+
+    await provisionManagedClaude(options(aioncore, fetchImpl));
+
+    expect(puts).toHaveLength(0);
+  });
+
+  it('drops a stale NEXWORK_PYTHON so skills fall back to the machine interpreter', async () => {
+    const root = tmp();
+    const aioncore = makeLayout(root);
+    const pinned = path.join(root, 'bundled-claude', 'linux-x64', 'claude');
+    const { fetchImpl, puts } = recordingFetch({
+      command_override: pinned,
+      env_override: [
+        { name: 'TOKEN', value: 'test' },
+        { name: BUNDLED_PYTHON_ENV, value: '/old/app/bundled-python/linux-x64/bin/python3' },
+      ],
+    });
+
+    await provisionManagedClaude(options(aioncore, fetchImpl));
+
+    expect(puts).toEqual([{ command_override: pinned, env_override: [{ name: 'TOKEN', value: 'test' }] }]);
+  });
+
+  it('uses forward slashes on Windows, where Claude Code runs commands through Git Bash', () => {
+    const { env, changed } = withBundledPython(
+      [],
+      'C:\\Program Files\\NexWork\\resources\\bundled-python\\win32-x64\\python.exe',
+      'win32'
+    );
+    expect(changed).toBe(true);
+    expect(env).toEqual([
+      { name: BUNDLED_PYTHON_ENV, value: 'C:/Program Files/NexWork/resources/bundled-python/win32-x64/python.exe' },
+    ]);
   });
 });

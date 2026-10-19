@@ -311,6 +311,10 @@ Module._load = function patchedLoad(request, parent, isMain) {
     } };
   }
 
+  if (request.endsWith('packages/shared-scripts/src/prepare-python.js')) {
+    return { preparePython: (options) => recordPrepareCall({ platform: options.platform, arch: options.arch, runtime: 'python' }) };
+  }
+
   if (request === './prepareAioncore' || request.endsWith('/prepareAioncore')) {
     return recordPrepareCall;
   }
@@ -395,6 +399,7 @@ childProcess.execSync = function mockedExecSync(command) {
         const calls = JSON.parse(readFileSync(callsPath, 'utf8')) as Array<{ arch?: string } | null>;
         expect(calls).toContainEqual(expect.objectContaining({ arch: expectedArch }));
         expect(calls[0]).toEqual({ platform: process.platform, arch: expectedArch, runtime: 'claude' });
+        expect(calls[1]).toEqual({ platform: process.platform, arch: expectedArch, runtime: 'python' });
       } finally {
         rmSync(outDir, { recursive: true, force: true });
         if (movedExistingOut) {

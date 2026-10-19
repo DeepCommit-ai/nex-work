@@ -19,6 +19,10 @@
  * 绝对路径。通道实测存在（aioncore `agent_metadata.command` 列），优先于 PATH。
  * 每次启动重钉——应用挪位置/升版本自愈。
  *
+ * The same write points NEXWORK_PYTHON at the bundled interpreter
+ * (`bundled-python/<plat>-<arch>/`, spec 011) so managed skills never depend on
+ * a Python the employee may not have.
+ *
  * ⚠️ aioncore 的 overrides PUT 是**整体替换**（实测：漏掉 env_override 会把网关
  * 四件套清空，反之漏掉 command_override 会把钉子清掉）。所以这里 GET 后原样带回
  * env_override；所有其他 setAgentOverrides 写者也必须带回 command_override。
@@ -119,6 +123,40 @@ export function resolveBundledClaudeCandidates(
   ];
 }
 
+/** Env var that tells managed skills which interpreter to run (spec 011). */
+export const BUNDLED_PYTHON_ENV = 'NEXWORK_PYTHON';
+
+/** Candidate paths of the bundled interpreter, in the same two layouts as bundled-claude. */
+export function resolveBundledPythonCandidates(
+  aioncoreBinaryPath: string,
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+  cwd: string = process.cwd()
+): string[] {
+  const exe = platform === 'win32' ? 'python.exe' : path.join('bin', 'python3');
+  const key = `${platform}-${arch}`;
+  return [
+    path.resolve(path.dirname(aioncoreBinaryPath), '..', '..', 'bundled-python', key, exe),
+    path.resolve(cwd, 'resources', 'bundled-python', key, exe),
+  ];
+}
+
+/**
+ * Point NEXWORK_PYTHON at the bundled interpreter, or drop a stale entry when there is none,
+ * so skills fall back to the machine's python3 instead of a path that no longer exists.
+ * Windows paths use forward slashes: Claude Code runs shell commands through Git Bash.
+ */
+export function withBundledPython(
+  env: { name: string; value: string }[],
+  pythonPath: string | undefined,
+  platform: NodeJS.Platform = process.platform
+): { env: { name: string; value: string }[]; changed: boolean } {
+  const value = pythonPath && platform === 'win32' ? pythonPath.replace(/\\/g, '/') : pythonPath;
+  const before = env.find((entry) => entry.name === BUNDLED_PYTHON_ENV)?.value;
+  const rest = env.filter((entry) => entry.name !== BUNDLED_PYTHON_ENV);
+  return { env: value ? [...rest, { name: BUNDLED_PYTHON_ENV, value }] : rest, changed: before !== value };
+}
+
 export type ProvisionManagedClaudeOptions = {
   aioncoreBinaryPath: string;
   backendPort: number;
@@ -176,7 +214,11 @@ export async function provisionManagedClaude(opts: ProvisionManagedClaudeOptions
     const { env: fixedEnv, changed: envFixed } = expandConfigDirTilde(overrides.env_override);
     const profile = fixedEnv.find((entry) => entry.name === 'CLAUDE_CONFIG_DIR')?.value;
     if (profile) migrateManagedProfile(profile);
-    if (overrides.command_override === claudeBin && !envFixed) {
+    const python = resolveBundledPythonCandidates(opts.aioncoreBinaryPath, opts.platform, opts.arch, opts.cwd).find(
+      (candidate) => fs.existsSync(candidate)
+    );
+    const { env: nextEnv, changed: pythonChanged } = withBundledPython(fixedEnv, python, opts.platform);
+    if (overrides.command_override === claudeBin && !envFixed && !pythonChanged) {
       log(`已钉在 ${claudeBin}（无变化）`);
       return;
     }
@@ -184,13 +226,17 @@ export async function provisionManagedClaude(opts: ProvisionManagedClaudeOptions
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       // 整体替换语义：env_override 必须带回（CLAUDE_CONFIG_DIR 的 `~` 顺手自愈成绝对路径）。
-      body: JSON.stringify({ command_override: claudeBin, env_override: fixedEnv }),
+      body: JSON.stringify({ command_override: claudeBin, env_override: nextEnv }),
     });
     if (!put.ok) {
       warn(`钉 command_override 失败：HTTP ${put.status}`);
       return;
     }
-    log(`Claude Code 已钉到捆绑二进制：${claudeBin}` + (envFixed ? '（并已展开 CLAUDE_CONFIG_DIR 的 ~）' : ''));
+    log(
+      `Claude Code 已钉到捆绑二进制：${claudeBin}` +
+        (envFixed ? '（并已展开 CLAUDE_CONFIG_DIR 的 ~）' : '') +
+        (pythonChanged ? (python ? `；${BUNDLED_PYTHON_ENV}=${python}` : `；已移除失效的 ${BUNDLED_PYTHON_ENV}`) : '')
+    );
   } catch (e) {
     warn('提供受管 Claude 时出错（不影响后端启动）', e);
   }
