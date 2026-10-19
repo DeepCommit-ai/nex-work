@@ -26,6 +26,7 @@ stay awake. Nothing in the renderer, the MCP launcher or chrome-devtools-mcp cha
   It is called on every input change and on attach/detach. The power service is injectable through
   a new optional second argument to `startCdpBridge`, together with the idle window, which the
   tests need. The production call site is unchanged.
+
 - **Diagnostics.**
   - The pending-discovery map now stores the start time, so answers and client closes log their
     latency.
@@ -37,12 +38,12 @@ stay awake. Nothing in the renderer, the MCP launcher or chrome-devtools-mcp cha
 
 ## Files
 
-| File | Owner | Change |
-| --- | --- | --- |
-| `packages/desktop/src/process/resources/builtinMcp/cdpBridge.ts` | upstream (with spec 007 patches) | +210 / −12 |
-| `tests/unit/process/cdpBridgeLease.test.ts` | ours (new) | +208 |
-| `specs/010-browser-bridge-busy-and-background/{spec,plan}.md` | ours (new) | — |
-| `specs/README.md` | ours | +1 index row |
+| File                                                             | Owner                            | Change       |
+| ---------------------------------------------------------------- | -------------------------------- | ------------ |
+| `packages/desktop/src/process/resources/builtinMcp/cdpBridge.ts` | upstream (with spec 007 patches) | +210 / −12   |
+| `tests/unit/process/cdpBridgeLease.test.ts`                      | ours (new)                       | +208         |
+| `specs/010-browser-bridge-busy-and-background/{spec,plan}.md`    | ours (new)                       | —            |
+| `specs/README.md`                                                | ours                             | +1 index row |
 
 ## Upstream drift
 

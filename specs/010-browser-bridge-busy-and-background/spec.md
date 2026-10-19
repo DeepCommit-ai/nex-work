@@ -69,7 +69,7 @@ five minutes. In-page batches poll with `setTimeout`, such as the review assista
   - Unattached 503s put the retry guidance in the HTTP reason phrase, which is what puppeteer
     shows. The body is kept for other clients.
   - Every waited discovery logs `[CDP] Discovery waiting …`, then either `answered 200|503 after
-    N ms` or `closed by the client after N ms`.
+N ms` or `closed by the client after N ms`.
   - A discovery timeout that fires more than 5 s late logs a warning naming suspension as the
     likely cause.
   - Lease changes log `[CDP] Browser lease taken / released (why)`.
