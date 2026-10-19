@@ -12,6 +12,7 @@ import {
   GATEWAY_ENV_CUSTOM_HEADERS,
   GATEWAY_ENV_AUTH_TOKEN,
   GATEWAY_ENV_BASE_URL,
+  GATEWAY_ENV_CLAUDE_MODELS,
   GATEWAY_ENV_CONFIG_DIR,
   type EnvEntry,
 } from '@/common/gateway/types';
@@ -78,6 +79,31 @@ describe('buildEnvOverride', () => {
   it('normalises the stored base url', () => {
     const env = buildEnvOverride([], { baseUrl: `${GW}///`, apiKey: 'k' });
     expect(env).toContainEqual({ name: GATEWAY_ENV_BASE_URL, value: GW });
+  });
+
+  describe('Claude Code model (spec 012)', () => {
+    const pinned = (model: string): EnvEntry[] => GATEWAY_ENV_CLAUDE_MODELS.map((name) => ({ name, value: model }));
+
+    it('writes the pin to the session default and every alias Claude Code resolves', () => {
+      const env = buildEnvOverride([], { ...cfg(), claudeModel: 'glm-5.3-flash' });
+      for (const entry of pinned('glm-5.3-flash')) expect(env).toContainEqual(entry);
+    });
+
+    it('replaces an earlier pin instead of duplicating it', () => {
+      const env = buildEnvOverride(pinned('glm-4.7'), { ...cfg(), claudeModel: 'glm-5.3-flash' });
+      expect(env.filter((e) => e.name === 'ANTHROPIC_MODEL')).toEqual([
+        { name: 'ANTHROPIC_MODEL', value: 'glm-5.3-flash' },
+      ]);
+    });
+
+    it('clears the pin when the department pins nothing', () => {
+      const env = buildEnvOverride(pinned('glm-5.3-flash'), { ...cfg(), claudeModel: null });
+      expect(env.some((e) => (GATEWAY_ENV_CLAUDE_MODELS as readonly string[]).includes(e.name))).toBe(false);
+    });
+
+    it('keeps the pin on a manual gateway save, which knows nothing about it', () => {
+      expect(buildEnvOverride(pinned('glm-5.3-flash'), cfg())).toEqual(expect.arrayContaining(pinned('glm-5.3-flash')));
+    });
   });
 });
 

@@ -57,6 +57,11 @@ export type GatewaySection = {
   api_key: string;
   /** Claude Code 的隔离目录（FR-5）。空 = 不隔离，transcript 落员工个人目录，采集器不看那里。 */
   config_dir?: string;
+  /**
+   * Model the department pins for Claude Code assistants (spec 012). Written as
+   * ANTHROPIC_MODEL and the alias variables; null or absent clears them.
+   */
+  claude_model?: string | null;
 };
 
 /** 服务端返回的一份部门配置。 */

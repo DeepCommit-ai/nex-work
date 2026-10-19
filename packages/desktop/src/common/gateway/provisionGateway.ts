@@ -11,6 +11,7 @@ import type { EnvEntry, GatewayConfig, GatewayState, RuntimeGatewayStatus } from
 import {
   GATEWAY_ENV_AUTH_TOKEN,
   GATEWAY_ENV_BASE_URL,
+  GATEWAY_ENV_CLAUDE_MODELS,
   GATEWAY_ENV_CONFIG_DIR,
   GATEWAY_ENV_CUSTOM_HEADERS,
   GATEWAY_WILDCARD_MODEL,
@@ -81,6 +82,7 @@ export const buildEnvOverride = (existing: readonly EnvEntry[], config: GatewayC
     GATEWAY_ENV_AUTH_TOKEN,
     GATEWAY_ENV_CONFIG_DIR,
     GATEWAY_ENV_CUSTOM_HEADERS,
+    ...(config.claudeModel === undefined ? [] : GATEWAY_ENV_CLAUDE_MODELS),
   ]);
   const preserved = existing.filter((e) => !managed.has(e.name));
   const token = config.apiKey.trim()
@@ -99,6 +101,8 @@ export const buildEnvOverride = (existing: readonly EnvEntry[], config: GatewayC
   if (token) next.push({ name: GATEWAY_ENV_AUTH_TOKEN, value: token });
   if (configDir) next.push({ name: GATEWAY_ENV_CONFIG_DIR, value: configDir });
   if (customHeaders) next.push({ name: GATEWAY_ENV_CUSTOM_HEADERS, value: customHeaders });
+  const claudeModel = config.claudeModel?.trim();
+  if (claudeModel) for (const name of GATEWAY_ENV_CLAUDE_MODELS) next.push({ name, value: claudeModel });
   return next;
 };
 

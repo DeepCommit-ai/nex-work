@@ -46,6 +46,13 @@ describe('validateConfig', () => {
     expect(validateConfig(cfg())).toEqual([]);
   });
 
+  it('rejects a Claude Code model that is not a gateway alias', () => {
+    const gateway = { base_url: 'http://gw', api_key: 'sk', claude_model: 'glm-5.3-flash' };
+    expect(validateConfig(cfg({ gateway }))).toContainEqual(expect.stringContaining('claude_model'));
+    expect(validateConfig(cfg({ gateway, model_aliases: ['glm-5.3-flash'] }))).toEqual([]);
+    expect(validateConfig(cfg({ gateway: { ...gateway, claude_model: null } }))).toEqual([]);
+  });
+
   it('rejects a config without usable gateway credentials', () => {
     // 半份网关配置（有地址没 token）会让流量绕过网关或每次 401，且两种失败
     // 此刻都表现成"配置成功"。

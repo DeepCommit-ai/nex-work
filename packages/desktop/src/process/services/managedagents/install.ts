@@ -88,6 +88,8 @@ export async function provisionGateway(cfg: DeptConfig, options: InstallOptions,
       configVersion: cfg.version,
       clientId: options.clientId,
     }),
+    // The server is the source of truth: no pin there clears a pin written earlier.
+    claudeModel: gateway.claude_model ?? null,
   });
   undo.push(() => api('PUT', '/api/agents/2d23ff1c/overrides', overrides));
   await api('PUT', '/api/agents/2d23ff1c/overrides', {

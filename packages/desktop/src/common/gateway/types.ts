@@ -45,6 +45,25 @@ export const GATEWAY_ENV_CONFIG_DIR = 'CLAUDE_CONFIG_DIR';
  */
 export const GATEWAY_ENV_CUSTOM_HEADERS = 'ANTHROPIC_CUSTOM_HEADERS';
 
+/**
+ * The department's model for Claude Code, written to every name Claude Code resolves a
+ * model from: the session default and the opus/sonnet/haiku aliases its model picker and
+ * background tasks use.
+ *
+ * Pinning the model on the conversation is not enough: aioncore only accepts models from
+ * Claude Code's own catalog (default/opus/sonnet/haiku), drops a gateway alias such as
+ * `glm-5.3-flash` and starts the session on Claude's default name (aioncore log
+ * "persisted model selection is absent from the agent's catalog", 2026-10-19).
+ * Through the gateway a wildcard route happened to map that name back; direct to the
+ * upstream it did not. Spec 012; cynapse spec §17.
+ */
+export const GATEWAY_ENV_CLAUDE_MODELS = [
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+] as const;
+
 /** The single gateway configuration for this install. */
 export type GatewayConfig = {
   baseUrl: string;
@@ -61,6 +80,12 @@ export type GatewayConfig = {
    * manual save must not silently strip what the dept-config apply wrote.
    */
   customHeadersValue?: string;
+  /**
+   * Model for GATEWAY_ENV_CLAUDE_MODELS. `undefined` keeps what is there (the manual
+   * gateway page knows nothing about it); `null` or empty clears it (the department
+   * pins nothing); a value sets every name.
+   */
+  claudeModel?: string | null;
 };
 
 /**

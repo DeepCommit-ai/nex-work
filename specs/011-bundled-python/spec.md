@@ -54,7 +54,7 @@ machines the employee does not administer; this follows the bundled Claude Code 
 - [x] The build harness prepares Python for the target architecture after Claude Code (unit test).
 - [x] darwin-arm64 bundle prepared from the real release on the dev Mac: 46 MB on disk (66 MB before
       pruning); the skill's three commands run with it and reproduce the committed sample results.
-- [ ] Live: after a restart, the Claude Code process of a NexWork conversation has `NEXWORK_PYTHON`
-      and the purchase assistant runs its scripts with it.
+- [x] Live (NexWork-Dev, 2026-10-19): a new purchase review conversation's Claude Code process has
+      `NEXWORK_PYTHON`; the assistant ran `"${NEXWORK_PYTHON:-python3}"` and got the bundled 3.12.15.
 - [ ] Packaged macOS and Windows x64 installers contain the bundle; on Windows the interpreter runs
       from Git Bash with the forward-slash path.

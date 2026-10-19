@@ -261,6 +261,8 @@ const provisionGatewayFor = async (
         apiKey: gw.api_key,
         configDir: effectiveConfigDir,
         customHeadersValue: provenance,
+        // Only Claude Code reads these; other CLI agents keep whatever they have.
+        claudeModel: agentId === CLAUDE_AGENT_ID ? (gw.claude_model ?? null) : undefined,
       });
       // PUT 是整体替换（实测：漏掉 command_override 会把它清成 null）。这里只管
       // env，command_override（受管 claude 的钉子，issue #8）必须原样带过。

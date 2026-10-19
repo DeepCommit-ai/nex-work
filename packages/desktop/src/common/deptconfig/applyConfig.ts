@@ -106,6 +106,13 @@ export const validateConfig = (cfg: DeptConfig): string[] => {
       `助手 ${badPin.map((a) => a.id).join(', ')} 钉的 fixed_model 不在 model_aliases 里——新会话会在网关得到 404`
     );
   }
+  const claudeModel = cfg.gateway?.claude_model;
+  if (claudeModel != null && (typeof claudeModel !== 'string' || !cfg.model_aliases?.includes(claudeModel))) {
+    // Same failure as a bad assistant pin: every Claude Code request would get a 404.
+    problems.push(
+      `gateway.claude_model ${String(claudeModel)} 不在 model_aliases 里——Claude Code 的每次请求都会得到 404`
+    );
+  }
   if (!cfg.gateway?.base_url?.trim() || !cfg.gateway?.api_key?.trim()) {
     // 半份网关配置（有地址没 token，或全都没有）会让流量绕过网关或每次 401，
     // 且两种失败此刻都表现成"配置成功"。服务端已保证带全，缺了就是响应坏了。

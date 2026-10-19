@@ -48,6 +48,29 @@ describe('managed Claude configuration', () => {
       });
     }
   );
+  it('writes the department Claude Code model to ANTHROPIC_MODEL', async () => {
+    const writes: { route: string; body: { env_override: { name: string; value: string }[] } }[] = [];
+    const backend: BackendCall = async <T>(method: string, route: string, body?: unknown): Promise<T> => {
+      if (method !== 'GET') writes.push({ route, body: body as (typeof writes)[number]['body'] });
+      if (route === '/api/agents/management') return [{ id: '2d23ff1c', enabled: true }] as T;
+      if (route === '/api/providers') return (method === 'GET' ? [] : { id: 'gateway' }) as T;
+      return { command_override: '/managed/claude', env_override: [] } as T;
+    };
+    const cfg = configFixture();
+    cfg.gateway!.claude_model = 'test-model';
+    await provisionGateway(cfg, {
+      backend,
+      skillsRoot: '/unused',
+      serverUrl: 'http://config',
+      deptKey: 'test',
+      clientId: 'test',
+      prepareClaude: vi.fn(),
+    });
+    const env = writes.find((w) => w.route === '/api/agents/2d23ff1c/overrides')!.body.env_override;
+    expect(env).toContainEqual({ name: 'ANTHROPIC_MODEL', value: 'test-model' });
+    expect(env).toContainEqual({ name: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', value: 'test-model' });
+  });
+
   it('does not replace gateway credentials when profile preparation fails', async () => {
     const writes: string[] = [];
     const backend: BackendCall = async <T>(method: string, route: string): Promise<T> => {
