@@ -25,14 +25,15 @@ therefore apply to every spec:
 
 ## Index
 
-| Spec                                              | Title                               | Status                                              |
-| ------------------------------------------------- | ----------------------------------- | --------------------------------------------------- |
-| [001](001-nexwork-rebrand/spec.md)                | AionUi → NexWork rebrand            | Implemented                                         |
-| [002](002-server-controlled-capabilities/spec.md) | Server-controlled capability policy | Draft (rev 3)                                       |
-| [003](003-nexwork-constitution/spec.md)           | NexWork constitution                | Implemented (rev 3)                                 |
-| [004](004-app-icon-geometry/spec.md)              | App icon geometry                   | Implemented (rev 5)                                 |
-| [005](005-trajectory-export/spec.md)              | Trajectory export                   | Withdrawn — collection belongs at the gateway       |
-| [006](006-gateway-provisioning/spec.md)           | Gateway provisioning                | Implemented, partially verified — resolves 002 OQ-1 |
-| [007](007-runtime-path-hardening/spec.md)         | Runtime path hardening              | Implemented, verified live                          |
+| Spec                                                  | Title                                           | Status                                              |
+| ----------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------- |
+| [001](001-nexwork-rebrand/spec.md)                    | AionUi → NexWork rebrand                        | Implemented                                         |
+| [002](002-server-controlled-capabilities/spec.md)     | Server-controlled capability policy             | Draft (rev 3)                                       |
+| [003](003-nexwork-constitution/spec.md)               | NexWork constitution                            | Implemented (rev 3)                                 |
+| [004](004-app-icon-geometry/spec.md)                  | App icon geometry                               | Implemented (rev 5)                                 |
+| [005](005-trajectory-export/spec.md)                  | Trajectory export                               | Withdrawn — collection belongs at the gateway       |
+| [006](006-gateway-provisioning/spec.md)               | Gateway provisioning                            | Implemented, partially verified — resolves 002 OQ-1 |
+| [007](007-runtime-path-hardening/spec.md)             | Runtime path hardening                          | Implemented, verified live                          |
+| [010](010-browser-bridge-busy-and-background/spec.md) | In-app browser: one driver, awake while driving | Implemented; live checks pending                    |
 
 Cross-repository specs live in cynapse, per the current AGENTS.md contract. The four-assistant rollout is recorded in [NexWork four assistants](../../cynapse/doc/spec/2026-09-09-nexwork-four-assistants.md), including its upstream-drift accounting.

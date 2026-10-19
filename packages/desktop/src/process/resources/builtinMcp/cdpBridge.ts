@@ -22,6 +22,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { randomBytes } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { webContents, type Debugger, type WebContents } from 'electron';
+import { getPlatformServices } from '@/common/platform';
 import {
   SINGLE_SESSION_ID,
   buildListPayload,
@@ -55,6 +56,132 @@ type AttachedState = {
 
 let attached: AttachedState | null = null;
 let sockets = new Set<WebSocket>();
+
+/**
+ * [ENTERPRISE PATCH] spec 010 FR-1/FR-2 — 一次只让一个对话驱动侧边浏览器；驱动期间不让系统把它“睡”掉。
+ *
+ * 每个对话各起一个 chrome-devtools-mcp、各连一条 WebSocket，而通道背后只有一个页面：
+ * 两个对话同时驱动，会互相把对方的页面导航走。所以给页面加一个租约 —— 最近在驱动页面的
+ * 那条连接持有它；别的连接的页面命令直接报“另一个对话在用”，随后断开它，让它下次调用时
+ * 干净重连（puppeteer 会永久缓存初始化失败的页面，见 spec 007 FR-6）。持有方断开、或闲置
+ * 超过 LEASE_IDLE_MS，租约自动释放，已经结束的对话不会一直占着浏览器。Target.* 由本地应答、
+ * 不碰页面，不受租约限制，握手照常完成。
+ *
+ * 持有租约、或有发现请求在等面板附加时：
+ *  - 阻止 App Nap（prevent-app-suspension）。NexWork 被隐藏时 App Nap 会把主进程定时器拖后，
+ *    发现请求的 10 秒超时迟迟不触发，puppeteer 一直等到 undici 的 300 秒头部超时才报
+ *    “fetch failed”（实测 list_pages 卡了 302 秒）；
+ *  - 关掉侧边浏览器 webContents 的后台节流。窗口隐藏后 Chromium 会压低页面定时器，
+ *    页面里后台跑的批量取数会跟着变慢。
+ * 都释放后恢复默认，不长期耗电。
+ *
+ * One conversation drives the in-app browser at a time. Each conversation runs its own
+ * chrome-devtools-mcp over its own socket while the bridge serves a single page, so two
+ * concurrent drivers navigate each other's page away. The connection that most recently drove
+ * the page holds a lease; page commands from any other connection get a clear "in use by
+ * another conversation" error and that socket is then closed so it reconnects cleanly later
+ * (puppeteer caches a failed page init forever, see spec 007 FR-6). The lease ends when its
+ * holder disconnects or stays idle for LEASE_IDLE_MS. Locally answered Target.* commands never
+ * touch the page and stay ungated, so handshakes complete.
+ *
+ * While a lease is held, or a discovery request waits for the panel to attach, the app is kept
+ * out of App Nap (a hidden NexWork had its main-process timers deferred: the 10 s discovery
+ * timeout never fired and puppeteer waited out undici's 300 s header timeout, measured as a
+ * 302 s list_pages) and the attached webview is exempt from background throttling (so in-page
+ * batches keep their pace). Both revert once idle.
+ */
+export const BROWSER_BUSY_MESSAGE =
+  'The in-app browser is being used by another conversation (it sent browser commands within the last minute). If that conversation is still working, tell the user and wait for it to finish; otherwise retry the same tool call in a minute.';
+/** HTTP reason phrase: puppeteer surfaces only statusText from discovery, never the body. ASCII only. */
+const BUSY_REASON =
+  'In-app browser in use by another conversation; tell the user, wait for it to finish, then retry the same tool call';
+export const LEASE_IDLE_MS = 60_000;
+
+export type BrowserKeepAwake = { start: () => number | null; stop: (id: number | null) => void };
+
+const platformKeepAwake: BrowserKeepAwake = {
+  start: () => getPlatformServices().power.preventSleep(),
+  stop: (id) => getPlatformServices().power.allowSleep(id),
+};
+
+let keepAwake: BrowserKeepAwake = platformKeepAwake;
+let leaseIdleMs = LEASE_IDLE_MS;
+let lease: { ws: WebSocket; lastActive: number } | null = null;
+let leaseTimer: ReturnType<typeof setTimeout> | null = null;
+let discoveryWaiting = false;
+let keepingAwake = false;
+let keepAwakeId: number | null = null;
+let unthrottled: WebContents | null = null;
+const busyClosing = new WeakSet<WebSocket>();
+
+const setPageThrottling = (contents: WebContents, allowed: boolean) => {
+  try {
+    if (!contents.isDestroyed() && typeof contents.setBackgroundThrottling === 'function') {
+      contents.setBackgroundThrottling(allowed);
+    }
+  } catch {
+    // Best-effort: a view torn down mid-call needs nothing restored.
+  }
+};
+
+const refreshBackgroundPolicy = () => {
+  const wantAwake = lease !== null || discoveryWaiting;
+  if (wantAwake && !keepingAwake) {
+    keepingAwake = true;
+    try {
+      keepAwakeId = keepAwake.start();
+    } catch {
+      keepAwakeId = null;
+    }
+  } else if (!wantAwake && keepingAwake) {
+    keepingAwake = false;
+    try {
+      keepAwake.stop(keepAwakeId);
+    } catch {
+      // Best-effort.
+    }
+    keepAwakeId = null;
+  }
+  const page = lease !== null && attached && !attached.contents.isDestroyed() ? attached.contents : null;
+  if (unthrottled && unthrottled !== page) {
+    setPageThrottling(unthrottled, true);
+    unthrottled = null;
+  }
+  if (page && unthrottled !== page) {
+    setPageThrottling(page, false);
+    unthrottled = page;
+  }
+};
+
+const releaseLease = (why: string) => {
+  if (!lease) return;
+  lease = null;
+  if (leaseTimer) clearTimeout(leaseTimer);
+  leaseTimer = null;
+  console.log(`[CDP] Browser lease released (${why})`);
+  refreshBackgroundPolicy();
+};
+
+/** True while a live connection other than `ws` drove the page within the idle window. */
+const leaseHeldByOther = (ws: WebSocket | null): boolean =>
+  !!lease && lease.ws !== ws && lease.ws.readyState === lease.ws.OPEN && Date.now() - lease.lastActive < leaseIdleMs;
+
+/** Records page activity for `ws`; false when another connection holds the lease. */
+const claimLease = (ws: WebSocket): boolean => {
+  if (leaseHeldByOther(ws)) return false;
+  if (lease?.ws !== ws) {
+    // Hand over in place: no keep-awake stop/start churn between holders.
+    if (lease) console.log('[CDP] Browser lease released (previous holder idle or gone)');
+    lease = { ws, lastActive: Date.now() };
+    console.log('[CDP] Browser lease taken by a conversation');
+  } else {
+    lease.lastActive = Date.now();
+  }
+  if (leaseTimer) clearTimeout(leaseTimer);
+  leaseTimer = setTimeout(() => releaseLease('idle'), leaseIdleMs);
+  refreshBackgroundPolicy();
+  return true;
+};
 
 const currentTargetInfo = () => {
   if (!attached || attached.contents.isDestroyed()) return buildTargetInfo('', 'about:blank');
@@ -109,6 +236,7 @@ const detachInternal = () => {
     // 已经销毁/已分离时 Electron 会抛，忽略即可。
     // Electron throws if it is already destroyed or detached; nothing to do.
   }
+  refreshBackgroundPolicy();
 };
 
 /**
@@ -174,6 +302,7 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
   contents.once('destroyed', onDestroyed);
   attached = { contents, dbg, onMessage, onDestroyed };
   resetClientConnections('The in-app browser attachment changed; reconnect.');
+  refreshBackgroundPolicy();
   return { ok: true };
 };
 
@@ -206,6 +335,25 @@ const sendError = (ws: WebSocket, id: number | undefined, message: string, sessi
 };
 
 /**
+ * [ENTERPRISE PATCH] spec 010 FR-1 — 拒绝非持有方，再断开它：它若正在初始化页面，失败会被
+ * puppeteer 永久缓存，只有重连能清掉。先让错误帧落地，再关。
+ * Refuse a non-holder, then drop it: a failed page init is cached by puppeteer for good and
+ * only a reconnect clears it. Let the error frame land first.
+ */
+const refuseBusy = (ws: WebSocket, id: number | undefined, sessionId?: string) => {
+  sendError(ws, id, BROWSER_BUSY_MESSAGE, sessionId);
+  if (busyClosing.has(ws)) return;
+  busyClosing.add(ws);
+  setTimeout(() => {
+    try {
+      ws.close(1013, 'In-app browser busy; reconnect later.');
+    } catch {
+      /* already closing */
+    }
+  }, 100);
+};
+
+/**
  * announcedSessions 是**每条连接**的状态，不能提到模块作用域：一条新连接的 puppeteer
  * 手上没有任何会话对象，必须重新收到 attachedToTarget 才能建立；若跨连接共享，第二个
  * 客户端就永远等不到那个事件，browser.pages() 会一直是 0。
@@ -229,6 +377,8 @@ const sendError = (ws: WebSocket, id: number | undefined, message: string, sessi
  */
 const UNATTACHED_MESSAGE =
   'The in-app browser is not attached yet. The browser panel opens automatically on first use — wait a few seconds and retry the same tool call.';
+/** HTTP reason phrase for the same guidance (spec 010 FR-3): puppeteer shows only statusText. ASCII only. */
+const UNATTACHED_REASON = 'In-app browser not attached yet; wait a few seconds and retry the same tool call';
 
 /**
  * [ENTERPRISE PATCH] spec 007 FR-8 — 键盘类命令转发前，把应用焦点拉回 webview。
@@ -415,6 +565,10 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
       sendError(ws, id, UNATTACHED_MESSAGE, sessionId);
       return;
     }
+    if (!claimLease(ws)) {
+      refuseBusy(ws, id, sessionId);
+      return;
+    }
     try {
       await attached.dbg.sendCommand('Page.navigate', { url: decision.url });
       ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
@@ -428,6 +582,10 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
   // forward
   if (!attached || attached.contents.isDestroyed()) {
     sendError(ws, id, UNATTACHED_MESSAGE, sessionId);
+    return;
+  }
+  if (!claimLease(ws)) {
+    refuseBusy(ws, id, sessionId);
     return;
   }
 
@@ -491,15 +649,31 @@ const writeJson = (res: ServerResponse, body: unknown) => {
  * main window never is (see the getType() check in attachInternal). Treating same-user local
  * processes as inside the trust boundary is an explicit assumption here.
  */
-export const startCdpBridge = async (onBrowserRequested?: () => void): Promise<CdpBridgeHandle> => {
+export const startCdpBridge = async (
+  onBrowserRequested?: () => void,
+  options: { keepAwake?: BrowserKeepAwake; leaseIdleMs?: number } = {}
+): Promise<CdpBridgeHandle> => {
+  keepAwake = options.keepAwake ?? platformKeepAwake;
+  leaseIdleMs = options.leaseIdleMs ?? LEASE_IDLE_MS;
   const token = randomBytes(24).toString('hex');
-  const pendingDiscovery = new Map<ServerResponse, ReturnType<typeof setTimeout>>();
+  const pendingDiscovery = new Map<ServerResponse, { timer: ReturnType<typeof setTimeout>; started: number }>();
+  const syncDiscoveryWaiting = () => {
+    discoveryWaiting = pendingDiscovery.size > 0;
+    refreshBackgroundPolicy();
+  };
   const finishDiscovery = (res: ServerResponse, ready: boolean) => {
-    clearTimeout(pendingDiscovery.get(res));
-    pendingDiscovery.delete(res);
+    const pending = pendingDiscovery.get(res);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingDiscovery.delete(res);
+      syncDiscoveryWaiting();
+    }
     if (res.destroyed || res.writableEnded) return;
+    // [ENTERPRISE PATCH] spec 010 FR-3 — every waited discovery leaves a timed trace.
+    if (pending) console.log(`[CDP] Discovery answered ${ready ? 200 : 503} after ${Date.now() - pending.started}ms`);
     if (!ready) {
-      res.writeHead(503, { 'Content-Type': 'application/json' });
+      // puppeteer reports only the status text, so the retry guidance rides in the reason phrase.
+      res.writeHead(503, UNATTACHED_REASON, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: UNATTACHED_MESSAGE }));
       return;
     }
@@ -513,18 +687,37 @@ export const startCdpBridge = async (onBrowserRequested?: () => void): Promise<C
     const info = currentTargetInfo();
 
     if (url.pathname === '/json/version') {
+      // [ENTERPRISE PATCH] spec 010 FR-1 — a new client while another conversation drives the page.
+      if (leaseHeldByOther(null)) {
+        console.warn('[CDP] Discovery refused: another conversation is driving the in-app browser');
+        res.writeHead(503, BUSY_REASON, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: BROWSER_BUSY_MESSAGE }));
+        return;
+      }
       // First tool use opens the webview asynchronously. Do not let Puppeteer create
       // and cache a rejected page before that view can accept initialization commands.
       if (attached && !attached.contents.isDestroyed()) finishDiscovery(res, true);
       else {
         const shouldOpen = pendingDiscovery.size === 0;
-        pendingDiscovery.set(
-          res,
-          setTimeout(() => finishDiscovery(res, false), 10_000)
-        );
+        const started = Date.now();
+        pendingDiscovery.set(res, {
+          started,
+          timer: setTimeout(() => {
+            // [ENTERPRISE PATCH] spec 010 FR-3 — a late timer means the app was suspended.
+            const late = Date.now() - started - 10_000;
+            if (late > 5_000) console.warn(`[CDP] Discovery timeout fired ${late}ms late (app suspended?)`);
+            finishDiscovery(res, false);
+          }, 10_000),
+        });
+        syncDiscoveryWaiting();
+        console.log('[CDP] Discovery waiting for the in-app browser to attach');
         res.once('close', () => {
-          clearTimeout(pendingDiscovery.get(res));
+          const pending = pendingDiscovery.get(res);
+          if (!pending) return;
+          clearTimeout(pending.timer);
           pendingDiscovery.delete(res);
+          syncDiscoveryWaiting();
+          console.log(`[CDP] Discovery closed by the client after ${Date.now() - pending.started}ms`);
         });
         // Native agents can emit bare tool names without MCP ownership metadata.
         // An actual connection to this bridge is an authoritative browser request.
@@ -558,8 +751,12 @@ export const startCdpBridge = async (onBrowserRequested?: () => void): Promise<C
       sockets.add(ws);
       const announcedSessions = new Set<string>();
       ws.on('message', (data) => void handleSocketMessage(ws, data.toString(), announcedSessions));
-      ws.on('close', () => sockets.delete(ws));
-      ws.on('error', () => sockets.delete(ws));
+      const forget = () => {
+        sockets.delete(ws);
+        if (lease?.ws === ws) releaseLease('connection closed');
+      };
+      ws.on('close', forget);
+      ws.on('error', forget);
     });
   });
 
@@ -586,6 +783,7 @@ export const startCdpBridge = async (onBrowserRequested?: () => void): Promise<C
     detach: detachInternal,
     close: async () => {
       for (const res of pendingDiscovery.keys()) finishDiscovery(res, false);
+      releaseLease('bridge closed');
       detachInternal();
       for (const ws of sockets) ws.close();
       sockets = new Set();
