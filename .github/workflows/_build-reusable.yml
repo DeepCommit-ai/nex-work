@@ -614,7 +614,7 @@ jobs:
               const settings = await response.json();
               if (settings.data?.['enterprise.serverUrl']) throw new Error('Installer contains enterprise configuration');
               await page.evaluate(() => { window.location.hash = '/settings/enterprise'; });
-              await expect(page.getByPlaceholder('http://cynapse.internal:54001')).toBeVisible({ timeout: 60000 });
+              await expect(page.getByPlaceholder(/work\.example\.com/)).toBeVisible({ timeout: 60000 });
               await expect(page.locator('input[type="password"]')).toBeVisible();
               console.log('PASS: packaged app, bundled backend, clean enterprise settings form');
             } finally {
