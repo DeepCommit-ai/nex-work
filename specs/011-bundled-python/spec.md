@@ -56,5 +56,10 @@ machines the employee does not administer; this follows the bundled Claude Code 
       pruning); the skill's three commands run with it and reproduce the committed sample results.
 - [x] Live (NexWork-Dev, 2026-10-19): a new purchase review conversation's Claude Code process has
       `NEXWORK_PYTHON`; the assistant ran `"${NEXWORK_PYTHON:-python3}"` and got the bundled 3.12.15.
-- [ ] Packaged macOS and Windows x64 installers contain the bundle; on Windows the interpreter runs
-      from Git Bash with the forward-slash path.
+- [x] Packaged macOS and Windows x64 installers contain the bundle (release `v2.1.61-nexwork.2`, build
+      run 39381684483, 2026-10-20): both DMGs carry `bundled-python/darwin-{arm64,x64}/bin/python3`, which
+      ran as 3.12.15 (x64 under Rosetta) and imports json/csv/sqlite3/ssl/zipfile/decimal; the Windows
+      installer's inner app archive carries `bundled-python/win32-x64/python.exe` with `Lib`/`DLLs`
+      (738 files, 36 MB), and `prepare-python` ran it on the windows-2022 runner. pip, ensurepip and
+      tkinter are pruned on all three.
+- [ ] On a Windows machine, the interpreter runs from Git Bash with the forward-slash path.
