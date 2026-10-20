@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Left, Right, Refresh, Loading } from '@icon-park/react';
 import { ipcBridge } from '@/common';
-import { InternalNavTracker, shouldResetHistoryForUrlProp } from './webviewHistory';
+import { InternalNavTracker, shouldLoadUrlProp, shouldResetHistoryForUrlProp } from './webviewHistory';
 
 export interface WebviewHostProps {
   /** URL to display */
@@ -93,6 +93,21 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   const [zoomFactor, setZoomFactor] = useState(1);
   const [webviewReady, setWebviewReady] = useState(false);
 
+  // <webview> 的 src 只绑定首次载入的地址，之后不再随导航状态重新渲染。
+  // Electron 每次给 src 赋值都会重新载入，哪怕赋的是当前地址；src 绑在 currentUrl 上时，
+  // 页面每跳一次（重定向、#路由）都会被再请求一遍。重定向链里带一次性票据的站点
+  // （金蝶 K3 单点登录）会拒绝重放、退回登录页。主动载入一律直接给 webviewEl.src 赋值
+  // （navigateToWithHistory、下方外部换址）。
+  //
+  // The <webview> src is bound to the first address only and never re-rendered from
+  // navigation state. Electron reloads a webview whenever src is assigned, even to its
+  // current value, so binding src to currentUrl requested every address the page moved
+  // to a second time (each redirect, each #route). Sites that pass one-time tokens through
+  // a redirect chain (Kingdee K3 single sign-on) reject the replay and fall back to their
+  // login page. Deliberate loads assign webviewEl.src directly (navigateToWithHistory and
+  // the external address change below).
+  const [initialSrc] = useState(url);
+
   // 最近由本组件内部触发的导航地址集合。
   //
   // 浏览器 tab 会把「当前地址」当作 url prop 回传下来，于是内部导航会形成回环：
@@ -149,10 +164,17 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
     setCanGoForward(false);
     setCurrentUrl(url);
     setInputUrl(url);
-    setIsLoading(true);
     setZoomFactor(1);
-    setWebviewReady(false);
     autoFitPendingRef.current = isStarOfficeUrl(url);
+    // 挂载时 src 已带着这个地址，不能再载一次（StrictMode 下 effect 还会跑两遍）。
+    // On mount src already carries this address; loading it again would double the
+    // request (and StrictMode runs this effect twice).
+    const webviewEl = webviewRef.current;
+    if (webviewEl && shouldLoadUrlProp(url, webviewEl)) {
+      setIsLoading(true);
+      setWebviewReady(false);
+      webviewEl.src = url;
+    }
   }, [url]);
 
   useEffect(() => {
@@ -784,7 +806,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
       >
         <webview
           ref={webviewRef as any}
-          src={currentUrl}
+          src={initialSrc}
           className='border-0 absolute start-0 top-0'
           style={{
             opacity: !showNavBar && isLoading ? 0 : 1,

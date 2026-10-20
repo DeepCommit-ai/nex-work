@@ -77,3 +77,32 @@ export const shouldResetHistoryForUrlProp = (incomingUrl: string, tracker: Inter
   // The prop is merely the echo of an internal navigation → keep history.
   return !tracker.consumeEcho(incomingUrl);
 };
+
+/** WebviewHost 需要的 webview 最小接口 / the slice of a webview this module reads */
+export type GuestAddressSource = Pick<Electron.WebviewTag, 'getURL' | 'getAttribute'>;
+
+/**
+ * 外部换址时是否需要真的载入：页面已经在这个地址上就不载（含挂载时 src 已带着它）。
+ *
+ * getURL() 在 webview 附加并 dom-ready 之前会抛错，此时退回 src 属性 —— 挂载时它就是
+ * 首次地址，所以挂载不会重复载入。
+ *
+ * Whether an external address change must actually load: skip when the guest is already
+ * on that address, which includes mount, where src already carries it.
+ *
+ * getURL() throws until the webview is attached and dom-ready; the src attribute stands
+ * in until then, and on mount it holds the first address, so mounting never loads twice.
+ *
+ * @param incomingUrl 新的 url prop / the new `url` prop
+ * @param webview 当前 webview / the current webview
+ * @returns true 表示需要给 src 赋值 / true when src must be assigned
+ */
+export const shouldLoadUrlProp = (incomingUrl: string, webview: GuestAddressSource): boolean => {
+  let guestUrl: string;
+  try {
+    guestUrl = webview.getURL();
+  } catch {
+    guestUrl = webview.getAttribute('src') ?? '';
+  }
+  return guestUrl !== incomingUrl;
+};

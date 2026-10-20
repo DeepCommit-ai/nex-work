@@ -17,7 +17,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { InternalNavTracker, shouldResetHistoryForUrlProp } from '@/renderer/components/media/webviewHistory';
+import {
+  InternalNavTracker,
+  shouldLoadUrlProp,
+  shouldResetHistoryForUrlProp,
+} from '@/renderer/components/media/webviewHistory';
 
 describe('shouldResetHistoryForUrlProp', () => {
   it('keeps history when the url prop is the echo of an internal navigation', () => {
@@ -79,5 +83,46 @@ describe('shouldResetHistoryForUrlProp', () => {
     expect(shouldResetHistoryForUrlProp('https://example.com/39', tracker)).toBe(false);
     // ...while a long-evicted one is not.
     expect(shouldResetHistoryForUrlProp('https://example.com/0', tracker)).toBe(true);
+  });
+});
+
+/** A webview that has attached and is showing `guestUrl`. */
+const attached = (guestUrl: string) => ({
+  getURL: () => guestUrl,
+  getAttribute: () => 'https://first.example',
+});
+
+/** A webview before dom-ready: getURL() throws, only the src attribute is readable. */
+const unattached = (src: string | null) => ({
+  getURL: (): string => {
+    throw new Error('The WebView must be attached to the DOM and the dom-ready event emitted');
+  },
+  getAttribute: () => src,
+});
+
+/**
+ * WebviewHost binds <webview src> to the first address only; an external url change
+ * loads by assigning src, and only when the guest is not already there. Electron reloads
+ * on every src assignment, so a spurious "yes" here replays the address — what turned
+ * Kingdee K3's single sign-on into a login loop when src followed every navigation.
+ */
+describe('shouldLoadUrlProp', () => {
+  it('does not load on mount, where src already carries the address', () => {
+    expect(shouldLoadUrlProp('https://first.example', unattached('https://first.example'))).toBe(false);
+  });
+
+  it('does not reload when the guest is already on the incoming address', () => {
+    expect(shouldLoadUrlProp('https://k3.example/index.aspx#', attached('https://k3.example/index.aspx#'))).toBe(false);
+  });
+
+  it('loads an external change after the guest navigated elsewhere', () => {
+    // Guest moved from the first address to C; the same first address arriving again
+    // is a genuine request to go back there.
+    expect(shouldLoadUrlProp('https://first.example', attached('https://c.example'))).toBe(true);
+  });
+
+  it('loads when the webview is not attached yet and src differs', () => {
+    expect(shouldLoadUrlProp('https://b.example', unattached('https://first.example'))).toBe(true);
+    expect(shouldLoadUrlProp('https://b.example', unattached(null))).toBe(true);
   });
 });

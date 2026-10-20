@@ -8,6 +8,7 @@
 // ANY module that calls app.getPath('userData'), because Electron caches the path on first call.
 import './process/utils/configureChromium';
 import { installGpuCrashHandler } from './process/utils/gpuRecovery';
+import { installGuestWindowOpenPolicy } from './process/resources/builtinMcp/guestWindowOpen';
 import { describeUncaughtError } from './process/utils/describeUncaughtError';
 import type { UncaughtErrorDiagnostics } from './process/utils/describeUncaughtError';
 import { createRendererRecoveryPolicy } from './process/utils/rendererRecovery';
@@ -1120,6 +1121,10 @@ app.on('open-url', (event, url) => {
 
 // 监听 GPU 子进程崩溃，连续多次后下次启动自动关闭硬件加速（参见 ELECTRON-9A / ELECTRON-9D）。
 installGpuCrashHandler();
+
+// 内置浏览器的新窗口在原 webview 里打开，不弹独立窗口（见 guestWindowOpen.ts）。
+// New windows from the in-app browser open in the same webview, never standalone.
+installGuestWindowOpenPolicy(app);
 
 // Register the backend startup flow only when this process owns the single
 // instance lock. A lock-losing instance must NOT spawn a competing aioncore
