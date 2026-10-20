@@ -40,6 +40,11 @@ on:
         required: false
         type: string
         default: ''
+      app_version:
+        description: 'Optional app version stamped into the build, e.g. 2.1.61-nexwork.2 (package.json is not changed)'
+        required: false
+        type: string
+        default: ''
 
 env:
   BUN_INSTALL_REGISTRY: 'https://registry.npmjs.org/'
@@ -95,6 +100,7 @@ jobs:
       ref: ${{ inputs.branch || github.sha }}
       skip_code_quality: ${{ inputs.skip_code_quality || false }}
       aioncore_run_id: ${{ inputs.aioncore_run_id }}
+      app_version: ${{ inputs.app_version }}
       append_commit_hash: true
       upload_installers_only: true
     secrets: inherit

@@ -27,6 +27,10 @@ on:
         description: 'Optional AionCore Manual Build workflow run id to bundle instead of the pinned release'
         type: string
         default: ''
+      app_version:
+        description: 'Optional app version stamped into the build; empty keeps package.json version'
+        type: string
+        default: ''
 
 env:
   BUN_INSTALL_REGISTRY: 'https://registry.npmjs.org/'
@@ -423,6 +427,8 @@ jobs:
         env:
           WINDOWS_BUILD_COMMAND: ${{ matrix.command }}
           AIONUI_BACKEND_RUN_ID: ${{ inputs.aioncore_run_id }}
+          # Stamps inputs.app_version for this build only; empty keeps package.json
+          AIONUI_DEBUG_AUTO_UPDATE_CURRENT_VERSION: ${{ inputs.app_version }}
           # Node.js memory limit for vite bundling (prevents OOM during build)
           # Node.js 内存限制，防止 vite 打包时内存不足
           NODE_OPTIONS: '--max-old-space-size=8192'
@@ -526,6 +532,8 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
           AIONUI_BACKEND_RUN_ID: ${{ inputs.aioncore_run_id }}
+          # Stamps inputs.app_version for this build only; empty keeps package.json
+          AIONUI_DEBUG_AUTO_UPDATE_CURRENT_VERSION: ${{ inputs.app_version }}
           npm_config_arch: ${{ matrix.arch }}
           APP_ID: ${{ secrets.APP_ID }}
           appleId: ${{ secrets.APPLE_ID }}
@@ -564,6 +572,8 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
           AIONUI_BACKEND_RUN_ID: ${{ inputs.aioncore_run_id }}
+          # Stamps inputs.app_version for this build only; empty keeps package.json
+          AIONUI_DEBUG_AUTO_UPDATE_CURRENT_VERSION: ${{ inputs.app_version }}
           npm_config_arch: ${{ matrix.arch }}
           npm_config_cache: ${{ runner.temp }}/.npm
           ELECTRON_CACHE: ${{ runner.temp }}/.cache/electron
