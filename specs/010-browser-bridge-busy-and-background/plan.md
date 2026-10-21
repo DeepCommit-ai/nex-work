@@ -42,6 +42,7 @@ stay awake. Nothing in the renderer, the MCP launcher or chrome-devtools-mcp cha
 | ---------------------------------------------------------------- | -------------------------------- | ------------ |
 | `packages/desktop/src/process/resources/builtinMcp/cdpBridge.ts` | upstream (with spec 007 patches) | +210 / −12   |
 | `tests/unit/process/cdpBridgeLease.test.ts`                      | ours (new)                       | +208         |
+| `tests/unit/process/cdpBridgeRuntimeEnable.test.ts` (FR-4)       | ours (new)                       | +139         |
 | `specs/010-browser-bridge-busy-and-background/{spec,plan}.md`    | ours (new)                       | —            |
 | `specs/README.md`                                                | ours                             | +1 index row |
 
@@ -61,6 +62,10 @@ stay awake. Nothing in the renderer, the MCP launcher or chrome-devtools-mcp cha
 
   Every hunk is marked `[ENTERPRISE PATCH] spec 010`. The behaviour change for upstream's
   single-conversation, visible-window case is limited to the 503 reason phrase.
+
+- FR-4 (2026-10-21): one more anchored hunk in the forward path of `handleSocketMessage`,
+  a `Runtime.disable` before a forwarded `Runtime.enable`, with its bilingual rationale; marked
+  `[ENTERPRISE PATCH] spec 010 FR-4`. Upstream has the same shared session and the same defect.
 
 ## Verification
 

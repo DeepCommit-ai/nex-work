@@ -97,6 +97,32 @@ N ms` or `closed by the client after N ms`.
       text and the first conversation's page is untouched; one minute after the first goes quiet,
       the second can drive.
 
+## Addendum 2026-10-21: a fresh client sees the page's existing contexts (FR-4)
+
+Every purchase review started the same way: the agent's first `evaluate_script` calls on an idle K3
+workbench failed with "Timed out after waiting 5000ms". The agent then navigated through the OA
+single sign-on entrance, which cost the employee a captcha whenever OA had expired. That happened
+in both 2026-10-21 runs.
+
+- **Cause.** All bridge clients share the webContents' single debugger session. Chrome announces
+  existing execution contexts only when Runtime goes from disabled to enabled. Once an earlier client
+  enabled Runtime, a new client's `Runtime.enable` produced no `executionContextCreated`. Puppeteer
+  then waited for the main-world context until `page.setDefaultTimeout(5000)` (set by
+  chrome-devtools-mcp) expired. A navigation creates new contexts, which is why the entrance "fixed"
+  it.
+- **Evidence.** Raw probe on a fresh bridge connection: 0 contexts after `Runtime.enable`, 4 after
+  `Runtime.disable` + `Runtime.enable`.
+- **FR-4.** Before forwarding a client's `Runtime.enable`, the bridge sends `Runtime.disable` on the
+  shared session, so the enable re-announces every existing context. A rejected disable does not
+  block the enable. No other command gains a disable.
+
+- [x] `tests/unit/process/cdpBridgeRuntimeEnable.test.ts`: disable precedes each `Runtime.enable`;
+      `Page.enable`, `Runtime.evaluate`, `Runtime.callFunctionOn` and `Network.enable` are
+      forwarded alone; the enable is forwarded when the disable rejects. The five bridge suites
+      pass (35 tests).
+- [ ] Live: a new conversation's first `evaluate_script` on an already-loaded K3 page returns
+      without a timeout and without navigating.
+
 ## Boundaries
 
 - This is not a per-conversation browser. The page is still shared; the lease only makes the

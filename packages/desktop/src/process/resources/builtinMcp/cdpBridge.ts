@@ -591,6 +591,31 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
 
   if (KEYBOARD_INPUT_METHODS.has(method)) await focusAttachedForKeyboardInput();
 
+  /**
+   * [ENTERPRISE PATCH] spec 010 FR-4 — 每个客户端的 Runtime.enable 都要重新通报页面已有的执行上下文。
+   *
+   * 所有客户端共用 webContents 的同一个调试会话。Chrome 只在 Runtime 从关到开时通报已有上下文，
+   * 前一个客户端开过以后，新客户端的 Runtime.enable 什么也收不到：puppeteer 等不到主世界上下文，
+   * 首个 evaluate_script 报 “Timed out after waiting 5000ms”，直到页面跳转才恢复（2026-10-21 实测：
+   * 新连接收到 0 个上下文，先 disable 再 enable 收到 4 个）。K3 工作台这种放着不动的页面上，
+   * 助手每次开工都撞上，只能跳转重进，OA 过期时还要员工输验证码。所以先 disable 再转发 enable。
+   *
+   * Each client's Runtime.enable must announce the page's existing execution contexts. All
+   * clients share the webContents' single debugger session, and Chrome only announces existing
+   * contexts when Runtime goes from disabled to enabled; once an earlier client enabled it, a new
+   * client's Runtime.enable received nothing, puppeteer never saw the main-world context, and the
+   * first evaluate_script failed with "Timed out after waiting 5000ms" until the page navigated
+   * (measured 2026-10-21: 0 contexts on a fresh connection, 4 after disable + enable). On an idle
+   * K3 workbench the agent hit this at every start. So disable first, then forward the enable.
+   */
+  if (method === 'Runtime.enable') {
+    try {
+      await attached.dbg.sendCommand('Runtime.disable', {});
+    } catch {
+      // Not enabled yet or already disabled: the enable below announces everything anyway.
+    }
+  }
+
   try {
     const result = await attached.dbg.sendCommand(method, params ?? {});
     ws.send(JSON.stringify({ id, result: result ?? {}, sessionId }));
