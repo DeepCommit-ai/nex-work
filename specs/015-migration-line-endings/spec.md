@@ -2,7 +2,7 @@
 
 **Feature Branch**: `nex-work`
 **Created**: 2026-10-23
-**Status**: Implemented; reproduced and verified with real binaries on macOS; Windows installer check pending
+**Status**: Shipped in `v2.1.61-nexwork.4`; verified with the real Windows binaries on a Windows runner
 
 ## Why
 
@@ -71,5 +71,15 @@ again.
   - the patched build leaves the stored checksums unchanged;
   - with migration 1's checksum zeroed, the patched build still refuses it.
 - [x] NexWork-Dev starts on the patched `darwin-arm64` build with its existing (LF) database.
-- [ ] A Windows installer built from this commit opens a nexwork.1 database (CI build on the Windows
-      runner, then an upgrade over nexwork.1 on a Windows machine).
+- [x] Windows, with the `aioncore.exe` unpacked from each release installer (nexwork.1 and .3 from their
+      releases, nexwork.4 from Manual Build run 40078504773 at `285860f27`). The run was on a GitHub
+      `windows-2022` runner, from a temporary branch workflow that was deleted afterwards
+      ([run 40132818754](https://github.com/DeepCommit-ai/nex-work/actions/runs/40132818754), 2026-10-24).
+      nexwork.1 creates the database (42 migrations), and then:
+  - nexwork.3 exits with the employee's error;
+  - nexwork.4 starts and leaves the stored checksums unchanged;
+  - nexwork.1 still starts on that database afterwards;
+  - nexwork.4 starts on a copy that nexwork.3 had just refused;
+  - nexwork.4 refuses a copy with migration 1's checksum zeroed.
+- [ ] Not done: installing nexwork.4 over an installed nexwork.1 on an employee's Windows PC (the
+      `AionUi` → `NexWork` directory move plus this database).
