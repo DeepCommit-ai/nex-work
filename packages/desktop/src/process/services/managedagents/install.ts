@@ -181,6 +181,8 @@ export async function installCatalog(
           mcps: { mode: 'fixed', value: agent.id === MANAGED_BUTLER_ID ? [...commonMcps, managementId] : commonMcps },
           // spec 014: a Claude Code selection of its own (opus) is the value aioncore keeps
           model: spec && pinnedModel(spec) ? { mode: 'fixed', value: pinnedModel(spec)! } : { mode: 'auto' },
+          // spec 016: the department's thought level; the guide page starts new conversations on it
+          thought_level: spec?.thought_level ? { mode: 'fixed', value: spec.thought_level } : { mode: 'auto' },
         },
       };
       if (old) {

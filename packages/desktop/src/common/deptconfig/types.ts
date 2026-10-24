@@ -48,6 +48,11 @@ export type AssistantSpec = {
    */
   claude_selection?: string | null;
   /**
+   * 这个 Claude Code 助手新会话的思考强度（`low`…`max`，spec 016）。受管安装写成
+   * defaults.thought_level（fixed）；不带 = auto，回到员工上次的选择。
+   */
+  thought_level?: string | null;
+  /**
    * 按助手挂载的技能名集合（cynapse issue #14）。落成 aioncore 的
    * `enabled_skills`（PUT partial，实测生效）——会话工作区只物化这个集合。
    * 不写/null = 不碰（保持 aioncore 默认技能集）。服务端保证引用无 ghost、

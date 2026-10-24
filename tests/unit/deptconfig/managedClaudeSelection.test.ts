@@ -79,7 +79,7 @@ describe('managed install — a Claude Code assistant on its own model (spec 014
       cfg.gateway!.claude_slots = { opus: 'big-model[1m]' };
       cfg.assistants = cfg.assistants.map((a) =>
         a.id === 'office-assistant'
-          ? { ...a, fixed_model: 'big-model', context_window: '1m', claude_selection: 'opus' }
+          ? { ...a, fixed_model: 'big-model', context_window: '1m', claude_selection: 'opus', thought_level: 'max' }
           : a.id === 'default-assistant'
             ? { ...a, fixed_model: 'test-model' }
             : a
@@ -104,6 +104,36 @@ describe('managed install — a Claude Code assistant on its own model (spec 014
       expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('test-model');
       expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('test-model');
       expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('big-model[1m]');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fixes the thought level the department pins and leaves the others on auto (spec 016)', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'nexwork-016-'));
+    try {
+      const cfg = configFixture();
+      cfg.assistants = cfg.assistants.map((a) => (a.id === 'office-assistant' ? { ...a, thought_level: 'max' } : a));
+      const { backend, assistants } = fakeBackend();
+      // An earlier pin the department has since dropped must not survive the reinstall.
+      assistants.set('default-assistant', {
+        id: 'default-assistant',
+        defaults: { thought_level: { mode: 'fixed', value: 'low' } },
+      });
+
+      await installCatalog(cfg, catalogFixture(), {
+        backend,
+        skillsRoot: path.join(root, 'skills'),
+        serverUrl: 'http://config',
+        deptKey: 'test',
+        clientId: 'test',
+        prepareClaude: vi.fn(),
+        locales: ['zh-CN'],
+      });
+
+      const level = (id: string) => (assistants.get(id)!.defaults as { thought_level: unknown }).thought_level;
+      expect(level('office-assistant')).toEqual({ mode: 'fixed', value: 'max' });
+      expect(level('default-assistant')).toEqual({ mode: 'auto' });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
