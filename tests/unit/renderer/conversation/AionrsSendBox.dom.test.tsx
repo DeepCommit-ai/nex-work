@@ -22,7 +22,15 @@ const {
   draftMutateMock,
   draftContentRef,
   runtimeViewIsProcessingRef,
+  mobileRef,
 } = vi.hoisted(() => ({
+  // spec 014: mobile layout, captured sheet entries, the model lock and the runtime thought level
+  mobileRef: {
+    isMobile: false,
+    modelSelectable: true,
+    thoughtLevel: null as unknown,
+    entries: [] as Array<{ key: string }>,
+  },
   ensureConversationRuntimeMock: vi.fn().mockResolvedValue({ recovered: false, config_options: [], runtime: null }),
   sendMessageInvokeMock: vi.fn().mockResolvedValue(undefined),
   translateMock: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
@@ -125,8 +133,14 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
 vi.mock('@/renderer/components/agent/AgentModeSelector', () => ({ default: () => null }));
 vi.mock('@/renderer/components/chat/CommandQueuePanel', () => ({ default: () => null }));
 vi.mock('@/renderer/components/chat/MobileActionSheet', () => ({
-  default: () => null,
+  default: ({ entries }: { entries?: Array<{ key: string }> }) => {
+    mobileRef.entries = entries ?? [];
+    return null;
+  },
   useAttachEntry: () => ({ entries: [], hiddenFileInput: null }),
+}));
+vi.mock('@/renderer/hooks/useCapability', () => ({
+  useCapability: (key: string) => (key === 'model.userSelectable' ? mobileRef.modelSelectable : true),
 }));
 vi.mock('@/renderer/components/chat/ThoughtDisplay', () => ({ default: () => null }));
 vi.mock('@/renderer/components/media/FileAttachButton', () => ({ default: () => null }));
@@ -140,7 +154,7 @@ vi.mock('@/renderer/hooks/agent/useAcpConfigOptions', () => ({
     setStatus: { state: 'idle' },
     mode: null,
     model: null,
-    thoughtLevel: null,
+    thoughtLevel: mobileRef.thoughtLevel,
     reload: vi.fn(),
     setConfigOption: vi.fn(),
   }),
@@ -152,7 +166,7 @@ vi.mock('@/renderer/hooks/context/ConversationContext', () => ({
   }),
 }));
 vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
-  useLayoutContext: () => ({ isMobile: false }),
+  useLayoutContext: () => ({ isMobile: mobileRef.isMobile }),
 }));
 vi.mock('@/renderer/hooks/chat/useAutoTitle', () => ({
   useAutoTitle: () => ({
@@ -309,6 +323,39 @@ describe('AionrsSendBox', () => {
     useTeamPermissionMock.mockReturnValue(null);
     draftContentRef.current = '';
     runtimeViewIsProcessingRef.current = false;
+    mobileRef.isMobile = false;
+    mobileRef.modelSelectable = true;
+    mobileRef.thoughtLevel = null;
+    mobileRef.entries = [];
+  });
+
+  // spec 014: below 768px (or zoomed in) the "+" opens the mobile sheet; with model choice locked by
+  // the department it must not offer the model / thought-level rows the desktop toolbar hides.
+  it.each([
+    [false, []],
+    [true, ['model', 'thought-level']],
+  ])('mobile sheet with model.userSelectable=%s offers %j', (selectable, expected) => {
+    mobileRef.isMobile = true;
+    mobileRef.modelSelectable = selectable;
+    mobileRef.thoughtLevel = {
+      id: 'thought_level',
+      category: 'thought_level',
+      currentValue: 'high',
+      options: [
+        { value: 'low', label: 'Low' },
+        { value: 'high', label: 'High' },
+      ],
+    };
+    const mobileModelSelection = {
+      ...modelSelection,
+      providers: [{ id: 'gw', name: 'Gateway' }],
+      getAvailableModels: () => ['glm-5.3-flash', 'glm-5.3'],
+    } as unknown as AionrsModelSelection;
+
+    render(<AionrsSendBox conversation_id='conv-1' modelSelection={mobileModelSelection} />);
+
+    const keys = mobileRef.entries.map((entry) => entry.key);
+    expect(keys.filter((key) => key === 'model' || key === 'thought-level')).toEqual(expected);
   });
 
   it('does not warm up team session when draft content changes', async () => {

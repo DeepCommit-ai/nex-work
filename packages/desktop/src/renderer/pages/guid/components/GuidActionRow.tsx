@@ -36,6 +36,8 @@ import {
 } from '@icon-park/react';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+// [ENTERPRISE PATCH] spec 014 — the mobile action sheet honours model.userSelectable like the desktop selectors
+import { useCapability } from '@/renderer/hooks/useCapability';
 import styles from '../index.module.css';
 
 /**
@@ -150,6 +152,9 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   const { t } = useTranslation();
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
+  // [ENTERPRISE PATCH] spec 014 — below 768px (or zoomed in) the "+" opens this sheet; it must not offer
+  // model / thought-level choices the desktop toolbar hides when the department locks them
+  const modelSelectable = useCapability('model.userSelectable');
   const [isPlusDropdownOpen, setIsPlusDropdownOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [skillQuery, setSkillQuery] = useState('');
@@ -400,8 +405,11 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
       });
     }
 
-    return entries;
+    return modelSelectable
+      ? entries
+      : entries.filter((entry) => entry.key !== 'model' && entry.key !== 'thought-level');
   }, [
+    modelSelectable,
     isMobile,
     isGeminiMode,
     modelList,

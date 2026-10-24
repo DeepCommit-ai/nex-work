@@ -24,6 +24,8 @@ import { getSendBoxDraftHook, type FileOrFolderItem } from '@/renderer/hooks/cha
 import { createSetUploadFile, useSendBoxFiles } from '@/renderer/hooks/chat/useSendBoxFiles';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
+// [ENTERPRISE PATCH] spec 014 — the mobile action sheet honours model.userSelectable like the desktop selectors
+import { useCapability } from '@/renderer/hooks/useCapability';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
 import { useLatestRef } from '@/renderer/hooks/ui/useLatestRef';
 import { useAddOrUpdateMessage } from '@/renderer/pages/conversation/Messages/hooks';
@@ -133,6 +135,9 @@ const AcpSendBox: React.FC<{
   const { atPath, uploadFile, setAtPath, setUploadFile, content, setContent } = useSendBoxDraft(conversation_id);
   const layout = useLayoutContext();
   const isMobile = Boolean(layout?.isMobile);
+  // [ENTERPRISE PATCH] spec 014 — below 768px (or zoomed in) the "+" opens this sheet; it must not offer
+  // model / thought-level choices the desktop toolbar hides when the department locks them
+  const modelSelectable = useCapability('model.userSelectable');
   const conversationContext = useConversationContextSafe();
   const loadedSkills = conversationContext?.loadedSkills ?? [];
   const loadedMcpStatuses =
@@ -676,8 +681,11 @@ Please check your local CLI tool authentication status`,
       });
     }
 
-    return entries;
+    return modelSelectable
+      ? entries
+      : entries.filter((entry) => entry.key !== 'model' && entry.key !== 'thought-level');
   }, [
+    modelSelectable,
     attachEntries,
     canSwitchModel,
     currentMode,

@@ -11,7 +11,7 @@ import GuidActionRow from '@/renderer/pages/guid/components/GuidActionRow';
 import type { IMcpServer } from '@/common/config/storage';
 import { ipcBridge } from '@/common';
 
-const environment = vi.hoisted(() => ({ isMobile: false, isDesktop: true }));
+const environment = vi.hoisted(() => ({ isMobile: false, isDesktop: true, modelSelectable: true }));
 
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -29,6 +29,10 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
   useLayoutContext: () => ({ isMobile: environment.isMobile }),
+}));
+
+vi.mock('@/renderer/hooks/useCapability', () => ({
+  useCapability: (key: string) => (key === 'model.userSelectable' ? environment.modelSelectable : true),
 }));
 
 vi.mock('@/renderer/components/agent/AgentModeSelector', () => ({
@@ -184,6 +188,7 @@ describe('GuidActionRow skill/MCP submenu search', () => {
     vi.clearAllMocks();
     environment.isMobile = false;
     environment.isDesktop = true;
+    environment.modelSelectable = true;
   });
 
   it('offers both host files and device upload in the mobile WebUI action sheet', () => {
@@ -269,5 +274,50 @@ describe('GuidActionRow skill/MCP submenu search', () => {
     fireEvent.click(screen.getByText('skill-3').closest('[role="menuitem"]')!);
 
     expect(onToggleSkill).toHaveBeenCalledWith('skill-3', false);
+  });
+});
+
+// spec 014: below 768px (or zoomed in) the "+" opens the mobile sheet instead of the desktop toolbar.
+// The desktop toolbar drops the model / thought-level selectors when the department locks model
+// choice (model.userSelectable = false); the sheet must drop them too.
+describe('GuidActionRow mobile sheet and the model lock', () => {
+  const modelInfo = {
+    current_model_id: 'opus[1m]',
+    current_model_label: 'opus[1m]',
+    available_models: [
+      { id: 'default', label: 'Default' },
+      { id: 'opus[1m]', label: 'Opus (1M)' },
+    ],
+  } as unknown as React.ComponentProps<typeof GuidActionRow>['currentAcpCachedModelInfo'];
+  const thoughtLevelOption = {
+    id: 'thought_level',
+    currentValue: 'max',
+    options: [
+      { value: 'auto', label: 'Auto' },
+      { value: 'max', label: 'Max' },
+    ],
+  } as unknown as React.ComponentProps<typeof GuidActionRow>['thoughtLevelOption'];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    environment.isMobile = true;
+    environment.isDesktop = true;
+  });
+
+  it('hides model and thought level from the sheet when the department locks model choice', () => {
+    environment.modelSelectable = false;
+    renderActionRow({ currentAcpCachedModelInfo: modelInfo, thoughtLevelOption, onThoughtLevelSelect: vi.fn() });
+
+    expect(screen.getByTestId('mobile-action-sheet')).toBeInTheDocument();
+    expect(screen.queryByTestId('model')).toBeNull();
+    expect(screen.queryByTestId('thought-level')).toBeNull();
+  });
+
+  it('keeps model and thought level in the sheet when staff may choose the model', () => {
+    environment.modelSelectable = true;
+    renderActionRow({ currentAcpCachedModelInfo: modelInfo, thoughtLevelOption, onThoughtLevelSelect: vi.fn() });
+
+    expect(screen.getByTestId('model')).toBeInTheDocument();
+    expect(screen.getByTestId('thought-level')).toBeInTheDocument();
   });
 });

@@ -34,6 +34,8 @@ const {
   draftContentRef,
   messageWarningMock,
   stopInvokeMock,
+  modelSelectableMock,
+  acpModelInfoMock,
 } = vi.hoisted(() => ({
   sendMessageInvokeMock: vi.fn(),
   addOrUpdateMessageMock: vi.fn(),
@@ -76,6 +78,10 @@ const {
   draftContentRef: { current: '' },
   messageWarningMock: vi.fn(),
   stopInvokeMock: vi.fn().mockResolvedValue(undefined),
+  modelSelectableMock: { current: true },
+  acpModelInfoMock: {
+    current: { model_info: null as unknown, canSwitch: false },
+  },
 }));
 
 vi.mock('@/common', () => ({
@@ -201,10 +207,12 @@ vi.mock('@/renderer/components/media/HorizontalFileList', () => ({
 }));
 vi.mock('@/renderer/hooks/agent/useAcpModelInfo', () => ({
   useAcpModelInfo: () => ({
-    model_info: null,
-    canSwitch: false,
+    ...acpModelInfoMock.current,
     selectModel: vi.fn(),
   }),
+}));
+vi.mock('@/renderer/hooks/useCapability', () => ({
+  useCapability: (key: string) => (key === 'model.userSelectable' ? modelSelectableMock.current : true),
 }));
 vi.mock('@/renderer/hooks/agent/useAcpConfigOptions', () => ({
   classifyConfigSetError: () => 'unknown',
@@ -345,6 +353,8 @@ describe('AcpSendBox', () => {
     vi.clearAllMocks();
     isMobileMock.current = false;
     mobileActionSheetEntries.current = [];
+    modelSelectableMock.current = true;
+    acpModelInfoMock.current = { model_info: null, canSwitch: false };
     runtimeViewMock.hydrated = true;
     runtimeViewMock.state = 'idle';
     runtimeViewMock.isProcessing = false;
@@ -666,6 +676,57 @@ describe('AcpSendBox', () => {
     await waitFor(() => {
       expect(setConfigOption).toHaveBeenCalledWith('reasoning_effort', 'high');
     });
+  });
+
+  // spec 014: below 768px (or zoomed in) the "+" opens this sheet. When the department locks model
+  // choice it must not offer the model and thought-level rows the desktop toolbar already hides.
+  it.each([
+    [false, []],
+    [true, ['model', 'thought-level']],
+  ])('mobile sheet with model.userSelectable=%s offers %j', (selectable, expected) => {
+    isMobileMock.current = true;
+    modelSelectableMock.current = selectable;
+    acpModelInfoMock.current = {
+      model_info: {
+        current_model_id: 'opus[1m]',
+        current_model_label: 'opus[1m]',
+        available_models: [
+          { id: 'default', label: 'Default' },
+          { id: 'opus[1m]', label: 'Opus (1M)' },
+        ],
+      },
+      canSwitch: true,
+    };
+    useAcpConfigOptionsMock.mockReturnValue({
+      mode: null,
+      model: null,
+      thoughtLevel: {
+        id: 'reasoning_effort',
+        category: 'thought_level',
+        currentValue: 'max',
+        options: [
+          { value: 'high', label: 'High' },
+          { value: 'max', label: 'Max' },
+        ],
+      },
+      setStatus: { state: 'idle' },
+      setConfigOption: vi.fn(),
+      reload: vi.fn(),
+      isLoading: false,
+      configOptions: [],
+    });
+
+    render(
+      <AcpSendBox
+        conversation_id='conv-1'
+        backend='claude'
+        workspacePath='/tmp/workspace'
+        messageState={makeMessageState()}
+      />
+    );
+
+    const keys = mobileActionSheetEntries.current.map((entry) => entry.key);
+    expect(keys.filter((key) => key === 'model' || key === 'thought-level')).toEqual(expected);
   });
 
   it('does not apply runtime thought level when observed confirmation fails', async () => {
