@@ -1,4 +1,4 @@
-/** Build the pinned backend with the NexWork workspace naming patch. */
+/** Build the pinned backend with the NexWork patch: workspace naming and line-ending tolerant migrations. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ export const BACKEND_COMMIT = '57a34cc1b1a3b17bcc023de06b9e6768fceac36f';
 export const BACKEND_VERSION = 'v0.1.72';
 export const RUST_VERSION = '1.95.0';
 const directory = path.dirname(fileURLToPath(import.meta.url));
-const patchPath = path.join(directory, 'workspace-prefix.patch');
+const patchPath = path.join(directory, 'aioncore.patch');
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
 /** Reject unsupported targets instead of silently bundling an upstream binary. */
@@ -74,7 +74,7 @@ export function buildWorkspaceBackend({ projectRoot, platform, arch, version, ou
     }
     if (run('git', ['rev-parse', 'HEAD']).trim() !== BACKEND_COMMIT)
       throw new Error('Unexpected backend source revision');
-    const normalizedPatch = path.join(cache, 'workspace-prefix.patch');
+    const normalizedPatch = path.join(cache, 'aioncore.patch');
     fs.writeFileSync(normalizedPatch, patch);
     if (!run('git', ['diff', '--binary']).trim()) run('git', ['apply', '--whitespace=error', normalizedPatch]);
     if (run('git', ['diff', '--binary']).trim() !== patch.trim())

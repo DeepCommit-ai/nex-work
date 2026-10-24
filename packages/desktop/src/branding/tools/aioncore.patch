@@ -1,0 +1,243 @@
+diff --git a/crates/aionui-conversation/src/service.rs b/crates/aionui-conversation/src/service.rs
+index 720cf91..6c24d62 100644
+--- a/crates/aionui-conversation/src/service.rs
++++ b/crates/aionui-conversation/src/service.rs
+@@ -4890,7 +4890,13 @@ impl ConversationService {
+                 backend.as_ref(),
+             );
+ 
+-            if workspace != expected_workspace {
++            // Existing conversations keep their native directory after a product rename.
++            let legacy_workspace = auto_workspace_parent(&self.workspace_root, &row.user_id).join(format!(
++                "{}-temp-{}",
++                native_conversation_label(&context.conversation.agent_type, backend.as_ref()),
++                row.id
++            ));
++            if workspace != expected_workspace && workspace != legacy_workspace {
+                 return;
+             }
+         }
+@@ -5140,6 +5146,13 @@ fn map_create_workspace_validation_error(error: WorkspacePathValidationError) ->
+ /// name (e.g. `"aionrs"`). Falls back to the agent type's serde name
+ /// when the backend field is missing or not a string.
+ fn conversation_label(agent_type: &AgentType, backend: Option<&serde_json::Value>) -> String {
++    if std::env::var("NEXWORK_WORKSPACE_PREFIX").as_deref() == Ok("nexwork") {
++        return "nexwork".to_owned();
++    }
++    native_conversation_label(agent_type, backend)
++}
++
++fn native_conversation_label(agent_type: &AgentType, backend: Option<&serde_json::Value>) -> String {
+     if *agent_type == AgentType::Acp
+         && let Some(serde_json::Value::String(s)) = backend
+         && !s.is_empty()
+diff --git a/crates/aionui-db/src/database.rs b/crates/aionui-db/src/database.rs
+index 16d7e14..b010a22 100644
+--- a/crates/aionui-db/src/database.rs
++++ b/crates/aionui-db/src/database.rs
+@@ -1,10 +1,12 @@
++use std::borrow::Cow;
++use std::collections::HashMap;
+ use std::fs::OpenOptions;
+ use std::path::{Path, PathBuf};
+ use std::str::FromStr;
+ use std::time::Duration;
+ 
+ use fs2::FileExt;
+-use sqlx::migrate::Migrator;
++use sqlx::migrate::{Migration, Migrator};
+ use sqlx::pool::PoolOptions;
+ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
+ use sqlx::{Sqlite, SqlitePool};
+@@ -441,11 +443,14 @@ async fn run_migrations_staged(pool: &SqlitePool) -> Result<(), DatabaseInitErro
+ /// pass sees the row that the winner committed, checksum matches (same
+ /// shipped binary), and the migration is treated as already applied.
+ async fn run_migrations_with_retry(conn: &mut sqlx::SqliteConnection) -> Result<(), DbError> {
+-    match DB_MIGRATOR.run(&mut *conn).await {
++    // [NexWork] Accept databases whose migrations were applied by a build with the other line endings.
++    let tolerant = line_ending_tolerant_migrator(&mut *conn).await?;
++    let migrator = tolerant.as_ref().unwrap_or(&DB_MIGRATOR);
++    match migrator.run(&mut *conn).await {
+         Ok(()) => Ok(()),
+         Err(e) if is_migrations_table_unique_conflict(&e) => {
+             warn!("Concurrent migrator detected (UNIQUE conflict on _sqlx_migrations); retrying");
+-            DB_MIGRATOR.run(&mut *conn).await.map_err(DbError::Migration)
++            migrator.run(&mut *conn).await.map_err(DbError::Migration)
+         }
+         Err(sqlx::migrate::MigrateError::VersionMismatch(version))
+             if version == MCP_SCHEMA_RECONCILIATION_MIGRATION_VERSION =>
+@@ -455,7 +460,7 @@ async fn run_migrations_with_retry(conn: &mut sqlx::SqliteConnection) -> Result<
+                     "Aligned checksum for reconciled MCP migration {}; retrying",
+                     MCP_SCHEMA_RECONCILIATION_MIGRATION_VERSION
+                 );
+-                DB_MIGRATOR.run(&mut *conn).await.map_err(DbError::Migration)
++                migrator.run(&mut *conn).await.map_err(DbError::Migration)
+             } else {
+                 Err(DbError::Migration(sqlx::migrate::MigrateError::VersionMismatch(
+                     version,
+@@ -466,6 +471,79 @@ async fn run_migrations_with_retry(conn: &mut sqlx::SqliteConnection) -> Result<
+     }
+ }
+ 
++/// [NexWork] The embedded migrator, except that an applied migration whose stored checksum is the
++/// same SQL with the other line endings keeps that checksum; `None` when nothing needs it.
++///
++/// AionCore's official Windows binaries embed migrations checked out with CRLF, while NexWork
++/// builds AionCore from source with LF on every platform. The SQL is identical, but sqlx checksums
++/// the bytes, so a database created by NexWork 2.1.61 (official binary) failed to open in
++/// 2.1.61-nexwork.2 and later with "migration 1 was previously applied but has been modified".
++/// The stored checksums are left as they are, so the other build can still open the database.
++async fn line_ending_tolerant_migrator(conn: &mut sqlx::SqliteConnection) -> Result<Option<Migrator>, DbError> {
++    let has_table: bool =
++        sqlx::query_scalar("SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'")
++            .fetch_one(&mut *conn)
++            .await
++            .map_err(DbError::Query)?;
++    if !has_table {
++        return Ok(None);
++    }
++    let stored: HashMap<i64, Vec<u8>> =
++        sqlx::query_as::<_, (i64, Vec<u8>)>("SELECT version, checksum FROM _sqlx_migrations")
++            .fetch_all(&mut *conn)
++            .await
++            .map_err(DbError::Query)?
++            .into_iter()
++            .collect();
++    let mut tolerated = Vec::new();
++    let migrations: Vec<Migration> = DB_MIGRATOR
++        .iter()
++        .map(|m| match stored.get(&m.version) {
++            Some(applied)
++                if !m.migration_type.is_down_migration()
++                    && applied.as_slice() != m.checksum.as_ref()
++                    && same_sql_other_line_endings(m, applied) =>
++            {
++                tolerated.push(m.version);
++                Migration {
++                    checksum: Cow::Owned(applied.clone()),
++                    ..m.clone()
++                }
++            }
++            _ => m.clone(),
++        })
++        .collect();
++    if tolerated.is_empty() {
++        return Ok(None);
++    }
++    info!(
++        versions = ?tolerated,
++        "Migrations were applied with the other line endings (official AionCore build); accepting them unchanged"
++    );
++    Ok(Some(Migrator {
++        migrations: Cow::Owned(migrations),
++        ignore_missing: DB_MIGRATOR.ignore_missing,
++        locking: DB_MIGRATOR.locking,
++        no_tx: DB_MIGRATOR.no_tx,
++    }))
++}
++
++/// Whether `checksum` is sqlx's checksum of `migration`'s SQL with LF or CRLF line endings.
++fn same_sql_other_line_endings(migration: &Migration, checksum: &[u8]) -> bool {
++    let lf = migration.sql.replace("\r\n", "\n");
++    let crlf = lf.replace('\n', "\r\n");
++    [lf, crlf].into_iter().any(|sql| {
++        let variant = Migration::new(
++            migration.version,
++            migration.description.clone(),
++            migration.migration_type,
++            Cow::Owned(sql),
++            migration.no_tx,
++        );
++        variant.checksum.as_ref() == checksum
++    })
++}
++
+ /// Detect the specific "another process inserted this version first" error.
+ ///
+ /// sqlx wraps the SQLite error inside `MigrateError::Execute(sqlx::Error)`.
+@@ -842,6 +920,85 @@ mod tests {
+         assert!(!is_migrations_table_unique_conflict(&unrelated));
+     }
+ 
++    /// Stamp every applied migration with the checksum of its SQL in CRLF form, as the official
++    /// Windows build of AionCore stores it.
++    async fn stamp_crlf_checksums(pool: &SqlitePool) {
++        for m in DB_MIGRATOR.iter().filter(|m| !m.migration_type.is_down_migration()) {
++            let crlf = m.sql.replace("\r\n", "\n").replace('\n', "\r\n");
++            let variant = Migration::new(
++                m.version,
++                m.description.clone(),
++                m.migration_type,
++                Cow::Owned(crlf),
++                m.no_tx,
++            );
++            sqlx::query("UPDATE _sqlx_migrations SET checksum = ? WHERE version = ?")
++                .bind(variant.checksum.as_ref())
++                .bind(m.version)
++                .execute(pool)
++                .await
++                .unwrap();
++        }
++    }
++
++    async fn stored_checksum(pool: &SqlitePool, version: i64) -> Vec<u8> {
++        sqlx::query_scalar("SELECT checksum FROM _sqlx_migrations WHERE version = ?")
++            .bind(version)
++            .fetch_one(pool)
++            .await
++            .unwrap()
++    }
++
++    #[tokio::test]
++    async fn database_from_a_crlf_build_opens_unchanged() {
++        let db = init_database_memory().await.unwrap();
++        let pool = db.pool();
++        stamp_crlf_checksums(pool).await;
++        let crlf_first = stored_checksum(pool, 1).await;
++        assert_ne!(
++            crlf_first.as_slice(),
++            DB_MIGRATOR.iter().next().unwrap().checksum.as_ref()
++        );
++
++        // The embedded migrator alone refuses it, exactly as 2.1.61-nexwork.3 did on Windows.
++        let mut conn = pool.acquire().await.unwrap();
++        assert!(matches!(
++            DB_MIGRATOR.run(&mut *conn).await,
++            Err(sqlx::migrate::MigrateError::VersionMismatch(1))
++        ));
++        run_migrations_with_retry(&mut conn).await.unwrap();
++        drop(conn);
++
++        // Left as it was, so the CRLF build can still open it.
++        assert_eq!(stored_checksum(pool, 1).await, crlf_first);
++    }
++
++    #[tokio::test]
++    async fn a_really_modified_migration_is_still_refused() {
++        let db = init_database_memory().await.unwrap();
++        let pool = db.pool();
++        stamp_crlf_checksums(pool).await;
++        sqlx::query("UPDATE _sqlx_migrations SET checksum = ? WHERE version = 1")
++            .bind(vec![0u8; 48])
++            .execute(pool)
++            .await
++            .unwrap();
++
++        let mut conn = pool.acquire().await.unwrap();
++        let err = run_migrations_with_retry(&mut conn).await.unwrap_err();
++        assert!(matches!(
++            err,
++            DbError::Migration(sqlx::migrate::MigrateError::VersionMismatch(1))
++        ));
++    }
++
++    #[tokio::test]
++    async fn matching_database_uses_the_embedded_migrator() {
++        let db = init_database_memory().await.unwrap();
++        let mut conn = db.pool().acquire().await.unwrap();
++        assert!(line_ending_tolerant_migrator(&mut conn).await.unwrap().is_none());
++    }
++
+     #[test]
+     fn migrate_lock_path_sits_next_to_db() {
+         let db = Path::new("/var/lib/aionui/aionui-backend.db");

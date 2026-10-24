@@ -25,8 +25,11 @@ because Electron detects the renamed native bundle as packaged. It is not a dist
 NexWork product/executable names. Never modify Electron's framework identifiers or
 bypass the data-directory migration when changing the displayed application name.
 
-`backendWorkspace.mjs` builds the pinned upstream commit with `workspace-prefix.patch`
-and records the source, patch and binary hashes in the bundle manifest. The launcher
+`backendWorkspace.mjs` builds the pinned upstream commit with `aioncore.patch`
+and records the source, patch and binary hashes in the bundle manifest. The patch also lets
+the migrator accept migrations applied with the other line endings: AionCore's official
+Windows binaries (bundled by 2.1.61-nexwork.1) embed them with CRLF, ours with LF, and sqlx
+checksums the bytes (spec 015). The launcher
 sets `NEXWORK_WORKSPACE_PREFIX=nexwork`; both conversation engines then create
 `nexwork-temp-<conversation id>` directories using the original project binding and
 cleanup logic. Existing workspace paths are retained. Prepare/build commands require
