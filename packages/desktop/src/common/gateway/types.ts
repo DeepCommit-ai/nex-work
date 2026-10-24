@@ -64,6 +64,26 @@ export const GATEWAY_ENV_CLAUDE_MODELS = [
   'ANTHROPIC_DEFAULT_HAIKU_MODEL',
 ] as const;
 
+/**
+ * Claude Code's model catalog as aioncore caches it once the aliases are mapped to gateway models:
+ * the only session models aioncore passes on (spec 014). `opus[1m]` is not in it (aioncore logs
+ * "persisted model selection is absent from the agent's catalog" and falls back, measured
+ * 2026-10-23), so a 1M window travels in the slot's value instead: `glm-5.3[1m]`.
+ */
+export const CLAUDE_CODE_MODEL_IDS = ['default', 'opus', 'sonnet', 'haiku'] as const;
+
+/** A slot value may carry Claude Code's 1M marker; the gateway alias is the part before it. */
+export const gatewayModelOf = (slotValue: string): string => slotValue.replace(/\[1m\]$/i, '');
+
+/** Slots a department can map to a model of its own (cynapse `gateway.claude_slots`, spec 014). */
+export const CLAUDE_SLOT_ENV = {
+  opus: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  sonnet: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  haiku: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+} as const;
+
+export type ClaudeSlots = Partial<Record<keyof typeof CLAUDE_SLOT_ENV, string>>;
+
 /** The single gateway configuration for this install. */
 export type GatewayConfig = {
   baseUrl: string;
@@ -86,6 +106,11 @@ export type GatewayConfig = {
    * pins nothing); a value sets every name.
    */
   claudeModel?: string | null;
+  /**
+   * Slots mapped to a model other than `claudeModel` (spec 014), e.g. `{ opus: 'glm-5.3[1m]' }` for
+   * the one assistant whose sessions select `opus`. Only read when `claudeModel` is not `undefined`.
+   */
+  claudeSlots?: ClaudeSlots | null;
 };
 
 /**

@@ -105,6 +105,41 @@ describe('buildEnvOverride', () => {
       expect(buildEnvOverride(pinned('glm-5.3-flash'), cfg())).toEqual(expect.arrayContaining(pinned('glm-5.3-flash')));
     });
   });
+
+  describe('a slot of its own (spec 014)', () => {
+    const value = (env: EnvEntry[], name: string) => env.filter((e) => e.name === name).map((e) => e.value);
+
+    it('maps only the opus slot to the assistant model; the default and the other aliases stay put', () => {
+      const env = buildEnvOverride([], {
+        ...cfg(),
+        claudeModel: 'glm-5.3-flash',
+        claudeSlots: { opus: 'glm-5.3[1m]' },
+      });
+      expect(value(env, 'ANTHROPIC_MODEL')).toEqual(['glm-5.3-flash']);
+      expect(value(env, 'ANTHROPIC_DEFAULT_SONNET_MODEL')).toEqual(['glm-5.3-flash']);
+      expect(value(env, 'ANTHROPIC_DEFAULT_HAIKU_MODEL')).toEqual(['glm-5.3-flash']);
+      // the [1m] marker stays in the value: it is what gives Claude Code the 1M window
+      expect(value(env, 'ANTHROPIC_DEFAULT_OPUS_MODEL')).toEqual(['glm-5.3[1m]']);
+    });
+
+    it('moves the opus slot back to the default when the department drops the slot', () => {
+      const before = buildEnvOverride([], { ...cfg(), claudeModel: 'glm-5.3-flash', claudeSlots: { opus: 'glm-5.3' } });
+      const after = buildEnvOverride(before, { ...cfg(), claudeModel: 'glm-5.3-flash', claudeSlots: {} });
+      expect(value(after, 'ANTHROPIC_DEFAULT_OPUS_MODEL')).toEqual(['glm-5.3-flash']);
+    });
+
+    it('writes the slot even when the department pins no default', () => {
+      const env = buildEnvOverride([], { ...cfg(), claudeModel: null, claudeSlots: { opus: 'glm-5.3' } });
+      expect(value(env, 'ANTHROPIC_MODEL')).toEqual([]);
+      expect(value(env, 'ANTHROPIC_DEFAULT_OPUS_MODEL')).toEqual(['glm-5.3']);
+    });
+
+    it('ignores slots on a manual gateway save (claudeModel undefined keeps everything)', () => {
+      const pinnedEnv = GATEWAY_ENV_CLAUDE_MODELS.map((name) => ({ name, value: 'glm-5.3-flash' }));
+      const env = buildEnvOverride(pinnedEnv, { ...cfg(), claudeSlots: { opus: 'glm-5.3' } });
+      expect(value(env, 'ANTHROPIC_DEFAULT_OPUS_MODEL')).toEqual(['glm-5.3-flash']);
+    });
+  });
 });
 
 describe('planProvisioning', () => {

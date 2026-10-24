@@ -26,6 +26,7 @@ import { scopeNexworkDepartmentConfig } from '@/branding/assistants/department';
 import { enterpriseStore } from './enterpriseStore';
 import {
   buildReport,
+  pinnedModel,
   planWrites,
   validateConfig,
   type CurrentState,
@@ -87,7 +88,7 @@ const readCurrentState = async (): Promise<{ state: CurrentState; agentTypes: Ma
  * 会照样下钉（幂等 PUT），"读不到现状"绝不能静默当成"已经钉好"。
  */
 const enrichPinnedModels = async (cfg: DeptConfig, state: CurrentState): Promise<void> => {
-  const wantPin = cfg.assistants.filter((a) => a.fixed_model);
+  const wantPin = cfg.assistants.filter((a) => pinnedModel(a));
   for (const spec of wantPin) {
     const cur = state.assistants.find((a) => a.id === spec.id);
     if (!cur) continue;
@@ -148,7 +149,8 @@ const executeWrite = (w: PlannedWrite, deptKey: string): Promise<unknown> => {
         ...(w.spec.description ? { description: w.spec.description } : {}),
         ...(w.spec.avatar ? { avatar: w.spec.avatar } : {}),
         ...(w.spec.agent_id ? { agent_id: w.spec.agent_id } : {}),
-        ...(w.spec.fixed_model ? { defaults: { model: { mode: 'fixed', value: w.spec.fixed_model } } } : {}),
+        // spec 014: a Claude Code selection of its own (opus) wins over the gateway alias
+        ...(pinnedModel(w.spec) ? { defaults: { model: { mode: 'fixed', value: pinnedModel(w.spec)! } } } : {}),
         ...(w.spec.enabled_skills?.length ? { enabled_skills: [...w.spec.enabled_skills] } : {}),
       });
     case 'assistant.repoint':
@@ -263,6 +265,8 @@ const provisionGatewayFor = async (
         customHeadersValue: provenance,
         // Only Claude Code reads these; other CLI agents keep whatever they have.
         claudeModel: agentId === CLAUDE_AGENT_ID ? (gw.claude_model ?? null) : undefined,
+        // spec 014: slots of their own, e.g. opus → glm-5.3[1m] for the one assistant on opus
+        claudeSlots: agentId === CLAUDE_AGENT_ID ? (gw.claude_slots ?? null) : undefined,
       });
       // PUT 是整体替换（实测：漏掉 command_override 会把它清成 null）。这里只管
       // env，command_override（受管 claude 的钉子，issue #8）必须原样带过。

@@ -9,6 +9,7 @@
 
 import type { EnvEntry, GatewayConfig, GatewayState, RuntimeGatewayStatus } from './types';
 import {
+  CLAUDE_SLOT_ENV,
   GATEWAY_ENV_AUTH_TOKEN,
   GATEWAY_ENV_BASE_URL,
   GATEWAY_ENV_CLAUDE_MODELS,
@@ -101,8 +102,21 @@ export const buildEnvOverride = (existing: readonly EnvEntry[], config: GatewayC
   if (token) next.push({ name: GATEWAY_ENV_AUTH_TOKEN, value: token });
   if (configDir) next.push({ name: GATEWAY_ENV_CONFIG_DIR, value: configDir });
   if (customHeaders) next.push({ name: GATEWAY_ENV_CUSTOM_HEADERS, value: customHeaders });
-  const claudeModel = config.claudeModel?.trim();
-  if (claudeModel) for (const name of GATEWAY_ENV_CLAUDE_MODELS) next.push({ name, value: claudeModel });
+  if (config.claudeModel !== undefined) {
+    // A slot of its own (spec 014) overrides the department model for that one name only:
+    // ANTHROPIC_MODEL, and with it every assistant without a selection of its own, stays on the default.
+    const claudeModel = config.claudeModel?.trim() ?? '';
+    const slotFor = new Map<string, string>(
+      Object.entries(config.claudeSlots ?? {}).flatMap(([slot, model]) => {
+        const name = CLAUDE_SLOT_ENV[slot as keyof typeof CLAUDE_SLOT_ENV];
+        return name && model?.trim() ? [[name, model.trim()] as [string, string]] : [];
+      })
+    );
+    for (const name of GATEWAY_ENV_CLAUDE_MODELS) {
+      const value = slotFor.get(name) ?? claudeModel;
+      if (value) next.push({ name, value });
+    }
+  }
   return next;
 };
 

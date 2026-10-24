@@ -8,6 +8,7 @@ import type { ManagedCatalog } from '@/common/deptconfig/catalog';
 import { MANAGED_BUTLER_ID, MANAGED_DEFAULT_ID } from '@/common/deptconfig/catalog';
 import { buildEnvOverride, resolveNexworkProfilePath } from '@/common/gateway/provisionGateway';
 import { buildProvenanceEnvValue } from '@/common/deptconfig/client';
+import { pinnedModel } from '@/common/deptconfig/applyConfig';
 import type { EnvEntry } from '@/common/gateway/types';
 import i18nConfig from '@/common/config/i18n-config.json';
 import { prepareNexworkClaudeProfile } from '@/branding/assistants/claudeProfile';
@@ -90,6 +91,8 @@ export async function provisionGateway(cfg: DeptConfig, options: InstallOptions,
     }),
     // The server is the source of truth: no pin there clears a pin written earlier.
     claudeModel: gateway.claude_model ?? null,
+    // spec 014: one assistant's own model (opus → glm-5.3[1m]) without moving everyone else's default
+    claudeSlots: gateway.claude_slots ?? null,
   });
   undo.push(() => api('PUT', '/api/agents/2d23ff1c/overrides', overrides));
   await api('PUT', '/api/agents/2d23ff1c/overrides', {
@@ -176,7 +179,8 @@ export async function installCatalog(
           ...old?.defaults,
           skills: { mode: 'fixed', value: skills },
           mcps: { mode: 'fixed', value: agent.id === MANAGED_BUTLER_ID ? [...commonMcps, managementId] : commonMcps },
-          model: spec?.fixed_model ? { mode: 'fixed', value: spec.fixed_model } : { mode: 'auto' },
+          // spec 014: a Claude Code selection of its own (opus) is the value aioncore keeps
+          model: spec && pinnedModel(spec) ? { mode: 'fixed', value: pinnedModel(spec)! } : { mode: 'auto' },
         },
       };
       if (old) {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildReport, planWrites, validateConfig, type CurrentState } from '@/common/deptconfig/applyConfig';
+import {
+  buildReport,
+  pinnedModel,
+  planWrites,
+  validateConfig,
+  type CurrentState,
+} from '@/common/deptconfig/applyConfig';
 import type { DeptConfig } from '@/common/deptconfig/types';
 
 const cfg = (over: Partial<DeptConfig> = {}): DeptConfig => ({
@@ -51,6 +57,37 @@ describe('validateConfig', () => {
     expect(validateConfig(cfg({ gateway }))).toContainEqual(expect.stringContaining('claude_model'));
     expect(validateConfig(cfg({ gateway, model_aliases: ['glm-5.3-flash'] }))).toEqual([]);
     expect(validateConfig(cfg({ gateway: { ...gateway, claude_model: null } }))).toEqual([]);
+  });
+
+  it('rejects slots outside the aliases and selections outside the Claude Code catalog (spec 014)', () => {
+    const gateway = {
+      base_url: 'http://gw',
+      api_key: 'sk',
+      claude_model: 'glm-5.3-flash',
+      claude_slots: { opus: 'glm-5.3[1m]' },
+    };
+    const assistants = [{ id: 'word', agent_id: 'claude', fixed_model: 'glm-5.3', claude_selection: 'opus' }];
+    const aliases = ['glm-5.3-flash', 'glm-5.3'];
+    expect(validateConfig(cfg({ gateway, assistants, model_aliases: aliases }))).toEqual([]);
+    expect(validateConfig(cfg({ gateway, assistants, model_aliases: ['glm-5.3-flash'] }))).toContainEqual(
+      expect.stringContaining('claude_slots')
+    );
+    expect(
+      validateConfig(
+        cfg({ gateway: { ...gateway, claude_slots: { turbo: 'glm-5.3' } }, assistants, model_aliases: aliases })
+      )
+    ).toContainEqual(expect.stringContaining('claude_slots'));
+    expect(
+      validateConfig(
+        cfg({ gateway, assistants: [{ ...assistants[0], claude_selection: 'glm-5.3' }], model_aliases: aliases })
+      )
+    ).toContainEqual(expect.stringContaining('claude_selection'));
+    // aioncore's cached catalog has no opus[1m] once aliases are mapped (2026-10-23): it would fall back silently
+    expect(
+      validateConfig(
+        cfg({ gateway, assistants: [{ ...assistants[0], claude_selection: 'opus[1m]' }], model_aliases: aliases })
+      )
+    ).toContainEqual(expect.stringContaining('claude_selection'));
   });
 
   it('rejects a config without usable gateway credentials', () => {
@@ -199,6 +236,29 @@ describe('planWrites — 服务端定义的 import 与钉模型（issue #7 / #6�
     });
     const w = world(); // butler.fixed_model 未设置 = undefined
     expect(planWrites(c, w)).toContainEqual({ kind: 'assistant.pin_model', id: 'butler', model: 'glm-4.7' });
+  });
+});
+
+describe('planWrites — a Claude Code selection of its own (spec 014)', () => {
+  const c = cfg({
+    model_aliases: ['glm-5.3'],
+    assistants: [{ id: 'word', agent_id: 'claude', fixed_model: 'glm-5.3', claude_selection: 'opus' }],
+  });
+
+  it('pins the selection, not the gateway alias aioncore would drop', () => {
+    expect(planWrites(c, world())).toContainEqual({ kind: 'assistant.pin_model', id: 'word', model: 'opus' });
+  });
+
+  it('stays quiet once the selection is pinned', () => {
+    const w = world();
+    w.assistants.find((a) => a.id === 'word')!.fixed_model = 'opus';
+    expect(planWrites(c, w).some((x) => x.kind === 'assistant.pin_model')).toBe(false);
+  });
+
+  it('falls back to fixed_model for assistants without a selection', () => {
+    expect(pinnedModel({ fixed_model: 'glm-4.7' })).toBe('glm-4.7');
+    expect(pinnedModel({ fixed_model: 'glm-5.3', claude_selection: 'opus' })).toBe('opus');
+    expect(pinnedModel({})).toBeNull();
   });
 });
 

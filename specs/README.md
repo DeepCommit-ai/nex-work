@@ -38,5 +38,6 @@ therefore apply to every spec:
 | [011](011-bundled-python/spec.md)                     | Bundled Python for managed skills               | Implemented; installer checks pending               |
 | [012](012-claude-model-pin/spec.md)                   | Department model for Claude Code assistants     | Implemented, verified live                          |
 | [013](013-in-app-browser-sso/spec.md)                 | In-app browser keeps single sign-on sessions    | Implemented, verified live                          |
+| [014](014-assistant-model-window/spec.md)             | Claude assistant on its own model and window    | Implemented, verified live; gateway check pending   |
 
 Cross-repository specs live in cynapse, per the current AGENTS.md contract. The four-assistant rollout is recorded in [NexWork four assistants](../../cynapse/doc/spec/2026-09-09-nexwork-four-assistants.md), including its upstream-drift accounting.

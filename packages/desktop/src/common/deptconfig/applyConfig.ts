@@ -24,6 +24,14 @@
  */
 
 import type { ApplyReport, AssistantSpec, DeptConfig } from './types';
+import { CLAUDE_CODE_MODEL_IDS, CLAUDE_SLOT_ENV, gatewayModelOf } from '../gateway/types';
+
+/**
+ * The model to pin as the assistant's default (spec 014): its Claude Code selection when the
+ * department gave it one (`opus`, a name aioncore keeps), else the gateway alias.
+ */
+export const pinnedModel = (spec: Pick<AssistantSpec, 'fixed_model' | 'claude_selection'>): string | null =>
+  spec.claude_selection?.trim() || spec.fixed_model || null;
 
 /** 落实需要知道的当前状态。 */
 export type CurrentState = {
@@ -104,6 +112,25 @@ export const validateConfig = (cfg: DeptConfig): string[] => {
     // 服务端也拦，这里是客户端执行前的最后防线（同一坏响应可能只坏一半）。
     problems.push(
       `助手 ${badPin.map((a) => a.id).join(', ')} 钉的 fixed_model 不在 model_aliases 里——新会话会在网关得到 404`
+    );
+  }
+  // spec 014：单独的槽位模型同样要在别名表里；助手要选的必须是 Claude Code 自报目录里的名字，
+  // 否则 aioncore 会把它当成“不在目录里”丢掉，助手悄悄回落默认模型。
+  const badSlots = Object.entries(cfg.gateway?.claude_slots ?? {}).filter(
+    ([slot, model]) =>
+      !(slot in CLAUDE_SLOT_ENV) || typeof model !== 'string' || !cfg.model_aliases?.includes(gatewayModelOf(model))
+  );
+  if (badSlots.length) {
+    problems.push(
+      `gateway.claude_slots ${badSlots.map(([slot, model]) => `${slot}=${String(model)}`).join(', ')} 不是可用的槽位或不在 model_aliases 里`
+    );
+  }
+  const badSelection = (cfg.assistants ?? []).filter(
+    (a) => a.claude_selection != null && !(CLAUDE_CODE_MODEL_IDS as readonly string[]).includes(a.claude_selection)
+  );
+  if (badSelection.length) {
+    problems.push(
+      `助手 ${badSelection.map((a) => a.id).join(', ')} 的 claude_selection 不在 Claude Code 的模型目录里（${CLAUDE_CODE_MODEL_IDS.join(' / ')}）`
     );
   }
   const claudeModel = cfg.gateway?.claude_model;
@@ -189,8 +216,9 @@ export const planWrites = (cfg: DeptConfig, current: CurrentState): PlannedWrite
     if (spec.agent_id && cur?.agent_id !== spec.agent_id) {
       assistantWrites.push({ kind: 'assistant.repoint', id: spec.id, agentId: spec.agent_id });
     }
-    if (spec.fixed_model && cur && cur.fixed_model !== spec.fixed_model) {
-      assistantWrites.push({ kind: 'assistant.pin_model', id: spec.id, model: spec.fixed_model });
+    const pin = pinnedModel(spec);
+    if (pin && cur && cur.fixed_model !== pin) {
+      assistantWrites.push({ kind: 'assistant.pin_model', id: spec.id, model: pin });
     }
     // 技能挂载（issue #14）：配置有值且与现状不同才写。undefined（没读到现状）
     // 也写——沉默不能冒充"已经挂好"。配置没写 enabled_skills = 不碰。

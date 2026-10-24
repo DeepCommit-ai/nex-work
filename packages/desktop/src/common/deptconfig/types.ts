@@ -37,6 +37,17 @@ export type AssistantSpec = {
    */
   fixed_model?: string | null;
   /**
+   * 只给这个 Claude Code 助手的上下文窗口（cynapse spec §18 / nex-work spec 014）：`1m` 或 `200k`。
+   * 仅作记录与排错；落实看 claude_selection。
+   */
+  context_window?: string | null;
+  /**
+   * 这个 Claude Code 助手的会话要选的 Claude Code 模型目录名（`opus`，spec 014）。
+   * 有值时它就是助手的默认模型（fixed_model 是给不认识它的旧客户端的网关别名）；
+   * 槽位对应的真实模型在 gateway.claude_slots 里。
+   */
+  claude_selection?: string | null;
+  /**
    * 按助手挂载的技能名集合（cynapse issue #14）。落成 aioncore 的
    * `enabled_skills`（PUT partial，实测生效）——会话工作区只物化这个集合。
    * 不写/null = 不碰（保持 aioncore 默认技能集）。服务端保证引用无 ghost、
@@ -62,6 +73,12 @@ export type GatewaySection = {
    * ANTHROPIC_MODEL and the alias variables; null or absent clears them.
    */
   claude_model?: string | null;
+  /**
+   * Slots mapped to a model of their own (spec 014), e.g. `{ "opus": "glm-5.3[1m]" }` (the `[1m]` marker
+   * gives Claude Code a 1M window): written as ANTHROPIC_DEFAULT_OPUS_MODEL while ANTHROPIC_MODEL stays on
+   * claude_model.
+   */
+  claude_slots?: Record<string, string> | null;
 };
 
 /** 服务端返回的一份部门配置。 */
