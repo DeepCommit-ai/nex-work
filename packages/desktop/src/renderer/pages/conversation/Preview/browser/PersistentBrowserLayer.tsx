@@ -12,23 +12,50 @@ export const PersistentBrowserLayer: React.FC<{
 }> = ({ slot, activeTabId, activeConversationId, updateTab }) => {
   const entries = useSyncExternalStore(browserSessions.subscribe, browserSessions.getSnapshot);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  const hasActiveBrowser = entries.some(
+    ({ tab, owner, live }) =>
+      live && tab.id === activeTabId && (!activeConversationId || activeConversationId === owner)
+  );
   useLayoutEffect(() => {
-    if (!slot) {
+    if (!slot || !hasActiveBrowser) {
       setRect(null);
       return;
     }
-    const measure = () => setRect(slot.getBoundingClientRect());
+    let previous: DOMRect | null = null;
+    const measure = () => {
+      const next = slot.getBoundingClientRect();
+      if (
+        !previous ||
+        previous.left !== next.left ||
+        previous.top !== next.top ||
+        previous.width !== next.width ||
+        previous.height !== next.height
+      ) {
+        previous = next;
+        setRect(next);
+      }
+    };
     measure();
+    // Sibling panels and their transitions can move the slot without resizing
+    // it. ResizeObserver alone leaves the fixed guest at its previous position.
+    // Track just the visible viewport and only update React when bounds change.
+    let frame: number;
+    const trackPosition = () => {
+      measure();
+      frame = requestAnimationFrame(trackPosition);
+    };
+    frame = requestAnimationFrame(trackPosition);
     const observer = new ResizeObserver(measure);
     observer.observe(slot);
     window.addEventListener('resize', measure);
     window.addEventListener('scroll', measure, true);
     return () => {
+      cancelAnimationFrame(frame);
       observer.disconnect();
       window.removeEventListener('resize', measure);
       window.removeEventListener('scroll', measure, true);
     };
-  }, [slot]);
+  }, [slot, activeTabId, hasActiveBrowser]);
   const patch = (id: string, value: PreviewTabPatch) => {
     browserSessions.patch(id, value);
     updateTab(id, value);
@@ -48,7 +75,8 @@ export const PersistentBrowserLayer: React.FC<{
             <div
               key={tab.id}
               aria-hidden={!visible}
-              className='flex flex-col bg-bg-1'
+              data-browser-view={tab.id}
+              className='flex flex-col overflow-hidden bg-1'
               style={{
                 position: 'fixed',
                 left: visible ? rect!.left : -10000,

@@ -776,7 +776,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
       )}
       {/* Navigation bar (optional) */}
       {showNavBar && (
-        <div className='aion-url-viewer-toolbar flex items-center gap-6px h-40px px-10px bg-bg-2 border-b border-border-1 flex-shrink-0'>
+        <div className='aion-url-viewer-toolbar flex items-center gap-6px h-40px px-10px bg-2 border-b border-3 flex-shrink-0'>
           <button
             onClick={handleGoBack}
             disabled={!canGoBack}
@@ -811,7 +811,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
               <span className='toolbar-chip'>{Math.round(zoomFactor * 100)}%</span>
             </div>
           )}
-          <form onSubmit={handleUrlSubmit} className='flex-1 ms-2px'>
+          <form onSubmit={handleUrlSubmit} className='flex-1 min-w-0 ms-2px'>
             <input
               type='text'
               value={inputUrl}

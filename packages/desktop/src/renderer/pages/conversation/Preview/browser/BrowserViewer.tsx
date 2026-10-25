@@ -85,7 +85,7 @@ const BrowserViewer: React.FC<BrowserViewerProps> = ({
       browserControlActive={isControlTarget}
       onDirtyChange={onDirtyChange}
       showNavBar
-      className='bg-bg-1'
+      className='bg-1'
       resolveUrlInput={resolveAddressBarInput}
       onUrlChange={handleUrlChange}
       onTitleChange={handleTitleChange}

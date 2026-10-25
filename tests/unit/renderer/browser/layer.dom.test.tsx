@@ -20,6 +20,7 @@ afterEach(() => {
   browserSessions.clear();
   mounted.count = 0;
   mounted.unmounted = 0;
+  vi.unstubAllGlobals();
 });
 describe('persistent browser guests', () => {
   it('keeps both guests mounted through a conversation switch and panel collapse', () => {
@@ -52,5 +53,45 @@ describe('persistent browser guests', () => {
       <PersistentBrowserLayer slot={slot} activeTabId={a.id} activeConversationId='a' updateTab={() => {}} />
     );
     expect(view.getByTestId(a.id).parentElement?.style.left).toBe('20px');
+  });
+
+  it('follows position-only layout changes without remounting the page', () => {
+    let nextFrame: FrameRequestCallback | undefined;
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        nextFrame = callback;
+        return 1;
+      })
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const a = browserSessions.ensure('a');
+    const slot = document.createElement('div');
+    let bounds = new DOMRect(400, 80, 500, 600);
+    slot.getBoundingClientRect = () => bounds;
+    const view = render(<PersistentBrowserLayer slot={slot} activeTabId={a.id} updateTab={() => {}} />);
+    bounds = new DOMRect(660, 120, 500, 600);
+    act(() => nextFrame?.(16));
+    const layer = view.getByTestId(a.id).parentElement!;
+    expect([layer.style.left, layer.style.top]).toEqual(['660px', '120px']);
+    expect([mounted.count, mounted.unmounted]).toEqual([1, 0]);
+  });
+
+  it('stops tracking a hidden panel and remeasures before reopening it', () => {
+    const requestFrame = vi.fn(() => 42);
+    const cancelFrame = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', requestFrame);
+    vi.stubGlobal('cancelAnimationFrame', cancelFrame);
+    const a = browserSessions.ensure('a');
+    const slot = document.createElement('div');
+    let bounds = new DOMRect(400, 80, 500, 600);
+    slot.getBoundingClientRect = () => bounds;
+    const view = render(<PersistentBrowserLayer slot={slot} activeTabId={a.id} updateTab={() => {}} />);
+    view.rerender(<PersistentBrowserLayer slot={slot} activeTabId={null} updateTab={() => {}} />);
+    expect(cancelFrame).toHaveBeenCalledWith(42);
+    bounds = new DOMRect(700, 80, 350, 600);
+    view.rerender(<PersistentBrowserLayer slot={slot} activeTabId={a.id} updateTab={() => {}} />);
+    expect(view.getByTestId(a.id).parentElement?.style.left).toBe('700px');
+    expect([mounted.count, mounted.unmounted]).toEqual([1, 0]);
   });
 });
