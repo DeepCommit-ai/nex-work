@@ -147,7 +147,8 @@ export const buildMcpSpawnCommand = (deps: {
   browserUrl: string;
 }): { command: string; args: string[] } => {
   const mcpArgs = ['-y', `chrome-devtools-mcp@${deps.version}`, '--browser-url', deps.browserUrl];
+  // Match the runtime health probe and prevent cmd AutoRun from polluting stdio.
   return deps.platform === 'win32'
-    ? { command: 'cmd.exe', args: ['/c', 'npx', ...mcpArgs] }
+    ? { command: 'cmd.exe', args: ['/d', '/c', 'npx', ...mcpArgs] }
     : { command: 'npx', args: mcpArgs };
 };

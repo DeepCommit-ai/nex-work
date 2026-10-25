@@ -97,10 +97,10 @@ describe('buildMcpSpawnCommand — issue #3883', () => {
     expect(command).toBe('cmd.exe');
   });
 
-  it('routes through cmd.exe /c on Windows with npx as an argument', () => {
+  it('disables cmd AutoRun on Windows so it cannot corrupt the MCP protocol', () => {
     const { command, args } = buildMcpSpawnCommand({ platform: 'win32', version, browserUrl });
     expect(command).toBe('cmd.exe');
-    expect(args.slice(0, 2)).toEqual(['/c', 'npx']);
+    expect(args.slice(0, 3)).toEqual(['/d', '/c', 'npx']);
     expect(args).toContain(`chrome-devtools-mcp@${version}`);
   });
 

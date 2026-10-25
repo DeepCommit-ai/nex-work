@@ -325,7 +325,7 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
   });
   if (nodeResolution.source !== 'path') {
     console.warn(
-      '[Migration] PATH `node` is unusable; builtin browser MCP node command resolved to %s (source: %s)',
+      '[Migration] PATH Node/npx toolchain is unusable; builtin browser MCP node command resolved to %s (source: %s)',
       nodeResolution.command,
       nodeResolution.source
     );

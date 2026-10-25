@@ -14,8 +14,12 @@
  */
 
 import path from 'node:path';
+import * as childProcess from 'node:child_process';
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
-import { listManagedNodeCandidates, resolveMcpNodeCommand } from '@/process/utils/mcpNodeCommand';
+import { listManagedNodeCandidates, probeNodeWorks, resolveMcpNodeCommand } from '@/process/utils/mcpNodeCommand';
+
+vi.mock('node:child_process', () => ({ execFile: vi.fn() }));
 
 const fsWith = (entries: Record<string, string[] | true>) => ({
   existsSync: (p: string) => Object.prototype.hasOwnProperty.call(entries, p),
@@ -63,7 +67,7 @@ describe('resolveMcpNodeCommand', () => {
     [managedNode]: true,
   });
 
-  it('keeps the bare `node` when PATH node runs cleanly (zero upstream drift)', async () => {
+  it('keeps the bare `node` when the complete PATH toolchain runs cleanly', async () => {
     const probe = vi.fn().mockResolvedValue(true);
     await expect(
       resolveMcpNodeCommand({ runtimeNodeRoot: ROOT, probe, platform: 'darwin', fsImpl: managedFs })
@@ -90,5 +94,43 @@ describe('resolveMcpNodeCommand', () => {
     await expect(
       resolveMcpNodeCommand({ runtimeNodeRoot: ROOT, probe, platform: 'darwin', fsImpl: fsWith({}) })
     ).resolves.toEqual({ command: 'node', source: 'fallback' });
+  });
+});
+
+describe('probeNodeWorks', () => {
+  it.each([
+    { platform: 'win32', status: 1, error: undefined, usable: false },
+    { platform: 'linux', status: null, error: new Error('ENOENT'), usable: false },
+    { platform: 'win32', status: 0, error: undefined, usable: true },
+    { platform: 'darwin', status: 0, error: undefined, usable: true },
+  ])('requires a working npx on $platform (usable=$usable)', async ({ platform, status, error, usable }) => {
+    const spawnSync = vi.fn(() => ({ status, error }));
+    const exec = vi.mocked(childProcess.execFile).mockImplementation((...args: unknown[]) => {
+      const script = (args[1] as string[])[1];
+      const callback = args[3] as (error: Error | null) => void;
+      runInNewContext(script, {
+        require: (name: string) => (name === 'node:child_process' ? { spawnSync } : path),
+        process: {
+          execPath: path.join('/runtime', 'node'),
+          platform,
+          env: { Path: '/existing' },
+          exit: (code: number) => callback(code ? new Error('npx failed') : null),
+        },
+      });
+      return {} as childProcess.ChildProcess;
+    });
+    try {
+      await expect(probeNodeWorks('node')).resolves.toBe(usable);
+      expect(spawnSync).toHaveBeenCalledWith(
+        platform === 'win32' ? 'cmd.exe' : 'npx',
+        platform === 'win32' ? ['/d', '/c', 'npx', '--version'] : ['--version'],
+        expect.objectContaining({
+          env: { Path: path.join('/runtime') + path.delimiter + '/existing' },
+          windowsHide: true,
+        })
+      );
+    } finally {
+      exec.mockReset();
+    }
   });
 });

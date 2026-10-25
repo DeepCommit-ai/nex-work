@@ -15,7 +15,7 @@
  *
  * 解析阶梯（每次启动重算，跟内置 MCP 脚本路径的逐启动对齐是同一个模式）：
  *
- *   1. PATH 里的 `node` 能跑（`--version` 干净退出）→ 保持裸 `node`，与上游零漂移。
+ *   1. PATH 里的 `node` 及其 npx 启动链均可用 → 保持裸 `node`。
  *   2. 否则在 aioncore 的受管运行时目录（`<dataDir>/runtime/node/node-v<ver>-<plat>-<arch>`）
  *      里找能跑的 node，版本从高到低，写**绝对路径**。这正是 aioncore 自己 spawn
  *      MCP 时用的运行时，机器上有 aioncore 就有它。
@@ -34,11 +34,27 @@ export type NodeProbe = (command: string) => Promise<boolean>;
 
 type FsLike = Pick<typeof fs, 'existsSync' | 'readdirSync'>;
 
-/** Strict probe: usable only when `--version` exits cleanly. */
+// Exercise the same Node -> PATH-prepend -> npx chain as browserServer, without
+// downloading packages or starting a browser. A standalone node.exe is not a
+// complete MCP runtime (for example the Codex bundled runtime on Windows).
+const runtimeProbe = `
+const { spawnSync } = require('node:child_process');
+const { dirname, delimiter } = require('node:path');
+const env = { ...process.env };
+const key = Object.keys(env).find(k => k.toUpperCase() === 'PATH') || 'PATH';
+env[key] = dirname(process.execPath) + delimiter + (env[key] || '');
+const windows = process.platform === 'win32';
+const result = spawnSync(windows ? 'cmd.exe' : 'npx', windows ? ['/d', '/c', 'npx', '--version'] : ['--version'], {
+  env, timeout: 3000, windowsHide: true, stdio: 'ignore'
+});
+process.exit(result.error || result.status !== 0 ? 1 : 0);
+`;
+
+/** Usable only when Node and its actual npx launch chain both exit cleanly. */
 export const probeNodeWorks: NodeProbe = (command) =>
   new Promise((resolve) => {
     try {
-      execFile(command, ['--version'], { timeout: 3000 }, (error) => resolve(!error));
+      execFile(command, ['-e', runtimeProbe], { timeout: 6000, windowsHide: true }, (error) => resolve(!error));
     } catch {
       resolve(false);
     }
