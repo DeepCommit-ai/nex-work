@@ -7,6 +7,28 @@ import { tmpdir } from 'node:os';
 const projectRoot = resolve(__dirname, '../..');
 const itWithBash = spawnSync('bash', ['--version'], { encoding: 'utf8' }).status === 0 ? it : it.skip;
 
+/** WSL's legacy bash.exe launcher does not preserve positional arguments. */
+const usesWslBash =
+  process.platform === 'win32' &&
+  spawnSync('bash', ['-c', 'uname -s'], { encoding: 'utf8' }).stdout?.trim() === 'Linux';
+
+function runBashFixture(script: string, directories: string[]) {
+  const command =
+    'export MOCK_VERSION=1.0.0; script=$1; shift; dirs=("$@"); if command -v wslpath >/dev/null 2>&1; then for i in "${!dirs[@]}"; do dirs[$i]="$(wslpath -u "${dirs[$i]}")"; done; fi; bash "$script" "${dirs[@]}"';
+  const args = [
+    '-c',
+    command,
+    'release-fixture',
+    script,
+    ...directories.map((directory) => directory.replace(/\\/g, '/')),
+  ];
+  return spawnSync(usesWslBash ? 'wsl.exe' : 'bash', usesWslBash ? ['--exec', 'bash', ...args] : args, {
+    cwd: projectRoot,
+    env: process.env,
+    encoding: 'utf8',
+  });
+}
+
 function readProjectFile(path: string): string {
   return readFileSync(resolve(projectRoot, path), 'utf8');
 }
@@ -80,21 +102,12 @@ describe('release packaging configuration', () => {
     const outputDir = resolve(tempDir, 'release-assets');
 
     try {
-      const env = { ...process.env, MOCK_VERSION: '1.0.0' };
-      const createResult = spawnSync('bash', ['scripts/create-mock-release-artifacts.sh', artifactsDir], {
-        cwd: projectRoot,
-        env,
-        encoding: 'utf8',
-      });
-      expect(createResult.status).toBe(0);
+      const createResult = runBashFixture('scripts/create-mock-release-artifacts.sh', [artifactsDir]);
+      expect(createResult.status, createResult.stderr || createResult.stdout).toBe(0);
 
       rmSync(resolve(artifactsDir, 'macos-build-arm64', `${productName()}-1.0.0-mac-arm64.zip`), { force: true });
 
-      const prepareResult = spawnSync('bash', ['scripts/prepare-release-assets.sh', artifactsDir, outputDir], {
-        cwd: projectRoot,
-        env,
-        encoding: 'utf8',
-      });
+      const prepareResult = runBashFixture('scripts/prepare-release-assets.sh', [artifactsDir, outputDir]);
 
       expect(prepareResult.status).not.toBe(0);
       expect(`${prepareResult.stdout}\n${prepareResult.stderr}`).toContain('Missing macOS zip artifact');

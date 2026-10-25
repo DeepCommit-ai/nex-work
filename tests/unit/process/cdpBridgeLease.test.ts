@@ -126,7 +126,7 @@ describe('cdpBridge — one driving conversation, awake only while driving (spec
     // A new client cannot even discover the browser while the holder is active.
     const busy = await fetch(`http://127.0.0.1:${bridge.port}/json/version`);
     expect(busy.status).toBe(503);
-    expect(busy.statusText).toContain('another conversation');
+    expect(busy.statusText).toContain('another connection');
     await busy.text();
 
     // The holder keeps driving undisturbed.
@@ -187,6 +187,35 @@ describe('cdpBridge — one driving conversation, awake only while driving (spec
       expect(keepAwake.stop).toHaveBeenCalledTimes(1);
     } finally {
       timer.mockRestore();
+    }
+  });
+
+  it('keeps a long browser operation awake and exclusive beyond the idle lease interval', async () => {
+    const handle = bridge!;
+    handle.attach(70);
+    const page = contentsById.get(70)!;
+    const original = page.debugger.sendCommand;
+    let complete!: (result: Record<string, never>) => void;
+    const pending = new Promise<Record<string, never>>((resolve) => {
+      complete = resolve;
+    });
+    page.debugger.sendCommand = async (method) => (method === 'Runtime.evaluate' ? pending : {});
+    const a = await connect(handle.port, handle.token);
+    try {
+      const operation = request(a.ws, 'Runtime.evaluate');
+      await sleep(400);
+      expect(page.throttling.at(-1)).toBe(false);
+      const b = await connect(handle.port, handle.token);
+      expect((await request(b.ws, 'Page.navigate')).error?.message).toBe(BROWSER_BUSY_MESSAGE);
+      await b.closed;
+      complete({});
+      expect((await operation).result).toEqual({});
+    } finally {
+      complete({});
+      page.debugger.sendCommand = original;
+      a.ws.close();
+      await a.closed;
+      await sleep(30);
     }
   });
 

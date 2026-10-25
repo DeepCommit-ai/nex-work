@@ -127,3 +127,46 @@ export const isBrowserMcpSettled = (messageType: string, data: unknown): boolean
 
   return entries.every((entry) => !IN_FLIGHT_STATUSES.has(String(entry.status)));
 };
+
+/** Whole-turn activity for page retention, distinct from one tool or thinking segment. */
+export function browserTaskRunningState(messageType: string, data: unknown): boolean | undefined {
+  if (messageType === 'finish' || messageType === 'error') return false;
+  const statusOf = (value: unknown): string | undefined => {
+    if (!value || typeof value !== 'object') return undefined;
+    const status = (value as { status?: unknown }).status;
+    return typeof status === 'string' ? status.toLowerCase().replaceAll('-', '_') : undefined;
+  };
+  const status = statusOf(data);
+  if (messageType === 'agent_status') {
+    if (
+      [
+        'running',
+        'thinking',
+        'processing',
+        'starting',
+        'cancelling',
+        'waiting_confirmation',
+        'awaiting_confirmation',
+      ].includes(status ?? '')
+    )
+      return true;
+    if (
+      ['idle', 'done', 'completed', 'finished', 'stopped', 'error', 'disconnected', 'cancelled'].includes(status ?? '')
+    )
+      return false;
+    // connected/authenticated/session_active describe the CLI connection, not
+    // whether the current model turn has completed.
+    return undefined;
+  }
+  if (messageType === 'thinking') return status === 'done' ? undefined : true;
+  if (['start', 'thought', 'permission', 'acp_permission', 'ask'].includes(messageType)) return true;
+  if (['tool_call', 'acp_tool_call', 'tool_group'].includes(messageType)) {
+    const entries = Array.isArray(data) ? data : [data];
+    return entries.some((entry) =>
+      ['running', 'in_progress', 'executing', 'pending', 'confirming'].includes(statusOf(entry) ?? '')
+    )
+      ? true
+      : undefined;
+  }
+  return undefined;
+}

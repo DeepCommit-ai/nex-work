@@ -4,8 +4,16 @@ import path from 'node:path';
 import { provisionGateway } from '@process/services/managedagents/install';
 import type { BackendCall } from '@process/services/managedagents/backend';
 import { configFixture } from './managedFixture';
+import { expandLeadingTilde } from '@/common/gateway/provisionGateway';
 
 describe('managed Claude configuration', () => {
+  it('expands Windows profiles without mixed separators and preserves POSIX names', () => {
+    expect(expandLeadingTilde('~/profile/config', 'C:\\Users\\employee\\')).toBe(
+      'C:\\Users\\employee\\profile\\config'
+    );
+    expect(expandLeadingTilde('~\\profile', '\\\\server\\home\\employee')).toBe('\\\\server\\home\\employee\\profile');
+    expect(expandLeadingTilde('~/literal\\name', '/home/employee')).toBe('/home/employee/literal\\name');
+  });
   it.each([
     { provided: undefined, existing: '/profiles/current', expected: '/profiles/current' },
     { provided: undefined, existing: undefined, expected: path.join(os.homedir(), '.nexwork-runtime') },

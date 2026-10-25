@@ -4,12 +4,14 @@ import path from 'node:path';
 import type { BackendCall } from '@/process/services/managedagents/backend';
 import { prepareNexworkClaudeProfile } from '@/branding/assistants/claudeProfile';
 import { prepareManagedConversation, setManagedCatalogIds } from '@/common/deptconfig/managedConversation';
+import { makeUnavailableSkillMount } from './managedSkillMountProbe';
 
 /** Controlled responses exercise the real engine's tool execution, without a paid model call. */
 export async function runManagedModelProbe(
   api: BackendCall,
   directory: string,
-  engine: 'aion' | 'claude' = 'aion'
+  engine: 'aion' | 'claude' = 'aion',
+  prepareRuntime?: (conversationId: string) => Promise<number>
 ): Promise<void> {
   const traffic: unknown[] = [];
   const results = new Set<string>();
@@ -31,7 +33,9 @@ export async function runManagedModelProbe(
     traffic.push({ system: body.system, toolNames, previous });
     const operation =
       engine === 'claude'
-        ? undefined
+        ? previous.length === 0
+          ? 'Skill'
+          : undefined
         : previous.length === 0
           ? 'register_agent'
           : previous.length === 1
@@ -39,14 +43,16 @@ export async function runManagedModelProbe(
             : undefined;
     const name = operation ? toolNames.find((name) => name.endsWith(operation)) : undefined;
     const input =
-      operation === 'register_agent'
-        ? {
-            id: 'dialogue-created',
-            name: '对话创建的助手',
-            rules: '帮助用户整理会议资料。',
-            request_id: 'dialogue-create-001',
-          }
-        : { title: '来自管家的联调 Bug', description: '验证真实 Aion 工具调用。', request_id: 'dialogue-bug-001' };
+      operation === 'Skill'
+        ? { skill: JSON.stringify(body.system).match(/officecli-docx-nw-[a-f0-9]{12}/)?.[0] ?? 'missing-probe-skill' }
+        : operation === 'register_agent'
+          ? {
+              id: 'dialogue-created',
+              name: '对话创建的助手',
+              rules: '帮助用户整理会议资料。',
+              request_id: 'dialogue-create-001',
+            }
+          : { title: '来自管家的联调 Bug', description: '验证真实 Aion 工具调用。', request_id: 'dialogue-bug-001' };
     const block = name
       ? { type: 'tool_use', id: `probe_${operation}`, name, input }
       : { type: 'text', text: 'Management probe complete.' };
@@ -143,16 +149,30 @@ export async function runManagedModelProbe(
     if (project.explorer.entries.find((entry) => entry.role === 'workspace')?.display_path !== workspace)
       throw new Error(`${engine} project binding differs from its workspace`);
     console.log(`PASS: ${engine} branded workspace, native skills, temporary flag and project binding`);
+    if (engine === 'claude' && prepareRuntime) {
+      const unavailable = makeUnavailableSkillMount(workspace);
+      const repaired = await prepareRuntime(conversation.id);
+      if (unavailable && (repaired !== 1 || !existsSync(path.join(unavailable, 'SKILL.md'))))
+        throw new Error('The desktop preflight did not repair the selected unavailable Windows mount');
+      console.log('PASS: selected Windows mount read failure recovered before starting the real model turn');
+    }
     await api('POST', `/api/conversations/${conversation.id}/messages`, {
       content: '创建并注册测试助手，然后提交测试 Bug。',
     });
-    for (let i = 0; i < 120 && (engine === 'aion' ? results.size < 2 : traffic.length === 0); i++) await Bun.sleep(500);
+    for (let i = 0; i < 120 && (engine === 'aion' ? results.size < 2 : results.size === 0); i++) await Bun.sleep(500);
     writeFileSync(path.join(directory, engine + '-model-traffic.json'), JSON.stringify(traffic, null, 2));
     if (engine === 'claude') {
       const serialized = JSON.stringify(traffic);
       if (!serialized.includes('你是 NexWork 办公助手') || !serialized.includes('officecli-docx-nw-'))
         throw new Error('Claude did not receive the published Office prompt and versioned skills');
       if (serialized.includes('你是 NexWork 管家')) throw new Error('Claude received the Butler role');
+      if (
+        ![...results].some((result) => result.includes('Launching skill: officecli-docx-nw-')) ||
+        [...results].some((result) => result.includes('Unknown skill') || result.includes('"is_error":true'))
+      )
+        throw new Error(
+          'Bundled Claude could not invoke its published workspace skill: ' + JSON.stringify([...results])
+        );
       console.log('PASS: bundled Claude Code received the published Office prompt and versioned skills');
       return;
     }

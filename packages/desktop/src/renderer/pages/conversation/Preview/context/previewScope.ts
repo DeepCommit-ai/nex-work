@@ -18,6 +18,7 @@
  *
  * Pure: no React, no I/O — so it is trivially unit-testable in isolation.
  */
+import { browserSessions } from '../browser/browserSessions';
 export type PreviewScopeKey = string | null;
 
 /**
@@ -69,6 +70,7 @@ export const listPersistedPreviewScopeKeys = (): string[] => {
  * Nothing cleaned them up before — the logout sweep only matched auth/csrf/token.
  */
 export const clearPersistedPreviewScopes = (): void => {
+  browserSessions.clear();
   try {
     listPersistedPreviewScopeKeys().forEach((key) => localStorage.removeItem(key));
   } catch {

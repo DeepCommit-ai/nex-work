@@ -11,6 +11,7 @@ import {
   assertManagedEngineEditAllowed,
   prepareManagedConversation,
   waitForManagedCatalog,
+  prepareManagedRuntime,
 } from '@/common/deptconfig/managedConversation';
 
 // ---------------------------------------------------------------------------
@@ -243,6 +244,7 @@ async function executeHttpRequest<T>(
   options?: HttpRequestOptions
 ): Promise<T> {
   assertManagedEngineEditAllowed(method, path, body);
+  await prepareManagedRuntime(method, path);
   body = await prepareManagedConversation(method, path, body, (route) => httpRequest('GET', route));
   if (path === '/api/assistants/default-assistant' && method === 'DELETE') throw new Error('MANAGED_DEFAULT_REQUIRED');
   if (path === '/api/assistants/default-assistant/state' && method === 'PATCH' && body && typeof body === 'object')

@@ -18,6 +18,9 @@ export interface BrowserViewerProps {
   url: string;
   /** 所属 preview tab 的 id / Id of the owning preview tab */
   tabId: string;
+  conversationId?: string;
+  isControlTarget?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
   /** 地址变化时回写 tab（用于持久化）/ Persist the new address back onto the tab */
   onUrlChange: (tabId: string, url: string) => void;
   /** 页面标题变化时回写 tab / Persist the page title back onto the tab */
@@ -39,7 +42,16 @@ export interface BrowserViewerProps {
  * the address bar, and writing address/title/favicon back onto the owning tab so
  * the browser can be restored after a restart.
  */
-const BrowserViewer: React.FC<BrowserViewerProps> = ({ url, tabId, onUrlChange, onTitleChange, onFaviconChange }) => {
+const BrowserViewer: React.FC<BrowserViewerProps> = ({
+  url,
+  tabId,
+  conversationId,
+  isControlTarget = true,
+  onDirtyChange,
+  onUrlChange,
+  onTitleChange,
+  onFaviconChange,
+}) => {
   const handleUrlChange = useCallback((next: string) => onUrlChange(tabId, next), [tabId, onUrlChange]);
 
   const handleTitleChange = useCallback(
@@ -69,6 +81,9 @@ const BrowserViewer: React.FC<BrowserViewerProps> = ({ url, tabId, onUrlChange, 
     <WebviewHost
       url={url || BROWSER_BLANK_URL}
       partition={BROWSER_SESSION_PARTITION}
+      browserConversationId={conversationId}
+      browserControlActive={isControlTarget}
+      onDirtyChange={onDirtyChange}
       showNavBar
       className='bg-bg-1'
       resolveUrlInput={resolveAddressBarInput}

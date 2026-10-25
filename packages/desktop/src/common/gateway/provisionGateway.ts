@@ -36,10 +36,12 @@ const findEntry = (entries: readonly EnvEntry[], name: string): EnvEntry | undef
  */
 export const expandLeadingTilde = (path: string, home: string): string => {
   const trimmed = path.trim();
-  if (trimmed !== '~' && !trimmed.startsWith('~/')) return trimmed;
-  const base = home.trim().replace(/\/+$/, '');
+  const windowsHome = home.includes('\\');
+  if (trimmed !== '~' && !trimmed.startsWith('~/') && !(windowsHome && trimmed.startsWith('~\\'))) return trimmed;
+  const base = home.trim().replace(/[\\/]+$/, '');
   if (!base) return trimmed;
-  return trimmed === '~' ? base : `${base}${trimmed.slice(1)}`;
+  const suffix = windowsHome ? trimmed.slice(1).replace(/\//g, '\\') : trimmed.slice(1);
+  return trimmed === '~' ? base : `${base}${suffix}`;
 };
 
 /** Normalize the former product-owned default while preserving custom profiles. */

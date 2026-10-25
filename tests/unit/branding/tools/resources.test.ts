@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildNexworkSkills } from '@/branding/tools/resources';
 import { runInNewContext } from 'node:vm';
+import path from 'node:path';
 import { localBundleMetadata, localAppBootstrap } from '../../../../packages/desktop/src/branding/tools/localApp.mjs';
 import { SKILL_NAMES, renameMcpConfig } from '@/branding/tools/policy';
 
@@ -67,12 +68,13 @@ describe('branded local launch mode', () => {
       },
     };
     let loaded = false;
-    runInNewContext(localAppBootstrap('/repo with spaces'), {
+    const root = path.resolve('repo with spaces');
+    runInNewContext(localAppBootstrap(root), {
       require(name: string) {
         if (name === 'electron') return { app };
-        if (name === '/repo with spaces/package.json') return { version: '2.1.61' };
-        expect(app).toMatchObject({ isPackaged: false, appPath: '/repo with spaces', version: '2.1.61' });
-        loaded = name === '/repo with spaces/out/main/index.js';
+        if (name === path.join(root, 'package.json')) return { version: '2.1.61' };
+        expect(app).toMatchObject({ isPackaged: false, appPath: root, version: '2.1.61' });
+        loaded = name === path.join(root, 'out/main/index.js');
         return {};
       },
     });

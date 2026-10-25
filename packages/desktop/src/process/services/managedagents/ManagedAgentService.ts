@@ -18,6 +18,7 @@ import { CatalogRestorationError, installCatalog } from './install';
 import { installManagedSkills, sha256, writeManagedJson } from './files';
 import { readCatalogEvents } from './events';
 import { ConversationLeases } from './ConversationLeases';
+import { prepareWorkspaceSkills } from './workspaceSkills';
 
 type Credentials = { serverUrl: string; deptKey: string };
 type Dependencies = {
@@ -68,6 +69,72 @@ function normalizeCredentials(input: Credentials): Credentials {
 }
 
 export class ManagedAgentService {
+  private runtimePreparations = new Map<string, Promise<number>>();
+  private pendingSkillReload = new Set<string>();
+  /** The host obtains workspace and selected skills from the conversation, never from IPC input. */
+  async prepareRuntime(conversationId: string): Promise<number> {
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(conversationId)) throw new Error('Invalid conversation identifier');
+    const existing = this.runtimePreparations.get(conversationId);
+    if (existing) return existing;
+    const preparing = this.prepareRuntimeOnce(conversationId);
+    this.runtimePreparations.set(conversationId, preparing);
+    try {
+      return await preparing;
+    } finally {
+      if (this.runtimePreparations.get(conversationId) === preparing) this.runtimePreparations.delete(conversationId);
+    }
+  }
+
+  private async prepareRuntimeOnce(conversationId: string): Promise<number> {
+    type Runtime = { has_task?: boolean; state?: string; is_processing?: boolean; pending_confirmations?: number };
+    const conversation = await this.deps.backend<{
+      type?: string;
+      extra?: { backend?: string; workspace?: string; skills?: string[]; teamId?: string; slot_id?: string };
+      runtime?: Runtime;
+    }>('GET', `/api/conversations/${encodeURIComponent(conversationId)}`);
+    // Aion/Codex/etc. have their own native skill directories, even when they
+    // happen to share a workspace containing a historical .claude directory.
+    if (conversation.type !== 'acp' || conversation.extra?.backend !== 'claude') return 0;
+    const workspace = conversation.extra?.workspace;
+    if (!workspace) return 0;
+    const needsRepair = prepareWorkspaceSkills(
+      workspace,
+      conversation.extra?.skills ?? [],
+      this.deps.skillsRoot,
+      process.platform,
+      true
+    );
+    if (!needsRepair && !this.pendingSkillReload.has(conversationId)) return 0;
+    const assertIdle = (runtime?: Runtime) => {
+      if (runtime && (runtime.state !== 'idle' || runtime.is_processing || (runtime.pending_confirmations ?? 0) > 0))
+        throw new Error(
+          'The selected skill needs repair. Wait for this conversation current turn or approval to finish, then retry.'
+        );
+    };
+    assertIdle(conversation.runtime);
+    const repaired = prepareWorkspaceSkills(workspace, conversation.extra?.skills ?? [], this.deps.skillsRoot);
+    if (repaired > 0) this.pendingSkillReload.add(conversationId);
+    // Claude caches missing skills for the lifetime of its process. Repairing
+    // files alone cannot recover an already-warm conversation.
+    const latest = await this.deps.backend<{ runtime?: Runtime }>(
+      'GET',
+      `/api/conversations/${encodeURIComponent(conversationId)}`
+    );
+    assertIdle(latest.runtime);
+    if (latest.runtime?.has_task) {
+      const team = conversation.extra?.teamId;
+      const slot = conversation.extra?.slot_id;
+      if (team && !slot)
+        throw new Error('The selected skill was repaired; its team runtime must be refreshed before retrying.');
+      const route =
+        team && slot
+          ? `/api/teams/${encodeURIComponent(team)}/agents/${encodeURIComponent(slot)}/runtime/restart`
+          : `/api/conversations/${encodeURIComponent(conversationId)}/runtime/restart`;
+      await this.deps.backend('POST', route);
+    }
+    this.pendingSkillReload.delete(conversationId);
+    return repaired;
+  }
   private status: ManagedSyncStatus = {
     phase: 'idle',
     push: 'disconnected',

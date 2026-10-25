@@ -41,7 +41,6 @@ import OfficeDocPreview from '../viewers/OfficeDocViewer';
 import PptViewer from '../viewers/PptViewer';
 import CodeEditor from '../editors/CodeEditor';
 import URLViewer from '../viewers/URLViewer';
-import BrowserTabLayer from '../../browser/BrowserTabLayer';
 import { MAX_BROWSER_TABS } from '../../browser/constants';
 import {
   PreviewTabs,
@@ -102,10 +101,10 @@ const PreviewPanel: React.FC = () => {
     tabsWithUpdate,
     clearTabUpdate,
     addDomSnippet,
-    updateTab,
     openBrowserTab,
     browserTabLimitHitAt,
     persistQuotaExceededAt,
+    setBrowserSlot,
   } = usePreviewContext();
   const layout = useLayoutContext();
 
@@ -1272,7 +1271,11 @@ const PreviewPanel: React.FC = () => {
 
         {/* 浏览器层：常驻挂载，切 tab 不重新加载页面
             Browser layer: always mounted so tab switches don't reload pages */}
-        <BrowserTabLayer browserTabs={browserTabs} activeTabId={activeTabId} updateTab={updateTab} />
+        <div
+          ref={setBrowserSlot}
+          className='relative flex-1 overflow-hidden'
+          style={{ display: browserTabs.some((tab) => tab.id === activeTabId) ? undefined : 'none' }}
+        />
 
         {/* Tab 右键菜单 / Tab context menu */}
         {/* eslint-disable-next-line max-len */}

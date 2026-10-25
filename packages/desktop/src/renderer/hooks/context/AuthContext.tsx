@@ -1,5 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { PREVIEW_SCOPE_KEY_PREFIX } from '@/renderer/pages/conversation/Preview/context/previewScope';
+import {
+  PREVIEW_SCOPE_KEY_PREFIX,
+  clearPersistedPreviewScopes,
+} from '@/renderer/pages/conversation/Preview/context/previewScope';
 import { refreshSession } from '@/common/adapter/sessionRefresh';
 // M6: CSRF removed with legacy webserver — stub functions for compatibility, re-implement in M7
 const withCsrfToken = <T extends Record<string, unknown>>(data: T): T => data;
@@ -55,6 +58,7 @@ const isDesktopRuntime = typeof window !== 'undefined' && Boolean(window.electro
 // 清除过期的认证缓存，包括 Cookie 和 localStorage
 function clearAuthCache(): void {
   if (typeof window === 'undefined') return;
+  clearPersistedPreviewScopes();
 
   try {
     // Clear CSRF cookie

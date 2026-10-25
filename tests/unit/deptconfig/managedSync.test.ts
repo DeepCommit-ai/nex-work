@@ -6,11 +6,107 @@ import { ManagedAgentService } from '@process/services/managedagents/ManagedAgen
 import { CatalogRestorationError } from '@process/services/managedagents/install';
 import type { BackendCall } from '@process/services/managedagents/backend';
 import { configFixture } from './managedFixture';
+import * as skillMounts from '@process/services/managedagents/workspaceSkills';
 
 const cleanup: Array<() => void> = [];
 afterEach(() => {
   cleanup.splice(0).forEach((run) => run());
   vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+describe('native skill preflight engine boundaries', () => {
+  it('does not inspect or change Claude mounts for an Aion native conversation', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'managed-engine-boundary-'));
+    cleanup.push(() => rmSync(root, { recursive: true, force: true }));
+    writeFileSync(path.join(root, '.claude'), 'An unrelated, user-owned file');
+    const backend: BackendCall = async <T>() =>
+      ({ type: 'acp', extra: { backend: 'aion', workspace: root, skills: ['review-nw-0123456789ab'] } }) as T;
+    const service = new ManagedAgentService({
+      backend,
+      dataDir: root,
+      skillsRoot: path.join(root, 'skills', 'aaaaaaaaaaaaaaaa'),
+    });
+    expect(await service.prepareRuntime('aion-conversation')).toBe(0);
+  });
+
+  it('rejects an invalid identifier without making a backend request', async () => {
+    const backend = vi.fn<BackendCall>();
+    const service = new ManagedAgentService({ backend, dataDir: os.tmpdir(), skillsRoot: os.tmpdir() });
+    await expect(service.prepareRuntime('../other-conversation')).rejects.toThrow('Invalid conversation identifier');
+    expect(backend).not.toHaveBeenCalled();
+  });
+});
+
+describe('warm Claude skill recovery', () => {
+  const setupRuntime = (state = 'idle', team = false) => {
+    let broken = true;
+    let runtime = {
+      has_task: true,
+      state,
+      is_processing: state === 'running',
+      pending_confirmations: state === 'waiting_confirmation' ? 1 : 0,
+    };
+    const mounts = vi
+      .spyOn(skillMounts, 'prepareWorkspaceSkills')
+      .mockImplementation((_workspace, _names, _root, _platform, inspectOnly) => {
+        if (inspectOnly) return broken ? 1 : 0;
+        const repaired = broken ? 1 : 0;
+        broken = false;
+        return repaired;
+      });
+    const restart = vi.fn(async (_route: string) => undefined);
+    const backend: BackendCall = async <T>(method: string, route: string) => {
+      if (method === 'POST') return (await restart(route)) as T;
+      return {
+        type: 'acp',
+        extra: {
+          backend: 'claude',
+          workspace: os.tmpdir(),
+          skills: ['review-nw-0123456789ab'],
+          ...(team ? { teamId: 'team', slot_id: 'slot' } : {}),
+        },
+        runtime,
+      } as T;
+    };
+    return {
+      service: new ManagedAgentService({ backend, dataDir: os.tmpdir(), skillsRoot: os.tmpdir() }),
+      mounts,
+      restart,
+      setIdle: () => {
+        runtime = { has_task: true, state: 'idle', is_processing: false, pending_confirmations: 0 };
+      },
+      isBroken: () => broken,
+    };
+  };
+
+  it('rebuilds an idle cached Claude once when concurrent messages request recovery', async () => {
+    const f = setupRuntime();
+    expect(await Promise.all([f.service.prepareRuntime('warm'), f.service.prepareRuntime('warm')])).toEqual([1, 1]);
+    expect(f.restart).toHaveBeenCalledTimes(1);
+    expect(f.isBroken()).toBe(false);
+  });
+
+  it('does not replace mounts or interrupt a turn waiting for approval', async () => {
+    const f = setupRuntime('waiting_confirmation');
+    await expect(f.service.prepareRuntime('warm')).rejects.toThrow('approval to finish');
+    expect([f.isBroken(), f.restart.mock.calls.length]).toEqual([true, 0]);
+    f.setIdle();
+    expect(await f.service.prepareRuntime('warm')).toBe(1);
+  });
+
+  it('retries a failed runtime rebuild even though the copied skill is now readable', async () => {
+    const f = setupRuntime();
+    f.restart.mockRejectedValueOnce(new Error('Restart failed'));
+    await expect(f.service.prepareRuntime('warm')).rejects.toThrow('Restart failed');
+    expect(await f.service.prepareRuntime('warm')).toBe(0);
+    expect(f.restart).toHaveBeenCalledTimes(2);
+  });
+  it('refreshes a team-owned runtime through its team slot without resetting the conversation', async () => {
+    const f = setupRuntime('idle', true);
+    await f.service.prepareRuntime('team-conversation');
+    expect(f.restart).toHaveBeenCalledWith('/api/teams/team/agents/slot/runtime/restart');
+  });
 });
 
 function setup(stored = false) {

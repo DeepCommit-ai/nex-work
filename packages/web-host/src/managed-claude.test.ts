@@ -36,7 +36,7 @@ afterEach(() => {
 describe('layout derivation', () => {
   it('derives bundled-claude as a sibling of bundled-aioncore — the one layout all three distributions share', () => {
     expect(deriveClaudeBinaryPath('/app/resources/bundled-aioncore/linux-x64/aioncore', 'linux', 'x64')).toBe(
-      '/app/resources/bundled-claude/linux-x64/claude'
+      path.resolve('/app/resources/bundled-claude/linux-x64/claude')
     );
     expect(deriveClaudeBinaryPath('/app/resources/bundled-aioncore/win32-x64/aioncore.exe', 'win32', 'x64')).toBe(
       path.resolve('/app/resources/bundled-claude/win32-x64/claude.exe')
@@ -148,15 +148,16 @@ describe('provisionManagedClaude', () => {
 describe('expandConfigDirTilde', () => {
   it('展开字面 ~ 的 CLAUDE_CONFIG_DIR,其他条目原样', async () => {
     const { expandConfigDirTilde } = await import('./managed-claude.js');
+    const home = path.resolve('staff home');
     const { env, changed } = expandConfigDirTilde(
       [
         { name: 'CLAUDE_CONFIG_DIR', value: '~/.nexwork-runtime' },
         { name: 'ANTHROPIC_BASE_URL', value: 'http://127.0.0.1:54000' },
       ],
-      '/home/emp'
+      home
     );
     expect(changed).toBe(true);
-    expect(env[0].value).toBe('/home/emp/.nexwork-runtime');
+    expect(env[0].value).toBe(path.join(home, '.nexwork-runtime'));
     expect(env[1].value).toBe('http://127.0.0.1:54000');
   });
 
@@ -180,7 +181,7 @@ describe('resolveBundledClaudeCandidates', () => {
       '/repo'
     );
     expect(candidates).toEqual([
-      '/app/resources/bundled-claude/linux-x64/claude',
+      path.resolve('/app/resources/bundled-claude/linux-x64/claude'),
       path.resolve('/repo', 'resources', 'bundled-claude', 'linux-x64', 'claude'),
     ]);
   });
@@ -301,18 +302,19 @@ describe('managed profile migration', () => {
   });
   it('normalizes legacy overrides without changing other environment entries', async () => {
     const { expandConfigDirTilde } = await import('./managed-claude');
+    const home = path.resolve('staff home');
     expect(
       expandConfigDirTilde(
         [
           { name: 'CLAUDE_CONFIG_DIR', value: '~/.nexwork-claude' },
           { name: 'TOKEN', value: 'test' },
         ],
-        '/staff'
+        home
       )
     ).toEqual({
       changed: true,
       env: [
-        { name: 'CLAUDE_CONFIG_DIR', value: '/staff/.nexwork-runtime' },
+        { name: 'CLAUDE_CONFIG_DIR', value: path.join(home, '.nexwork-runtime') },
         { name: 'TOKEN', value: 'test' },
       ],
     });
@@ -353,7 +355,7 @@ describe('bundled Python (spec 011)', () => {
     expect(
       resolveBundledPythonCandidates('/app/resources/bundled-aioncore/linux-x64/aioncore', 'linux', 'x64', '/repo')
     ).toEqual([
-      '/app/resources/bundled-python/linux-x64/bin/python3',
+      path.resolve('/app/resources/bundled-python/linux-x64/bin/python3'),
       path.resolve('/repo', 'resources', 'bundled-python', 'linux-x64', 'bin', 'python3'),
     ]);
   });

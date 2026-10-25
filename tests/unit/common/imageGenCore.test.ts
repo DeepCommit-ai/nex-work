@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { join, resolve as pathResolve } from 'node:path';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve as pathResolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { processImageUri, saveGeneratedImage, executeImageGeneration } from '@/common/chat/imageGenCore';
 
@@ -28,6 +28,17 @@ function createNonImageFile(dir: string, name: string): string {
   const filePath = join(dir, name);
   writeFileSync(filePath, 'hello world');
   return filePath;
+}
+
+/** Windows directory Junctions exercise realpath boundaries without requiring Developer Mode. */
+function createImageAlias(workspace: string, target: string, name: string): string {
+  if (process.platform === 'win32') {
+    const directory = `${name}-directory`;
+    symlinkSync(dirname(target), join(workspace, directory), 'junction');
+    return join(directory, basename(target));
+  }
+  symlinkSync(target, join(workspace, name));
+  return name;
 }
 
 afterEach(() => {
@@ -147,26 +158,31 @@ describe('processImageUri', () => {
     // realpath must reveal the escape and block the read.
     const outsideDir = createWorkspace();
     const secretImg = createImageFile(outsideDir, 'secret.png');
-    symlinkSync(secretImg, join(ws, 'linked.png'));
+    const alias = createImageAlias(ws, secretImg, 'linked.png');
+    expect(realpathSync(join(ws, alias))).toBe(realpathSync(secretImg));
 
-    await expect(processImageUri('linked.png', ws)).rejects.toThrow('Path traversal blocked');
+    await expect(processImageUri(alias, ws)).rejects.toThrow('Path traversal blocked');
   });
 
   it('should block a symlinked directory inside the workspace that points outside', async () => {
     const ws = createWorkspace();
     const outsideDir = createWorkspace();
-    createImageFile(outsideDir, 'secret.png');
-    symlinkSync(outsideDir, join(ws, 'linked-dir'), 'dir');
+    const secret = createImageFile(outsideDir, 'secret.png');
+    symlinkSync(outsideDir, join(ws, 'linked-dir'), process.platform === 'win32' ? 'junction' : 'dir');
+    expect(realpathSync(join(ws, 'linked-dir', 'secret.png'))).toBe(realpathSync(secret));
 
     await expect(processImageUri('linked-dir/secret.png', ws)).rejects.toThrow('Path traversal blocked');
   });
 
   it('should allow a symlink inside the workspace that stays inside', async () => {
     const ws = createWorkspace();
-    const imgPath = createImageFile(ws, 'real.png');
-    symlinkSync(imgPath, join(ws, 'alias.png'));
+    const images = join(ws, 'images');
+    mkdirSync(images);
+    const imgPath = createImageFile(images, 'real.png');
+    const alias = createImageAlias(ws, imgPath, 'alias.png');
+    expect(realpathSync(join(ws, alias))).toBe(realpathSync(imgPath));
 
-    const result = await processImageUri('alias.png', ws);
+    const result = await processImageUri(alias, ws);
 
     expect(result).toBeDefined();
     expect(result!.type).toBe('image_url');

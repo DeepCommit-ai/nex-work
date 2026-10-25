@@ -11,8 +11,11 @@ import { chatFileRefKey, isChatFileRef } from '@/common/types/chatFile';
 import { emitter } from '@/renderer/utils/emitter';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BROWSER_BLANK_URL, BROWSER_TAB_FALLBACK_TITLE, MAX_BROWSER_TABS } from '../browser/constants';
-import { isBrowserMcpActivity, isBrowserMcpSettled } from '../browser/agentActivity';
+import { browserTaskRunningState, isBrowserMcpActivity, isBrowserMcpSettled } from '../browser/agentActivity';
 import { maybeNotifyFirstAgentBrowserUse } from '../browser/firstUseNotice';
+import { browserSessions } from '../browser/browserSessions';
+import { PersistentBrowserLayer } from '../browser/PersistentBrowserLayer';
+import { useCurrentConversation } from '../../explorer/currentConversationStore';
 import { listPersistedPreviewScopeKeys, previewScopeStorageKey, type PreviewScopeKey } from './previewScope';
 import { peKey } from '@/renderer/pages/conversation/explorer/explorerModel';
 import { reflessTabKey } from './reflessTabKey';
@@ -29,6 +32,7 @@ export interface DomSnippet {
 }
 
 export interface PreviewMetadata {
+  browserConversationId?: string;
   language?: string;
   title?: string;
   diff?: string;
@@ -132,6 +136,7 @@ export interface PreviewContextValue {
    * Open a browser tab; blank page when url is omitted.
    */
   openBrowserTab: (url?: string) => void;
+  setBrowserSlot: (slot: HTMLElement | null) => void;
   closePreview: () => void;
   /** 切换最大化 / Toggle maximized. */
   toggleMaximized: () => void;
@@ -184,7 +189,7 @@ export interface PreviewContextValue {
   clearTabUpdate: (tabId: string) => void;
   findPreviewTab: (type: PreviewContentType, content?: string, metadata?: PreviewMetadata) => PreviewTab | null; // 查找匹配的 tab
   closePreviewByIdentity: (type: PreviewContentType, content?: string, metadata?: PreviewMetadata) => void; // 根据内容关闭指定 tab
-  closePreviewIfScopeChanged: (scopeKey: PreviewScopeKey) => void; // 切换隔离 scope(project;见 previewScope.ts):持久化旧 scope、恢复新 scope 的 tabs+可见性(per-project)
+  closePreviewIfScopeChanged: (scopeKey: PreviewScopeKey, conversationId?: string | null) => void;
 
   // 发送框集成 / Sendbox integration
   addToSendBox: (text: string) => void;
@@ -536,6 +541,59 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isMaximized, setIsMaximized] = useState(false);
   const [tabs, setTabs] = useState<PreviewTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [browserSlot, setBrowserSlot] = useState<HTMLElement | null>(null);
+  const conversationId = useCurrentConversation();
+  const browserOwner = conversationId ?? 'manual';
+  const browserOwnerRef = useRef(browserOwner);
+  browserOwnerRef.current = browserOwner;
+  useEffect(() => {
+    browserSessions.wake(browserOwner);
+    const owned = browserSessions.forOwner(browserOwner);
+    setTabs((previous) => [...previous.filter((tab) => tab.content_type !== 'browser'), ...owned]);
+    setActiveTabId((previous) =>
+      previous?.startsWith('browser-') ? (browserSessions.selectedTab(browserOwner) ?? null) : previous
+    );
+  }, [browserOwner]);
+  useEffect(() => {
+    browserSessions.remember(tabs);
+  }, [tabs]);
+  useEffect(() => {
+    if (activeTabId) browserSessions.select(activeTabId);
+  }, [activeTabId, tabs]);
+  useEffect(() => {
+    const releaseOwners = (owners: string[]) => {
+      for (const owner of owners)
+        if (owner !== 'manual') {
+          void ipcBridge.application?.releaseConversationBrowser?.invoke({ conversationId: owner }).catch(() => {});
+        }
+    };
+    browserSessions.onClear = (owners) => {
+      releaseOwners(owners);
+      // Account cleanup must remove placeholders too, or the next tab update
+      // would remember them and recreate the previous account's guests.
+      currentScopeRef.current = null;
+      resetPreviewWatch();
+      setTabs([]);
+      setActiveTabId(null);
+      setIsOpen(false);
+    };
+    return () => {
+      const owners = [...new Set(browserSessions.getSnapshot().map((entry) => entry.owner))];
+      browserSessions.onClear = undefined;
+      browserSessions.clear();
+      releaseOwners(owners);
+    };
+  }, []);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      for (const owner of browserSessions.suspendIdle(Date.now(), browserOwnerRef.current)) {
+        if (owner !== 'manual')
+          void ipcBridge.application?.releaseConversationBrowser?.invoke({ conversationId: owner }).catch(() => {});
+      }
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   // The preview scope currently loaded into state (project id / workspace / null).
   const currentScopeRef = useRef<PreviewScopeKey>(null);
   // Mirror activeTabId in a ref so setTabs updaters can read the latest value
@@ -836,7 +894,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
           id: newTabId,
           content: new_content,
           content_type: type,
-          metadata: meta,
+          metadata: type === 'browser' ? { ...meta, browserConversationId: browserOwnerRef.current } : meta,
           title,
           isDirty: false,
           originalContent: new_content, // 保存原始内容 / Save original content
@@ -917,6 +975,11 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const toggleMaximized = useCallback(() => setIsMaximized((prev) => !prev), []);
 
   const clearPreviewForScope = useCallback(() => {
+    for (const tab of browserSessions.forOwner(browserOwnerRef.current)) {
+      const released = browserSessions.remove(tab.id);
+      if (released && released !== 'manual')
+        void ipcBridge.application?.releaseConversationBrowser?.invoke({ conversationId: released }).catch(() => {});
+    }
     setIsMaximized(false);
     setIsOpen(false);
     setTabs([]);
@@ -930,7 +993,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Same scope is a no-op. `currentScopeRef` lives in the app-root context so it
   // survives conversation-page remounts.
   const closePreviewIfScopeChanged = useCallback(
-    (scopeKey: PreviewScopeKey) => {
+    (scopeKey: PreviewScopeKey, requestedOwner?: string | null) => {
       const prev = currentScopeRef.current;
       if (prev === scopeKey) return;
       if (prev != null) persistScopeState(prev, { isOpen, tabs, activeTabId });
@@ -950,10 +1013,29 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const loaded = scopeKey != null ? loadScopeState(scopeKey) : EMPTY_SCOPE_STATE;
       // Subscriptions for these tabs come from the tabs effect, which this setTabs
       // triggers — restored tabs are subscribed exactly like freshly opened ones.
-      setTabs(loaded.tabs);
-      setActiveTabId(loaded.activeTabId);
-      activeTabIdRef.current = loaded.activeTabId;
-      setIsOpen(loaded.isOpen);
+      const owner = requestedOwner ?? browserOwnerRef.current;
+      const remembered = browserSessions.forOwner(owner);
+      const restoredBrowsers = loaded.tabs
+        .filter(
+          (tab) =>
+            tab.content_type === 'browser' &&
+            (!tab.metadata?.browserConversationId || tab.metadata.browserConversationId === owner)
+        )
+        .map((tab) => ({ ...tab, metadata: { ...tab.metadata, browserConversationId: owner } }));
+      const restored = [
+        ...loaded.tabs.filter((tab) => tab.content_type !== 'browser'),
+        ...(remembered.length ? remembered : restoredBrowsers),
+      ];
+      // The owner effect may run before tab-state effects after a route change.
+      // Publish restored guests first so it cannot replace them with an empty list.
+      browserSessions.remember(restored);
+      setTabs(restored);
+      const selected = restored.some((tab) => tab.id === loaded.activeTabId)
+        ? loaded.activeTabId
+        : (browserSessions.selectedTab(owner) ?? restored[0]?.id ?? null);
+      setActiveTabId(selected);
+      activeTabIdRef.current = selected;
+      setIsOpen(loaded.isOpen || remembered.length > 0);
       setIsMaximized(false);
       setDomSnippets([]);
     },
@@ -962,6 +1044,9 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const closeTab = useCallback(
     (tabId: string) => {
+      const released = browserSessions.remove(tabId);
+      if (released && released !== 'manual')
+        void ipcBridge.application?.releaseConversationBrowser?.invoke({ conversationId: released }).catch(() => {});
       setTabs((prevTabs) => {
         // Clean up mtime record for the closed tab (keyed by ChatFileRef identity)
         const tabToClose = prevTabs.find((tab) => tab.id === tabId);
@@ -1038,7 +1123,8 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         const next: PreviewTab = { ...tab };
         if (typeof patch.title === 'string' && patch.title) next.title = patch.title;
-        if (typeof patch.content === 'string') next.content = patch.content;
+        if (typeof patch.content === 'string')
+          next.content = tab.content_type === 'browser' ? patch.content || BROWSER_BLANK_URL : patch.content;
         if (patch.metadata) next.metadata = { ...tab.metadata, ...patch.metadata };
         return next;
       })
@@ -1319,19 +1405,13 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // plain sight and the one-time notice explains it, so this stays within the
   // visible-browser design. Refs, because the subscription below deliberately
   // mounts once ([] deps) and would otherwise close over first-render values.
-  const hasBrowserTabRef = useRef(false);
-  const browserOpeningRef = useRef(false);
   useEffect(() => {
-    hasBrowserTabRef.current = tabs.some((tab) => tab.content_type === 'browser');
-    browserOpeningRef.current = false;
-  }, [tabs]);
-  const openBrowserTabRef = useRef(openBrowserTab);
-  useEffect(() => {
-    openBrowserTabRef.current = openBrowserTab;
-  }, [openBrowserTab]);
-
-  useEffect(() => {
-    const markBrowserTabs = (agentActive: boolean) => {
+    const markBrowserTabs = (owner: string, agentActive: boolean) => {
+      for (const tab of browserSessions.forOwner(owner)) {
+        if (Boolean(tab.metadata?.agentActive) !== agentActive)
+          browserSessions.patch(tab.id, { metadata: { agentActive } });
+      }
+      if (owner !== browserOwnerRef.current) return;
       setTabs((prevTabs) => {
         // 只标记浏览器 tab；没有浏览器 tab 时返回原数组，避免无意义的重渲染
         // Only browser tabs are marked; return the same array when there are none
@@ -1357,30 +1437,35 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
      * providing the channel), it must not take the whole preview panel down —
      * previewing is the primary feature, the badge is not.
      */
-    const ensureBrowserOpen = () => {
-      const browsers = tabsRef.current.filter((tab) => tab.content_type === 'browser');
-      const existing = browsers.find((tab) => tab.id === activeTabIdRef.current) ?? browsers[0];
-      if (existing) {
-        setActiveTabId(existing.id);
-        setIsOpen(true);
-      } else if (!browserOpeningRef.current) {
-        browserOpeningRef.current = true;
-        openBrowserTabRef.current();
-      }
+    const ensureBrowserOpen = (request?: { conversationId: string } | void) => {
+      const owner = request ? request.conversationId : browserOwnerRef.current;
+      const existing = browserSessions.ensure(owner);
+      browserSessions.touch(owner, true);
+      if (owner !== browserOwnerRef.current) return;
+      setTabs((previous) => (previous.some((tab) => tab.id === existing.id) ? previous : [...previous, existing]));
+      setActiveTabId(existing.id);
+      setIsOpen(true);
     };
     const unsubscribeBrowser = ipcBridge.preview.requestBrowser?.on(ensureBrowserOpen);
     const stream = ipcBridge.conversation?.responseStream;
     if (!stream?.on) return unsubscribeBrowser;
 
     const unsubscribe = stream.on((message) => {
+      const owner = message.conversation_id;
+      const running = browserTaskRunningState(message.type, message.data);
+      if (owner && running !== undefined) {
+        browserSessions.touch(owner, running);
+        if (!running) markBrowserTabs(owner, false);
+      }
       if (isBrowserMcpActivity(message.type, message.data)) {
-        if (!hasBrowserTabRef.current) ensureBrowserOpen();
-        markBrowserTabs(true);
+        ensureBrowserOpen(owner ? { conversationId: owner } : undefined);
+        markBrowserTabs(owner ?? browserOwnerRef.current, true);
+        if (owner && owner !== browserOwnerRef.current) return;
         maybeNotifyFirstAgentBrowserUse();
         return;
       }
       if (isBrowserMcpSettled(message.type, message.data)) {
-        markBrowserTabs(false);
+        markBrowserTabs(owner ?? browserOwnerRef.current, false);
       }
     });
 
@@ -1408,6 +1493,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       openBrowserTab,
       browserTabLimitHitAt,
       persistQuotaExceededAt,
+      setBrowserSlot,
       saveContent,
       reloadTabContent,
       tabsWithUpdate,
@@ -1454,7 +1540,17 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     clearDomSnippets,
   ]);
 
-  return <PreviewContext.Provider value={previewContextValue}>{children}</PreviewContext.Provider>;
+  return (
+    <PreviewContext.Provider value={previewContextValue}>
+      {children}
+      <PersistentBrowserLayer
+        slot={browserSlot}
+        activeTabId={isOpen ? activeTabId : null}
+        activeConversationId={browserOwner}
+        updateTab={updateTab}
+      />
+    </PreviewContext.Provider>
+  );
 };
 
 export const usePreviewContext = () => {

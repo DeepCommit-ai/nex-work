@@ -34,8 +34,8 @@ const ChatConversationIndex: React.FC = () => {
   useEffect(() => {
     if (!data) return;
     const workspace = (data.extra as { workspace?: string } | undefined)?.workspace ?? null;
-    closePreviewIfScopeChanged(previewScopeKey(data.project_id ?? null, workspace));
-  }, [data, closePreviewIfScopeChanged]);
+    closePreviewIfScopeChanged(previewScopeKey(data.project_id ?? null, workspace), id);
+  }, [data, id, closePreviewIfScopeChanged]);
 
   // Publish the active project SYNCHRONOUSLY on conversation switch, from the
   // in-memory list snapshot (every row carries project_id) — before the async
@@ -63,9 +63,9 @@ const ChatConversationIndex: React.FC = () => {
   // Publish the active conversation id so the Layout-level Explorer's "add to
   // chat" can target this conversation's send box. Cleared when leaving the
   // conversation route (id falsy) so a stale target can't leak.
-  useEffect(() => {
-    setCurrentConversation(data?.id ?? null);
-  }, [data]);
+  useLayoutEffect(() => {
+    setCurrentConversation(id ?? null);
+  }, [id]);
 
   // Refetch this conversation when the backend reports it changed. This is also
   // the project_id backfill path: opening a workspace conversation lazily

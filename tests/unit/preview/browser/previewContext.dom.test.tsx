@@ -17,7 +17,7 @@
 
 import React from 'react';
 import { act, render } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const browserRequests = vi.hoisted(() => new Set<() => void>());
 vi.mock('@/common', () => ({
@@ -47,6 +47,10 @@ import {
   type PreviewContextValue,
 } from '@/renderer/pages/conversation/Preview/context/PreviewContext';
 import { MAX_BROWSER_TABS } from '@/renderer/pages/conversation/Preview/browser/constants';
+import {
+  resetCurrentConversationForTest,
+  setCurrentConversation,
+} from '@/renderer/pages/conversation/explorer/currentConversationStore';
 
 let ctx: PreviewContextValue;
 
@@ -66,7 +70,9 @@ const browserTabs = () => ctx.tabs.filter((tab) => tab.content_type === 'browser
 
 beforeEach(() => {
   localStorage.clear();
+  resetCurrentConversationForTest();
 });
+afterEach(() => resetCurrentConversationForTest());
 
 describe('PreviewContext browser tabs', () => {
   it('opens one browser for repeated native connection requests before rendering', () => {
@@ -170,16 +176,19 @@ describe('PreviewContext browser tabs', () => {
 
 describe('PreviewContext browser tab persistence', () => {
   const readScope = (scope: string) => JSON.parse(localStorage.getItem(`preview-ui:${scope}`) ?? '{}');
+  const enter = (conversationId: string, project: string) =>
+    act(() => {
+      setCurrentConversation(conversationId);
+      ctx.closePreviewIfScopeChanged(project, conversationId);
+    });
 
-  it('persists browser tabs per project so switching projects restores the right pages', async () => {
+  it('persists browser URLs with their conversation while project switches restore the right previews', () => {
     renderProvider();
-    act(() => ctx.closePreviewIfScopeChanged('project-a'));
+    enter('conversation-a', 'project-a');
     act(() => ctx.openBrowserTab('https://example.com'));
 
-    // 切换到另一个项目时，当前项目的状态被写入；浏览器 tab 属于项目而非会话
-    // Switching to another project persists the current one. Browser tabs belong to
-    // the project, not the conversation.
-    act(() => ctx.closePreviewIfScopeChanged('project-b'));
+    // Document previews remain project-scoped; browser guests retain conversation ownership.
+    enter('conversation-b', 'project-b');
 
     const stored = readScope('project-a');
     expect(stored.tabs).toHaveLength(1);
@@ -191,30 +200,33 @@ describe('PreviewContext browser tab persistence', () => {
     expect(browserTabs()).toHaveLength(0);
 
     // 切回来后恢复 / Returning restores them
-    act(() => ctx.closePreviewIfScopeChanged('project-a'));
+    enter('conversation-a', 'project-a');
     expect(browserTabs()).toHaveLength(1);
     expect(browserTabs()[0].content).toBe('https://example.com');
   });
 
-  it('never restores the agent activity badge as active', () => {
+  it('never restores a persisted agent activity badge as active after restarting', () => {
     // 关键行为：角标是"此刻 Agent 正在操作"的实时信号。若被持久化成 true，
     // 重启后会永久亮着，用户会以为 Agent 在偷偷操作浏览器。
     // Key behavior: the badge means "the agent is acting right now". Persisted as
     // true it would stay lit forever after a restart, making the user think the
     // agent is secretly driving the browser.
-    renderProvider();
-    act(() => ctx.closePreviewIfScopeChanged('project-a'));
+    const provider = renderProvider();
+    enter('conversation-a', 'project-a');
     act(() => ctx.openBrowserTab('https://example.com'));
     const tabId = browserTabs()[0].id;
     act(() => ctx.updateTab(tabId, { metadata: { agentActive: true } }));
     expect(browserTabs()[0].metadata?.agentActive).toBe(true);
 
-    act(() => ctx.closePreviewIfScopeChanged('project-b'));
+    enter('conversation-b', 'project-b');
 
     const stored = readScope('project-a');
     expect(stored.tabs[0].metadata.agentActive).toBe(false);
 
-    act(() => ctx.closePreviewIfScopeChanged('project-a'));
+    // A warm background task keeps its live activity. A cold restore must not.
+    provider.unmount();
+    renderProvider();
+    enter('conversation-a', 'project-a');
     expect(browserTabs()[0].metadata?.agentActive).toBe(false);
   });
 
@@ -400,15 +412,15 @@ describe('PreviewContext updateTab', () => {
     expect(browserTabs()[0]).toEqual(before);
   });
 
-  it('allows clearing the address to an empty string', () => {
-    // content 用 typeof 检查而非真值检查，空字符串是合法的清空操作
-    // content is checked with typeof rather than truthiness, so clearing is valid.
+  it('normalizes a cleared browser address to the blank page', () => {
+    // The live guest resolves an empty URL to about:blank. Store that canonical
+    // address directly rather than depending on an asynchronous webview echo.
     renderProvider();
     act(() => ctx.openBrowserTab('https://example.com'));
     const tabId = browserTabs()[0].id;
 
     act(() => ctx.updateTab(tabId, { content: '' }));
 
-    expect(browserTabs()[0].content).toBe('');
+    expect(browserTabs()[0].content).toBe('about:blank');
   });
 });

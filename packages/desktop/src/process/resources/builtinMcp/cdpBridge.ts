@@ -36,6 +36,7 @@ import {
 
 const HOST = '127.0.0.1';
 const WS_PATH = '/aionui-cdp';
+let keyboardQueue: Promise<unknown> = Promise.resolve();
 
 export type CdpBridgeHandle = {
   port: number;
@@ -53,9 +54,6 @@ type AttachedState = {
   onMessage: (event: unknown, method: string, params: unknown, sessionId: string) => void;
   onDestroyed: () => void;
 };
-
-let attached: AttachedState | null = null;
-let sockets = new Set<WebSocket>();
 
 /**
  * [ENTERPRISE PATCH] spec 010 FR-1/FR-2 — 一次只让一个对话驱动侧边浏览器；驱动期间不让系统把它“睡”掉。
@@ -91,10 +89,10 @@ let sockets = new Set<WebSocket>();
  * batches keep their pace). Both revert once idle.
  */
 export const BROWSER_BUSY_MESSAGE =
-  'The in-app browser is being used by another conversation (it sent browser commands within the last minute). If that conversation is still working, tell the user and wait for it to finish; otherwise retry the same tool call in a minute.';
+  'This conversation browser is busy with another connection. Wait for its current browser operation to finish, then retry the same tool call.';
 /** HTTP reason phrase: puppeteer surfaces only statusText from discovery, never the body. ASCII only. */
 const BUSY_REASON =
-  'In-app browser in use by another conversation; tell the user, wait for it to finish, then retry the same tool call';
+  'Conversation browser busy with another connection; wait for it to finish, then retry the same tool call';
 export const LEASE_IDLE_MS = 60_000;
 
 export type BrowserKeepAwake = { start: () => number | null; stop: (id: number | null) => void };
@@ -104,330 +102,345 @@ const platformKeepAwake: BrowserKeepAwake = {
   stop: (id) => getPlatformServices().power.allowSleep(id),
 };
 
-let keepAwake: BrowserKeepAwake = platformKeepAwake;
-let leaseIdleMs = LEASE_IDLE_MS;
-let lease: { ws: WebSocket; lastActive: number } | null = null;
-let leaseTimer: ReturnType<typeof setTimeout> | null = null;
-let discoveryWaiting = false;
-let keepingAwake = false;
-let keepAwakeId: number | null = null;
-let unthrottled: WebContents | null = null;
-const busyClosing = new WeakSet<WebSocket>();
+/** Each conversation gets its own bridge state; switching the UI cannot retarget it. */
+export const startCdpBridge = async (
+  onBrowserRequested?: () => void,
+  options: { keepAwake?: BrowserKeepAwake; leaseIdleMs?: number; preserveHostFocus?: boolean } = {}
+): Promise<CdpBridgeHandle> => {
+  let attached: AttachedState | null = null;
+  let sockets = new Set<WebSocket>();
+  const keepAwake: BrowserKeepAwake = options.keepAwake ?? platformKeepAwake;
+  const leaseIdleMs = options.leaseIdleMs ?? LEASE_IDLE_MS;
+  let lease: { ws: WebSocket; lastActive: number } | null = null;
+  let leaseTimer: ReturnType<typeof setTimeout> | null = null;
+  let inFlight = 0;
+  let discoveryWaiting = false;
+  let keepingAwake = false;
+  let keepAwakeId: number | null = null;
+  let unthrottled: WebContents | null = null;
+  const busyClosing = new WeakSet<WebSocket>();
 
-const setPageThrottling = (contents: WebContents, allowed: boolean) => {
-  try {
-    if (!contents.isDestroyed() && typeof contents.setBackgroundThrottling === 'function') {
-      contents.setBackgroundThrottling(allowed);
-    }
-  } catch {
-    // Best-effort: a view torn down mid-call needs nothing restored.
-  }
-};
-
-const refreshBackgroundPolicy = () => {
-  const wantAwake = lease !== null || discoveryWaiting;
-  if (wantAwake && !keepingAwake) {
-    keepingAwake = true;
+  const setPageThrottling = (contents: WebContents, allowed: boolean) => {
     try {
-      keepAwakeId = keepAwake.start();
+      if (!contents.isDestroyed() && typeof contents.setBackgroundThrottling === 'function') {
+        contents.setBackgroundThrottling(allowed);
+      }
     } catch {
+      // Best-effort: a view torn down mid-call needs nothing restored.
+    }
+  };
+
+  const refreshBackgroundPolicy = () => {
+    const wantAwake = lease !== null || discoveryWaiting;
+    if (wantAwake && !keepingAwake) {
+      keepingAwake = true;
+      try {
+        keepAwakeId = keepAwake.start();
+      } catch {
+        keepAwakeId = null;
+      }
+    } else if (!wantAwake && keepingAwake) {
+      keepingAwake = false;
+      try {
+        keepAwake.stop(keepAwakeId);
+      } catch {
+        // Best-effort.
+      }
       keepAwakeId = null;
     }
-  } else if (!wantAwake && keepingAwake) {
-    keepingAwake = false;
-    try {
-      keepAwake.stop(keepAwakeId);
-    } catch {
-      // Best-effort.
+    const page = lease !== null && attached && !attached.contents.isDestroyed() ? attached.contents : null;
+    if (unthrottled && unthrottled !== page) {
+      setPageThrottling(unthrottled, true);
+      unthrottled = null;
     }
-    keepAwakeId = null;
-  }
-  const page = lease !== null && attached && !attached.contents.isDestroyed() ? attached.contents : null;
-  if (unthrottled && unthrottled !== page) {
-    setPageThrottling(unthrottled, true);
-    unthrottled = null;
-  }
-  if (page && unthrottled !== page) {
-    setPageThrottling(page, false);
-    unthrottled = page;
-  }
-};
-
-const releaseLease = (why: string) => {
-  if (!lease) return;
-  lease = null;
-  if (leaseTimer) clearTimeout(leaseTimer);
-  leaseTimer = null;
-  console.log(`[CDP] Browser lease released (${why})`);
-  refreshBackgroundPolicy();
-};
-
-/** True while a live connection other than `ws` drove the page within the idle window. */
-const leaseHeldByOther = (ws: WebSocket | null): boolean =>
-  !!lease && lease.ws !== ws && lease.ws.readyState === lease.ws.OPEN && Date.now() - lease.lastActive < leaseIdleMs;
-
-/** Records page activity for `ws`; false when another connection holds the lease. */
-const claimLease = (ws: WebSocket): boolean => {
-  if (leaseHeldByOther(ws)) return false;
-  if (lease?.ws !== ws) {
-    // Hand over in place: no keep-awake stop/start churn between holders.
-    if (lease) console.log('[CDP] Browser lease released (previous holder idle or gone)');
-    lease = { ws, lastActive: Date.now() };
-    console.log('[CDP] Browser lease taken by a conversation');
-  } else {
-    lease.lastActive = Date.now();
-  }
-  if (leaseTimer) clearTimeout(leaseTimer);
-  leaseTimer = setTimeout(() => releaseLease('idle'), leaseIdleMs);
-  refreshBackgroundPolicy();
-  return true;
-};
-
-const currentTargetInfo = () => {
-  if (!attached || attached.contents.isDestroyed()) return buildTargetInfo('', 'about:blank');
-  return buildTargetInfo(attached.contents.getTitle(), attached.contents.getURL());
-};
-
-const broadcast = (payload: Record<string, unknown>) => {
-  const text = JSON.stringify(payload);
-  for (const ws of sockets) {
-    if (ws.readyState === ws.OPEN) ws.send(text);
-  }
-};
-
-/**
- * [ENTERPRISE PATCH] spec 007 FR-6 — 附加状态真正变化时，断开所有已连客户端。
- *
- * puppeteer（chrome-devtools-mcp 内置）在未附加窗口期首次物化页面时，
- * Network.enable 等转发命令被逐条报错，失败的 pagePromise 被它**永久缓存**——
- * 之后每次重试只是回放这个缓存的 rejection，一个字节都不上线，于是"面板已经
- * 打开了"对这个客户端永远不可见。实测：同一会话反复重试全部失败，而同一时刻
- * /json/list 显示着健康的已附加页面。
- *
- * 协议层救不回来：重发 attachedToTarget 会撞上 puppeteer 的既存会话替换问题
- * （见下方 announce-once 的注释），targetInfoChanged 更新不掉已缓存的 rejection。
- * 所以直接断开（1012 Service Restart）：客户端的 browser.connected 变 false，
- * chrome-devtools-mcp 的 ensureBrowserConnected 在下一次工具调用时全新重连，
- * 拿到干净的已附加握手。代价是附加瞬间在途的那一次调用失败，重试即恢复。
- * detach / webview 销毁同理——否则旧客户端会拿着过期的 frame tree 驱动新页面。
- *
- * 注意：同一 webContents 的重复 attach（每次导航的 dom-ready 都会重报）走
- * attachInternal 的同 id 早退，不会触发这里——导航绝不能断开客户端。
- */
-const resetClientConnections = (reason: string) => {
-  for (const ws of [...sockets]) {
-    try {
-      ws.close(1012, reason);
-    } catch {
-      /* already closing */
+    if (page && unthrottled !== page) {
+      setPageThrottling(page, false);
+      unthrottled = page;
     }
-  }
-};
-
-const detachInternal = () => {
-  if (!attached) return;
-  const { contents, dbg, onMessage, onDestroyed } = attached;
-  attached = null;
-  try {
-    dbg.removeListener('message', onMessage);
-    contents.removeListener('destroyed', onDestroyed);
-    if (dbg.isAttached()) dbg.detach();
-  } catch {
-    // 已经销毁/已分离时 Electron 会抛，忽略即可。
-    // Electron throws if it is already destroyed or detached; nothing to do.
-  }
-  refreshBackgroundPolicy();
-};
-
-/**
- * 附加到指定 webContents。
- *
- * 两道校验都必须报错而不是「尽力而为」：
- *  - getType() 必须是 webview：防止把主窗口（带 preload 桥）交出去，这正是原方案的漏洞。
- *  - debugger.attach() 会和同一个 webContents 上打开的 DevTools 冲突（Electron 限制），
- *    这时给出可读的原因，而不是抛一个原始异常。
- *
- * Both checks must fail loudly rather than degrade:
- *  - getType() must be 'webview', so the main window (with its preload bridge) can never
- *    be handed over — that is precisely the hole in the process-wide approach.
- *  - debugger.attach() conflicts with DevTools open on the same webContents (an Electron
- *    limitation); surface a readable reason instead of a raw throw.
- */
-const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reason: string } => {
-  const contents = webContents.fromId(webContentsId);
-  if (!contents || contents.isDestroyed()) {
-    return { ok: false, reason: `No live webContents with id ${webContentsId}` };
-  }
-
-  const type = contents.getType();
-  if (type !== 'webview') {
-    return {
-      ok: false,
-      reason: `Refusing to attach to webContents of type "${type}"; only the in-app browser webview may be exposed.`,
-    };
-  }
-
-  if (attached?.contents.id === webContentsId) return { ok: true };
-  detachInternal();
-
-  const dbg = contents.debugger;
-  try {
-    if (!dbg.isAttached()) dbg.attach('1.3');
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, reason: `Could not attach debugger (DevTools open on this view will block it): ${message}` };
-  }
-
-  const onMessage = (_event: unknown, method: string, params: unknown, _sessionId: string) => {
-    /**
-     * 统一贴上我们那个固定 sessionId 再转发。
-     *
-     * puppeteer 用 flatten 模式，它靠 sessionId 把事件路由到对应的页面会话；不贴的话
-     * 事件会被当成浏览器级的，Page/Runtime 那些事件就丢了。
-     *
-     * Stamp our fixed sessionId before forwarding. puppeteer runs in flatten mode and
-     * routes events to the page session by sessionId; without it these would look
-     * browser-level and Page/Runtime events would be dropped.
-     */
-    broadcast({ method, params: params ?? {}, sessionId: SINGLE_SESSION_ID });
   };
 
-  const onDestroyed = () => {
+  const releaseLease = (why: string) => {
+    if (!lease) return;
+    if (why === 'idle' && inFlight > 0) {
+      leaseTimer = setTimeout(() => releaseLease('idle'), leaseIdleMs);
+      return;
+    }
+    lease = null;
+    if (leaseTimer) clearTimeout(leaseTimer);
+    leaseTimer = null;
+    console.log(`[CDP] Browser lease released (${why})`);
+    refreshBackgroundPolicy();
+  };
+
+  /** True while a live connection other than `ws` drove the page within the idle window. */
+  const leaseHeldByOther = (ws: WebSocket | null): boolean =>
+    !!lease &&
+    lease.ws !== ws &&
+    lease.ws.readyState === lease.ws.OPEN &&
+    (inFlight > 0 || Date.now() - lease.lastActive < leaseIdleMs);
+
+  /** Records page activity for `ws`; false when another connection holds the lease. */
+  const claimLease = (ws: WebSocket): boolean => {
+    if (leaseHeldByOther(ws)) return false;
+    if (lease?.ws !== ws) {
+      // Hand over in place: no keep-awake stop/start churn between holders.
+      if (lease) console.log('[CDP] Browser lease released (previous holder idle or gone)');
+      lease = { ws, lastActive: Date.now() };
+      console.log('[CDP] Browser lease taken by a conversation');
+    } else {
+      lease.lastActive = Date.now();
+    }
+    if (leaseTimer) clearTimeout(leaseTimer);
+    leaseTimer = setTimeout(() => releaseLease('idle'), leaseIdleMs);
+    refreshBackgroundPolicy();
+    return true;
+  };
+
+  const currentTargetInfo = () => {
+    if (!attached || attached.contents.isDestroyed()) return buildTargetInfo('', 'about:blank');
+    return buildTargetInfo(attached.contents.getTitle(), attached.contents.getURL());
+  };
+
+  const broadcast = (payload: Record<string, unknown>) => {
+    const text = JSON.stringify(payload);
+    for (const ws of sockets) {
+      if (ws.readyState === ws.OPEN) ws.send(text);
+    }
+  };
+
+  /**
+   * [ENTERPRISE PATCH] spec 007 FR-6 — 附加状态真正变化时，断开所有已连客户端。
+   *
+   * puppeteer（chrome-devtools-mcp 内置）在未附加窗口期首次物化页面时，
+   * Network.enable 等转发命令被逐条报错，失败的 pagePromise 被它**永久缓存**——
+   * 之后每次重试只是回放这个缓存的 rejection，一个字节都不上线，于是"面板已经
+   * 打开了"对这个客户端永远不可见。实测：同一会话反复重试全部失败，而同一时刻
+   * /json/list 显示着健康的已附加页面。
+   *
+   * 协议层救不回来：重发 attachedToTarget 会撞上 puppeteer 的既存会话替换问题
+   * （见下方 announce-once 的注释），targetInfoChanged 更新不掉已缓存的 rejection。
+   * 所以直接断开（1012 Service Restart）：客户端的 browser.connected 变 false，
+   * chrome-devtools-mcp 的 ensureBrowserConnected 在下一次工具调用时全新重连，
+   * 拿到干净的已附加握手。代价是附加瞬间在途的那一次调用失败，重试即恢复。
+   * detach / webview 销毁同理——否则旧客户端会拿着过期的 frame tree 驱动新页面。
+   *
+   * 注意：同一 webContents 的重复 attach（每次导航的 dom-ready 都会重报）走
+   * attachInternal 的同 id 早退，不会触发这里——导航绝不能断开客户端。
+   */
+  const resetClientConnections = (reason: string) => {
+    for (const ws of [...sockets]) {
+      try {
+        ws.close(1012, reason);
+      } catch {
+        /* already closing */
+      }
+    }
+  };
+
+  const detachInternal = () => {
+    if (!attached) return;
+    const { contents, dbg, onMessage, onDestroyed } = attached;
+    attached = null;
+    try {
+      dbg.removeListener('message', onMessage);
+      contents.removeListener('destroyed', onDestroyed);
+      if (dbg.isAttached()) dbg.detach();
+    } catch {
+      // 已经销毁/已分离时 Electron 会抛，忽略即可。
+      // Electron throws if it is already destroyed or detached; nothing to do.
+    }
+    refreshBackgroundPolicy();
+  };
+
+  /**
+   * 附加到指定 webContents。
+   *
+   * 两道校验都必须报错而不是「尽力而为」：
+   *  - getType() 必须是 webview：防止把主窗口（带 preload 桥）交出去，这正是原方案的漏洞。
+   *  - debugger.attach() 会和同一个 webContents 上打开的 DevTools 冲突（Electron 限制），
+   *    这时给出可读的原因，而不是抛一个原始异常。
+   *
+   * Both checks must fail loudly rather than degrade:
+   *  - getType() must be 'webview', so the main window (with its preload bridge) can never
+   *    be handed over — that is precisely the hole in the process-wide approach.
+   *  - debugger.attach() conflicts with DevTools open on the same webContents (an Electron
+   *    limitation); surface a readable reason instead of a raw throw.
+   */
+  const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reason: string } => {
+    const contents = webContents.fromId(webContentsId);
+    if (!contents || contents.isDestroyed()) {
+      return { ok: false, reason: `No live webContents with id ${webContentsId}` };
+    }
+
+    const type = contents.getType();
+    if (type !== 'webview') {
+      return {
+        ok: false,
+        reason: `Refusing to attach to webContents of type "${type}"; only the in-app browser webview may be exposed.`,
+      };
+    }
+
+    if (attached?.contents.id === webContentsId) return { ok: true };
     detachInternal();
-    broadcast({ method: 'Target.targetDestroyed', params: { targetId: currentTargetInfo().targetId } });
-    resetClientConnections('The in-app browser view was closed; reconnect.');
+
+    const dbg = contents.debugger;
+    try {
+      if (!dbg.isAttached()) dbg.attach('1.3');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, reason: `Could not attach debugger (DevTools open on this view will block it): ${message}` };
+    }
+
+    const onMessage = (_event: unknown, method: string, params: unknown, _sessionId: string) => {
+      /**
+       * 统一贴上我们那个固定 sessionId 再转发。
+       *
+       * puppeteer 用 flatten 模式，它靠 sessionId 把事件路由到对应的页面会话；不贴的话
+       * 事件会被当成浏览器级的，Page/Runtime 那些事件就丢了。
+       *
+       * Stamp our fixed sessionId before forwarding. puppeteer runs in flatten mode and
+       * routes events to the page session by sessionId; without it these would look
+       * browser-level and Page/Runtime events would be dropped.
+       */
+      broadcast({ method, params: params ?? {}, sessionId: SINGLE_SESSION_ID });
+    };
+
+    const onDestroyed = () => {
+      detachInternal();
+      broadcast({ method: 'Target.targetDestroyed', params: { targetId: currentTargetInfo().targetId } });
+      resetClientConnections('The in-app browser view was closed; reconnect.');
+    };
+
+    dbg.on('message', onMessage);
+    contents.once('destroyed', onDestroyed);
+    attached = { contents, dbg, onMessage, onDestroyed };
+    resetClientConnections('The in-app browser attachment changed; reconnect.');
+    refreshBackgroundPolicy();
+    return { ok: true };
   };
 
-  dbg.on('message', onMessage);
-  contents.once('destroyed', onDestroyed);
-  attached = { contents, dbg, onMessage, onDestroyed };
-  resetClientConnections('The in-app browser attachment changed; reconnect.');
-  refreshBackgroundPolicy();
-  return { ok: true };
-};
+  /**
+   * 回包必须带上入站的 sessionId，否则页面级命令会永久挂起。
+   *
+   * puppeteer 按 sessionId 分发回包（cdp/Connection.js）：带 sessionId 的交给对应
+   * CdpSession 的 CallbackRegistry，不带的交给 Connection 自己那一份。而页面级命令是
+   * 用 session.send() 发的，callback 只登记在 session 的 registry 里 —— 回包一旦漏掉
+   * sessionId 就会被投到 Connection 的 registry，那里查无此 id，
+   * CallbackRegistry.resolve/reject 直接静默 return，Promise 永不 settle。
+   *
+   * 于是一个本该「立刻报错」的命令变成了挂死，最后由 puppeteer 的 protocolTimeout 抛出
+   * 「XXX timed out. Increase the 'protocolTimeout' setting」—— 一条把人指向超时设置的
+   * 假线索，而真实原因（比如浏览器面板没打开）被彻底吞掉。
+   *
+   * Replies must echo the inbound sessionId or page-level commands hang forever.
+   * puppeteer routes replies by sessionId: with one it goes to that CdpSession's
+   * CallbackRegistry, without one to the Connection's own. Page-level commands are sent via
+   * session.send(), so the callback lives only in the session registry; a reply missing the
+   * sessionId lands in the Connection registry, which has no such id, and
+   * CallbackRegistry.resolve/reject silently returns — the promise never settles.
+   *
+   * An immediate error therefore turns into a hang that surfaces as puppeteer's
+   * "... timed out. Increase the 'protocolTimeout' setting", a misleading clue that buries the
+   * real cause (e.g. the browser panel was never opened).
+   */
+  const sendError = (ws: WebSocket, id: number | undefined, message: string, sessionId?: string) => {
+    ws.send(JSON.stringify({ id: id ?? 0, error: { code: -32601, message }, sessionId }));
+  };
 
-/**
- * 回包必须带上入站的 sessionId，否则页面级命令会永久挂起。
- *
- * puppeteer 按 sessionId 分发回包（cdp/Connection.js）：带 sessionId 的交给对应
- * CdpSession 的 CallbackRegistry，不带的交给 Connection 自己那一份。而页面级命令是
- * 用 session.send() 发的，callback 只登记在 session 的 registry 里 —— 回包一旦漏掉
- * sessionId 就会被投到 Connection 的 registry，那里查无此 id，
- * CallbackRegistry.resolve/reject 直接静默 return，Promise 永不 settle。
- *
- * 于是一个本该「立刻报错」的命令变成了挂死，最后由 puppeteer 的 protocolTimeout 抛出
- * 「XXX timed out. Increase the 'protocolTimeout' setting」—— 一条把人指向超时设置的
- * 假线索，而真实原因（比如浏览器面板没打开）被彻底吞掉。
- *
- * Replies must echo the inbound sessionId or page-level commands hang forever.
- * puppeteer routes replies by sessionId: with one it goes to that CdpSession's
- * CallbackRegistry, without one to the Connection's own. Page-level commands are sent via
- * session.send(), so the callback lives only in the session registry; a reply missing the
- * sessionId lands in the Connection registry, which has no such id, and
- * CallbackRegistry.resolve/reject silently returns — the promise never settles.
- *
- * An immediate error therefore turns into a hang that surfaces as puppeteer's
- * "... timed out. Increase the 'protocolTimeout' setting", a misleading clue that buries the
- * real cause (e.g. the browser panel was never opened).
- */
-const sendError = (ws: WebSocket, id: number | undefined, message: string, sessionId?: string) => {
-  ws.send(JSON.stringify({ id: id ?? 0, error: { code: -32601, message }, sessionId }));
-};
+  /**
+   * [ENTERPRISE PATCH] spec 010 FR-1 — 拒绝非持有方，再断开它：它若正在初始化页面，失败会被
+   * puppeteer 永久缓存，只有重连能清掉。先让错误帧落地，再关。
+   * Refuse a non-holder, then drop it: a failed page init is cached by puppeteer for good and
+   * only a reconnect clears it. Let the error frame land first.
+   */
+  const refuseBusy = (ws: WebSocket, id: number | undefined, sessionId?: string) => {
+    sendError(ws, id, BROWSER_BUSY_MESSAGE, sessionId);
+    if (busyClosing.has(ws)) return;
+    busyClosing.add(ws);
+    setTimeout(() => {
+      try {
+        ws.close(1013, 'In-app browser busy; reconnect later.');
+      } catch {
+        /* already closing */
+      }
+    }, 100);
+  };
 
-/**
- * [ENTERPRISE PATCH] spec 010 FR-1 — 拒绝非持有方，再断开它：它若正在初始化页面，失败会被
- * puppeteer 永久缓存，只有重连能清掉。先让错误帧落地，再关。
- * Refuse a non-holder, then drop it: a failed page init is cached by puppeteer for good and
- * only a reconnect clears it. Let the error frame land first.
- */
-const refuseBusy = (ws: WebSocket, id: number | undefined, sessionId?: string) => {
-  sendError(ws, id, BROWSER_BUSY_MESSAGE, sessionId);
-  if (busyClosing.has(ws)) return;
-  busyClosing.add(ws);
-  setTimeout(() => {
-    try {
-      ws.close(1013, 'In-app browser busy; reconnect later.');
-    } catch {
-      /* already closing */
-    }
-  }, 100);
-};
+  /**
+   * announcedSessions 是**每条连接**的状态，不能提到模块作用域：一条新连接的 puppeteer
+   * 手上没有任何会话对象，必须重新收到 attachedToTarget 才能建立；若跨连接共享，第二个
+   * 客户端就永远等不到那个事件，browser.pages() 会一直是 0。
+   *
+   * announcedSessions is PER-CONNECTION state and must not be hoisted to module scope: a freshly
+   * connected puppeteer holds no session objects and needs attachedToTarget to build them. Sharing
+   * the set across connections would starve the second client of that event, leaving
+   * browser.pages() at 0 forever.
+   */
+  /**
+   * [ENTERPRISE PATCH] spec 007 — 未附加时的错误现在指向「重试」而不是「去开面板」。
+   *
+   * 旧文案让 agent 去找用户开面板 —— 那是 auto-open（FR-5/5b）之前的世界。现在浏览器
+   * 工具一被调用面板就会自己打开并附加，附加瞬间桥还会重置客户端连接（FR-6），
+   * 所以对 agent 正确的指令就是：稍等片刻，重试同一个调用。
+   *
+   * Pre-auto-open this message sent the agent to ask the user to open the panel.
+   * Now the first browser tool call itself opens and attaches the panel (FR-5/5b)
+   * and the bridge resets clients on attach (FR-6), so the correct instruction to
+   * the agent is simply: wait a beat and retry the same call.
+   */
+  const UNATTACHED_MESSAGE =
+    'The in-app browser is not attached yet. The browser panel opens automatically on first use — wait a few seconds and retry the same tool call.';
+  /** HTTP reason phrase for the same guidance (spec 010 FR-3): puppeteer shows only statusText. ASCII only. */
+  const UNATTACHED_REASON = 'In-app browser not attached yet; wait a few seconds and retry the same tool call';
 
-/**
- * announcedSessions 是**每条连接**的状态，不能提到模块作用域：一条新连接的 puppeteer
- * 手上没有任何会话对象，必须重新收到 attachedToTarget 才能建立；若跨连接共享，第二个
- * 客户端就永远等不到那个事件，browser.pages() 会一直是 0。
- *
- * announcedSessions is PER-CONNECTION state and must not be hoisted to module scope: a freshly
- * connected puppeteer holds no session objects and needs attachedToTarget to build them. Sharing
- * the set across connections would starve the second client of that event, leaving
- * browser.pages() at 0 forever.
- */
-/**
- * [ENTERPRISE PATCH] spec 007 — 未附加时的错误现在指向「重试」而不是「去开面板」。
- *
- * 旧文案让 agent 去找用户开面板 —— 那是 auto-open（FR-5/5b）之前的世界。现在浏览器
- * 工具一被调用面板就会自己打开并附加，附加瞬间桥还会重置客户端连接（FR-6），
- * 所以对 agent 正确的指令就是：稍等片刻，重试同一个调用。
- *
- * Pre-auto-open this message sent the agent to ask the user to open the panel.
- * Now the first browser tool call itself opens and attaches the panel (FR-5/5b)
- * and the bridge resets clients on attach (FR-6), so the correct instruction to
- * the agent is simply: wait a beat and retry the same call.
- */
-const UNATTACHED_MESSAGE =
-  'The in-app browser is not attached yet. The browser panel opens automatically on first use — wait a few seconds and retry the same tool call.';
-/** HTTP reason phrase for the same guidance (spec 010 FR-3): puppeteer shows only statusText. ASCII only. */
-const UNATTACHED_REASON = 'In-app browser not attached yet; wait a few seconds and retry the same tool call';
+  /**
+   * [ENTERPRISE PATCH] spec 007 FR-8 — 键盘类命令转发前，把应用焦点拉回 webview。
+   *
+   * Chromium 对 CDP 键盘/文本注入不按「命令发给哪个 target」投递，而按「当前焦点
+   * widget」投递：input_handler.cc（138.0.7204.251，Electron 37 同版）里
+   * DispatchKeyEvent / InsertText / ImeSetComposition 全部走
+   * `delegate()->GetFocusedRenderWidgetHost()`，而焦点整棵窗口树只有一份，挂在最外层
+   * WebContents 上（web_contents_impl.cc: `GetFocusedFrameTree() =
+   * GetOutermostWebContents()->node_.focused_frame_tree()`）。用户刚发完消息时焦点停在
+   * 主窗口聊天输入框，于是 agent 的 fill 把表单内容逐字打进了聊天框（实测，会话
+   * 7a4f0946：文本字段全报「成功」但页面 DOM 为空；date 字段走 JS 赋值路径反而成功）。
+   *
+   * 鼠标命令按坐标命中测试路由（GetRenderWidgetHostAtPointAsynchronously），从不受焦点
+   * 影响，click 一直是对的——所以只拦键盘三命令，绝不给鼠标/截图/evaluate 抢焦点
+   * （负向约束，测试钉住）。真 Chrome 没这个问题：被自动化的页面就是唯一顶层页面，
+   * 焦点无处可去；页面嵌成 webview 后「页面焦点」与「应用焦点」合流，假设即碎。
+   *
+   * Chromium delivers CDP keyboard/text injection to the FOCUSED widget, not to the
+   * session's own target (input_handler.cc: DispatchKeyEvent / InsertText /
+   * ImeSetComposition all consult `delegate()->GetFocusedRenderWidgetHost()`), and
+   * focus is tracked once per window tree on the outermost WebContents
+   * (web_contents_impl.cc). With app focus in the host chat input, an agent fill
+   * typed the form values into the chat box (measured, conversation 7a4f0946: text
+   * fields reported success while the page DOM stayed empty; the date field, filled
+   * via JS assignment, stuck). Mouse events hit-test by coordinates and were never
+   * affected — hence only the three keyboard methods force focus back to the
+   * webview, never mouse/screenshot/evaluate (a pinned negative constraint).
+   *
+   * focus 是尽力而为：失败也必须照常转发（字可能落错处，但命令绝不能凭空丢失）。
+   * Focus is best-effort: forwarding must proceed even when it fails.
+   */
+  const KEYBOARD_INPUT_METHODS = new Set(['Input.dispatchKeyEvent', 'Input.insertText', 'Input.imeSetComposition']);
 
-/**
- * [ENTERPRISE PATCH] spec 007 FR-8 — 键盘类命令转发前，把应用焦点拉回 webview。
- *
- * Chromium 对 CDP 键盘/文本注入不按「命令发给哪个 target」投递，而按「当前焦点
- * widget」投递：input_handler.cc（138.0.7204.251，Electron 37 同版）里
- * DispatchKeyEvent / InsertText / ImeSetComposition 全部走
- * `delegate()->GetFocusedRenderWidgetHost()`，而焦点整棵窗口树只有一份，挂在最外层
- * WebContents 上（web_contents_impl.cc: `GetFocusedFrameTree() =
- * GetOutermostWebContents()->node_.focused_frame_tree()`）。用户刚发完消息时焦点停在
- * 主窗口聊天输入框，于是 agent 的 fill 把表单内容逐字打进了聊天框（实测，会话
- * 7a4f0946：文本字段全报「成功」但页面 DOM 为空；date 字段走 JS 赋值路径反而成功）。
- *
- * 鼠标命令按坐标命中测试路由（GetRenderWidgetHostAtPointAsynchronously），从不受焦点
- * 影响，click 一直是对的——所以只拦键盘三命令，绝不给鼠标/截图/evaluate 抢焦点
- * （负向约束，测试钉住）。真 Chrome 没这个问题：被自动化的页面就是唯一顶层页面，
- * 焦点无处可去；页面嵌成 webview 后「页面焦点」与「应用焦点」合流，假设即碎。
- *
- * Chromium delivers CDP keyboard/text injection to the FOCUSED widget, not to the
- * session's own target (input_handler.cc: DispatchKeyEvent / InsertText /
- * ImeSetComposition all consult `delegate()->GetFocusedRenderWidgetHost()`), and
- * focus is tracked once per window tree on the outermost WebContents
- * (web_contents_impl.cc). With app focus in the host chat input, an agent fill
- * typed the form values into the chat box (measured, conversation 7a4f0946: text
- * fields reported success while the page DOM stayed empty; the date field, filled
- * via JS assignment, stuck). Mouse events hit-test by coordinates and were never
- * affected — hence only the three keyboard methods force focus back to the
- * webview, never mouse/screenshot/evaluate (a pinned negative constraint).
- *
- * focus 是尽力而为：失败也必须照常转发（字可能落错处，但命令绝不能凭空丢失）。
- * Focus is best-effort: forwarding must proceed even when it fails.
- */
-const KEYBOARD_INPUT_METHODS = new Set(['Input.dispatchKeyEvent', 'Input.insertText', 'Input.imeSetComposition']);
-
-/**
- * 让「嵌入层」把 DOM 焦点交给 webview 元素 —— 这是唯一实测有效的通路。
- *
- * 主进程侧的 `contents.focus()` 对 guest 实测无效（探针：guest 的
- * document.hasFocus() 保持 false，键仍打进宿主聊天框）；而宿主渲染进程里
- * `webviewEl.focus()` 走用户点击同一条焦点通道，实测让 guest hasFocus 翻真、
- * 两类按键全部落进 webview。executeJavaScript 可等待，把首字符竞态压到最小。
- *
- * Main-process `contents.focus()` measurably does nothing for a guest (probe:
- * guest document.hasFocus() stays false, keys still land in the host chat box),
- * while a DOM `webviewEl.focus()` in the EMBEDDER renderer — the same channel a
- * real user click takes — measurably flips guest focus and lands both key kinds
- * in the webview. executeJavaScript is awaitable, minimising the first-key race.
- */
-const buildEmbedderFocusScript = (webContentsId: number): string => `(() => {
+  /**
+   * 让「嵌入层」把 DOM 焦点交给 webview 元素 —— 这是唯一实测有效的通路。
+   *
+   * 主进程侧的 `contents.focus()` 对 guest 实测无效（探针：guest 的
+   * document.hasFocus() 保持 false，键仍打进宿主聊天框）；而宿主渲染进程里
+   * `webviewEl.focus()` 走用户点击同一条焦点通道，实测让 guest hasFocus 翻真、
+   * 两类按键全部落进 webview。executeJavaScript 可等待，把首字符竞态压到最小。
+   *
+   * Main-process `contents.focus()` measurably does nothing for a guest (probe:
+   * guest document.hasFocus() stays false, keys still land in the host chat box),
+   * while a DOM `webviewEl.focus()` in the EMBEDDER renderer — the same channel a
+   * real user click takes — measurably flips guest focus and lands both key kinds
+   * in the webview. executeJavaScript is awaitable, minimising the first-key race.
+   */
+  const buildEmbedderFocusScript = (webContentsId: number): string => `(() => {
   for (const wv of document.querySelectorAll('webview')) {
     try {
       if (wv.getWebContentsId && wv.getWebContentsId() === ${webContentsId}) {
@@ -440,127 +453,146 @@ const buildEmbedderFocusScript = (webContentsId: number): string => `(() => {
   return { found: false, wasActive: false };
 })()`;
 
-/**
- * 每个键盘命令前都执行，无 guard、无轮询 —— 两者的信号都被实测证伪：
- *  - `contents.isFocused()` 对 guest **恒为 false**（焦点实际已在 guest、键正常落位
- *    时依然 false），既当不了跳过条件，也当不了 settle 信号；
- *  - 首字符竞态实测不存在：executeJavaScript 的完成回执落后于渲染进程发出的焦点
- *    转移消息，第一个 insertText 稳定落位（探针 '恒1' 从未缺首字）。
- * 已聚焦时宿主侧 `wv.focus()` 是 DOM no-op，无条件执行的增量只是一次
- * executeJavaScript 往返（毫秒级），换来最强自愈：用户中途点回聊天框，
- * 下一个键盘命令立即把焦点夺回 webview。
- *
- * Runs before every keyboard command, unguarded and unpolled — both signals were
- * measured false: `contents.isFocused()` stays false for a guest even while keys
- * demonstrably land in it, and no first-key race exists (the executeJavaScript
- * completion trails the renderer's focus-transfer message; the probe never lost
- * a leading char). When already focused, the embedder-side `wv.focus()` is a DOM
- * no-op, so the unconditional call costs one millisecond-scale roundtrip and
- * buys the strongest self-healing: if the user clicks back into the chat box
- * mid-fill, the very next keyboard command reclaims the webview.
- */
-const focusAttachedForKeyboardInput = async (): Promise<void> => {
-  if (!attached || attached.contents.isDestroyed()) return;
-  const { contents } = attached;
-  try {
-    const host = contents.hostWebContents;
-    if (!host || host.isDestroyed()) {
-      // No embedder to ask (should not happen for a webview); try the direct
-      // call even though it was measured ineffective for guests — better than
-      // silently doing nothing.
-      contents.focus();
+  /**
+   * 每个键盘命令前都执行，无 guard、无轮询 —— 两者的信号都被实测证伪：
+   *  - `contents.isFocused()` 对 guest **恒为 false**（焦点实际已在 guest、键正常落位
+   *    时依然 false），既当不了跳过条件，也当不了 settle 信号；
+   *  - 首字符竞态实测不存在：executeJavaScript 的完成回执落后于渲染进程发出的焦点
+   *    转移消息，第一个 insertText 稳定落位（探针 '恒1' 从未缺首字）。
+   * 已聚焦时宿主侧 `wv.focus()` 是 DOM no-op，无条件执行的增量只是一次
+   * executeJavaScript 往返（毫秒级），换来最强自愈：用户中途点回聊天框，
+   * 下一个键盘命令立即把焦点夺回 webview。
+   *
+   * Runs before every keyboard command, unguarded and unpolled — both signals were
+   * measured false: `contents.isFocused()` stays false for a guest even while keys
+   * demonstrably land in it, and no first-key race exists (the executeJavaScript
+   * completion trails the renderer's focus-transfer message; the probe never lost
+   * a leading char). When already focused, the embedder-side `wv.focus()` is a DOM
+   * no-op, so the unconditional call costs one millisecond-scale roundtrip and
+   * buys the strongest self-healing: if the user clicks back into the chat box
+   * mid-fill, the very next keyboard command reclaims the webview.
+   */
+  const focusAttachedForKeyboardInput = async (): Promise<void> => {
+    if (!attached || attached.contents.isDestroyed()) return;
+    const { contents } = attached;
+    try {
+      const host = contents.hostWebContents;
+      if (!host || host.isDestroyed()) {
+        // No embedder to ask (should not happen for a webview); try the direct
+        // call even though it was measured ineffective for guests — better than
+        // silently doing nothing.
+        contents.focus();
+        return;
+      }
+      const result = (await host.executeJavaScript(buildEmbedderFocusScript(contents.id), true)) as {
+        found?: boolean;
+        wasActive?: boolean;
+      } | null;
+      if (result?.found && !result.wasActive) {
+        console.log('[CDP] Focused the browser webview for agent keyboard input');
+      }
+    } catch {
+      // Focus is best-effort; the command itself must still be forwarded.
+    }
+  };
+
+  const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions: Set<string>) => {
+    let req: CdpRequest;
+    try {
+      req = JSON.parse(raw) as CdpRequest;
+    } catch {
+      return; // 非 JSON 直接忽略 / ignore non-JSON frames
+    }
+
+    const { id, method, params, sessionId } = req;
+    if (!method) return;
+
+    if (!isAcceptableSessionId(sessionId)) {
+      sendError(ws, id, `Unknown sessionId: ${sessionId}`, sessionId);
       return;
     }
-    const result = (await host.executeJavaScript(buildEmbedderFocusScript(contents.id), true)) as {
-      found?: boolean;
-      wasActive?: boolean;
-    } | null;
-    if (result?.found && !result.wasActive) {
-      console.log('[CDP] Focused the browser webview for agent keyboard input');
+
+    const decision = decideCdpCommand(req, currentTargetInfo);
+
+    if (decision.kind === 'error') {
+      sendError(ws, id, decision.message, sessionId);
+      return;
     }
-  } catch {
-    // Focus is best-effort; the command itself must still be forwarded.
-  }
-};
 
-const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions: Set<string>) => {
-  let req: CdpRequest;
-  try {
-    req = JSON.parse(raw) as CdpRequest;
-  } catch {
-    return; // 非 JSON 直接忽略 / ignore non-JSON frames
-  }
-
-  const { id, method, params, sessionId } = req;
-  if (!method) return;
-
-  if (!isAcceptableSessionId(sessionId)) {
-    sendError(ws, id, `Unknown sessionId: ${sessionId}`, sessionId);
-    return;
-  }
-
-  const decision = decideCdpCommand(req, currentTargetInfo);
-
-  if (decision.kind === 'error') {
-    sendError(ws, id, decision.message, sessionId);
-    return;
-  }
-
-  if (decision.kind === 'reply' || decision.kind === 'reply-and-emit') {
-    if (decision.kind === 'reply-and-emit') {
-      for (const evt of decision.emit) {
-        /**
-         * 同一个 sessionId 只宣布一次 attachedToTarget —— 重复宣布会让 puppeteer 换掉
-         * 会话对象，把调用方手里的 handle 变成孤儿。
-         *
-         * puppeteer 的 Connection.onMessage 收到 attachedToTarget 时无条件
-         * `new CdpCDPSession(...)` 再 `#sessions.set(sessionId, session)`（cdp/Connection.js）。
-         * 它不检查这个 sessionId 是否已经存在，于是第二次宣布会用一个全新对象覆盖旧的，
-         * 而新对象带着一份空的 CallbackRegistry。
-         *
-         * 这正是致命之处：setAutoAttach 已经宣布过一次，attachToTarget 再宣布一次，
-         * 调用方（TargetManager / 任何持有 CDPSession 的代码）手上那个 handle 就指向了被
-         * 换掉的旧对象。它 send() 出去的命令 id 登记在旧 registry 里，回包却按 sessionId
-         * 被路由到新对象的 registry —— 那里查无此 id，resolve/reject 静默 return，
-         * Promise 永不 settle，最后以 protocolTimeout 的形式浮现。
-         *
-         * 真实 Chrome 不会重复宣布已附加的会话，所以这是本伪装层特有的问题。
-         *
-         * Announce attachedToTarget at most once per sessionId: re-announcing makes puppeteer
-         * swap out the session object and orphans handles the caller already holds.
-         *
-         * On attachedToTarget, puppeteer's Connection.onMessage unconditionally constructs a
-         * new CdpCDPSession and does `#sessions.set(sessionId, session)` — it never checks
-         * whether that sessionId already exists, so a second announcement replaces the old
-         * object with a fresh one carrying an EMPTY CallbackRegistry.
-         *
-         * That is the fatal part: setAutoAttach already announced once, so announcing again on
-         * attachToTarget leaves the caller holding the replaced object. Commands it sends
-         * register their id in the old registry, while replies are routed by sessionId into the
-         * new object's registry, which has no such id — resolve/reject silently returns and the
-         * promise never settles, surfacing later as a protocolTimeout.
-         *
-         * Real Chrome does not re-announce an already-attached session, so this is specific to
-         * this emulation layer.
-         */
-        if (evt.method === 'Target.attachedToTarget') {
-          const announcedId = (evt.params as { sessionId?: string }).sessionId;
-          if (typeof announcedId === 'string') {
-            if (announcedSessions.has(announcedId)) continue;
-            announcedSessions.add(announcedId);
+    if (decision.kind === 'reply' || decision.kind === 'reply-and-emit') {
+      if (decision.kind === 'reply-and-emit') {
+        for (const evt of decision.emit) {
+          /**
+           * 同一个 sessionId 只宣布一次 attachedToTarget —— 重复宣布会让 puppeteer 换掉
+           * 会话对象，把调用方手里的 handle 变成孤儿。
+           *
+           * puppeteer 的 Connection.onMessage 收到 attachedToTarget 时无条件
+           * `new CdpCDPSession(...)` 再 `#sessions.set(sessionId, session)`（cdp/Connection.js）。
+           * 它不检查这个 sessionId 是否已经存在，于是第二次宣布会用一个全新对象覆盖旧的，
+           * 而新对象带着一份空的 CallbackRegistry。
+           *
+           * 这正是致命之处：setAutoAttach 已经宣布过一次，attachToTarget 再宣布一次，
+           * 调用方（TargetManager / 任何持有 CDPSession 的代码）手上那个 handle 就指向了被
+           * 换掉的旧对象。它 send() 出去的命令 id 登记在旧 registry 里，回包却按 sessionId
+           * 被路由到新对象的 registry —— 那里查无此 id，resolve/reject 静默 return，
+           * Promise 永不 settle，最后以 protocolTimeout 的形式浮现。
+           *
+           * 真实 Chrome 不会重复宣布已附加的会话，所以这是本伪装层特有的问题。
+           *
+           * Announce attachedToTarget at most once per sessionId: re-announcing makes puppeteer
+           * swap out the session object and orphans handles the caller already holds.
+           *
+           * On attachedToTarget, puppeteer's Connection.onMessage unconditionally constructs a
+           * new CdpCDPSession and does `#sessions.set(sessionId, session)` — it never checks
+           * whether that sessionId already exists, so a second announcement replaces the old
+           * object with a fresh one carrying an EMPTY CallbackRegistry.
+           *
+           * That is the fatal part: setAutoAttach already announced once, so announcing again on
+           * attachToTarget leaves the caller holding the replaced object. Commands it sends
+           * register their id in the old registry, while replies are routed by sessionId into the
+           * new object's registry, which has no such id — resolve/reject silently returns and the
+           * promise never settles, surfacing later as a protocolTimeout.
+           *
+           * Real Chrome does not re-announce an already-attached session, so this is specific to
+           * this emulation layer.
+           */
+          if (evt.method === 'Target.attachedToTarget') {
+            const announcedId = (evt.params as { sessionId?: string }).sessionId;
+            if (typeof announcedId === 'string') {
+              if (announcedSessions.has(announcedId)) continue;
+              announcedSessions.add(announcedId);
+            }
           }
+          ws.send(JSON.stringify({ method: evt.method, params: evt.params }));
         }
-        ws.send(JSON.stringify({ method: evt.method, params: evt.params }));
       }
+      // Publish targets before acknowledging discovery/attachment. Puppeteer yields between
+      // WebSocket frames and finishes connecting on the ACK; replying first lets the MCP
+      // cache an empty page list, leaving navigate_page stuck at "No page selected".
+      ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
+      return;
     }
-    // Publish targets before acknowledging discovery/attachment. Puppeteer yields between
-    // WebSocket frames and finishes connecting on the ACK; replying first lets the MCP
-    // cache an empty page list, leaving navigate_page stuck at "No page selected".
-    ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
-    return;
-  }
 
-  if (decision.kind === 'navigate-single-target') {
+    if (decision.kind === 'navigate-single-target') {
+      if (!attached || attached.contents.isDestroyed()) {
+        sendError(ws, id, UNATTACHED_MESSAGE, sessionId);
+        return;
+      }
+      if (!claimLease(ws)) {
+        refuseBusy(ws, id, sessionId);
+        return;
+      }
+      try {
+        await attached.dbg.sendCommand('Page.navigate', { url: decision.url });
+        ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ws.send(JSON.stringify({ id, error: { code: -32000, message }, sessionId }));
+      }
+      return;
+    }
+
+    // forward
     if (!attached || attached.contents.isDestroyed()) {
       sendError(ws, id, UNATTACHED_MESSAGE, sessionId);
       return;
@@ -569,117 +601,128 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
       refuseBusy(ws, id, sessionId);
       return;
     }
+
+    /**
+     * [ENTERPRISE PATCH] spec 010 FR-4 — 每个客户端的 Runtime.enable 都要重新通报页面已有的执行上下文。
+     *
+     * 所有客户端共用 webContents 的同一个调试会话。Chrome 只在 Runtime 从关到开时通报已有上下文，
+     * 前一个客户端开过以后，新客户端的 Runtime.enable 什么也收不到：puppeteer 等不到主世界上下文，
+     * 首个 evaluate_script 报 “Timed out after waiting 5000ms”，直到页面跳转才恢复（2026-10-21 实测：
+     * 新连接收到 0 个上下文，先 disable 再 enable 收到 4 个）。K3 工作台这种放着不动的页面上，
+     * 助手每次开工都撞上，只能跳转重进，OA 过期时还要员工输验证码。所以先 disable 再转发 enable。
+     *
+     * Each client's Runtime.enable must announce the page's existing execution contexts. All
+     * clients share the webContents' single debugger session, and Chrome only announces existing
+     * contexts when Runtime goes from disabled to enabled; once an earlier client enabled it, a new
+     * client's Runtime.enable received nothing, puppeteer never saw the main-world context, and the
+     * first evaluate_script failed with "Timed out after waiting 5000ms" until the page navigated
+     * (measured 2026-10-21: 0 contexts on a fresh connection, 4 after disable + enable). On an idle
+     * K3 workbench the agent hit this at every start. So disable first, then forward the enable.
+     */
+    inFlight++;
     try {
-      await attached.dbg.sendCommand('Page.navigate', { url: decision.url });
-      ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
+      if (method === 'Runtime.enable') {
+        try {
+          await attached.dbg.sendCommand('Runtime.disable', {});
+        } catch {
+          // Not enabled yet or already disabled: the enable below announces everything anyway.
+        }
+      }
+
+      const target = attached;
+      const execute = async () => {
+        // Electron's guest debugger Page.reload can reload its embedder, destroying
+        // every conversation page. Reload the owned WebContents explicitly.
+        if (method === 'Page.reload') {
+          if (params?.ignoreCache === true) target.contents.reloadIgnoringCache();
+          else target.contents.reload();
+          return {};
+        }
+        if (KEYBOARD_INPUT_METHODS.has(method)) await focusAttachedForKeyboardInput();
+        return target.dbg.sendCommand(method, params ?? {});
+      };
+      let result: unknown;
+      if (options.preserveHostFocus && KEYBOARD_INPUT_METHODS.has(method)) {
+        // Only keyboard dispatch is serialized across guests. Reads and scripts remain concurrent.
+        const input = keyboardQueue.then(async () => {
+          const host = target.contents.hostWebContents;
+          if (host && !host.isDestroyed())
+            await host.executeJavaScript('globalThis.__nexworkFocusBeforeInput = document.activeElement; true;');
+          try {
+            return await execute();
+          } finally {
+            if (host && !host.isDestroyed())
+              await host
+                .executeJavaScript(
+                  'globalThis.__nexworkFocusBeforeInput?.focus(); delete globalThis.__nexworkFocusBeforeInput; true;'
+                )
+                .catch(() => {});
+          }
+        });
+        keyboardQueue = input.catch(() => {});
+        result = await input;
+      } else result = await execute();
+      ws.send(JSON.stringify({ id, result: result ?? {}, sessionId }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       ws.send(JSON.stringify({ id, error: { code: -32000, message }, sessionId }));
+    } finally {
+      inFlight--;
     }
-    return;
-  }
+  };
 
-  // forward
-  if (!attached || attached.contents.isDestroyed()) {
-    sendError(ws, id, UNATTACHED_MESSAGE, sessionId);
-    return;
-  }
-  if (!claimLease(ws)) {
-    refuseBusy(ws, id, sessionId);
-    return;
-  }
-
-  if (KEYBOARD_INPUT_METHODS.has(method)) await focusAttachedForKeyboardInput();
+  const writeJson = (res: ServerResponse, body: unknown) => {
+    const text = JSON.stringify(body);
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Content-Length': Buffer.byteLength(text),
+    });
+    res.end(text);
+  };
 
   /**
-   * [ENTERPRISE PATCH] spec 010 FR-4 — 每个客户端的 Runtime.enable 都要重新通报页面已有的执行上下文。
+   * 启动通道。返回 handle 供主进程在浏览器 tab 切换时改附加目标。
    *
-   * 所有客户端共用 webContents 的同一个调试会话。Chrome 只在 Runtime 从关到开时通报已有上下文，
-   * 前一个客户端开过以后，新客户端的 Runtime.enable 什么也收不到：puppeteer 等不到主世界上下文，
-   * 首个 evaluate_script 报 “Timed out after waiting 5000ms”，直到页面跳转才恢复（2026-10-21 实测：
-   * 新连接收到 0 个上下文，先 disable 再 enable 收到 4 个）。K3 工作台这种放着不动的页面上，
-   * 助手每次开工都撞上，只能跳转重进，OA 过期时还要员工输验证码。所以先 disable 再转发 enable。
+   * 口令只加在 WebSocket 段，不加在 HTTP 发现段 —— 这是被实测逼出来的设计：
+   * puppeteer 拿 browserURL 后执行 `new URL('/json/version', browserURL)`，绝对路径会
+   * 把 query 整段丢掉，所以口令放在 browserURL 的 ?token= 上根本传不到服务端，
+   * 只会让 puppeteer 被自己的 403 挡死。
    *
-   * Each client's Runtime.enable must announce the page's existing execution contexts. All
-   * clients share the webContents' single debugger session, and Chrome only announces existing
-   * contexts when Runtime goes from disabled to enabled; once an earlier client enabled it, a new
-   * client's Runtime.enable received nothing, puppeteer never saw the main-world context, and the
-   * first evaluate_script failed with "Timed out after waiting 5000ms" until the page navigated
-   * (measured 2026-10-21: 0 contexts on a fresh connection, 4 after disable + enable). On an idle
-   * K3 workbench the agent hit this at every start. So disable first, then forward the enable.
+   * 于是分两层：
+   *  - HTTP 发现段（/json/version、/json/list）不校验口令，响应里带着含口令的 ws 地址。
+   *  - WebSocket 段强制校验口令，所有实际控制都走这里。
+   *
+   * ⚠️ 威胁模型要说实话：因为发现段不鉴权且会吐出口令，同机同用户的任意进程扫到这个端口后
+   * 一个 GET 就能取回口令再连 WS。所以口令的作用是**阻止盲连**（不知道端口/没读过发现段
+   * 的连接一律 403），**不是身份证明** —— 它无法证明对端就是我们 spawn 的那个 MCP。
+   * 对本机进程而言，真实屏障只有「listen(0) 随机分配的临时端口」这一层。
+   *
+   * 这与 Chrome 原生 remote-debugging-port 的 /json/version 是同一水平，不是回归；本方案真正
+   * 的收益在别处：只暴露侧边浏览器那一个 webview，绝不暴露主窗口（见 attachInternal 的
+   * getType() 校验）。把「同用户本机进程」算作可信边界是这里的显式假设。
+   *
+   * The token guards only the WebSocket leg, not HTTP discovery — a design forced by testing:
+   * puppeteer runs `new URL('/json/version', browserURL)`, and an absolute path discards the
+   * entire query string, so a token on browserURL never reaches the server and would only make
+   * puppeteer trip over its own 403.
+   *
+   * Hence two tiers:
+   *  - HTTP discovery (/json/version, /json/list) is unauthenticated and its response carries
+   *    a tokened ws address.
+   *  - The WebSocket enforces the token; all actual control flows there.
+   *
+   * ⚠️ Be honest about the threat model: because discovery is unauthenticated and hands the
+   * token out, any process running as the same user can scan this port and retrieve the token
+   * with one GET, then connect. The token therefore **prevents blind connections** (anything
+   * that has not read discovery gets a 403); it is **not proof of identity** and cannot show
+   * the peer is the MCP we spawned. Against local processes the only real barrier is the
+   * ephemeral, OS-assigned listen(0) port.
+   *
+   * This matches Chrome's own remote-debugging-port /json/version and is not a regression. The
+   * real gain of this design lies elsewhere: only the in-app browser webview is exposed and the
+   * main window never is (see the getType() check in attachInternal). Treating same-user local
+   * processes as inside the trust boundary is an explicit assumption here.
    */
-  if (method === 'Runtime.enable') {
-    try {
-      await attached.dbg.sendCommand('Runtime.disable', {});
-    } catch {
-      // Not enabled yet or already disabled: the enable below announces everything anyway.
-    }
-  }
-
-  try {
-    const result = await attached.dbg.sendCommand(method, params ?? {});
-    ws.send(JSON.stringify({ id, result: result ?? {}, sessionId }));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    ws.send(JSON.stringify({ id, error: { code: -32000, message }, sessionId }));
-  }
-};
-
-const writeJson = (res: ServerResponse, body: unknown) => {
-  const text = JSON.stringify(body);
-  res.writeHead(200, { 'Content-Type': 'application/json; charset=UTF-8', 'Content-Length': Buffer.byteLength(text) });
-  res.end(text);
-};
-
-/**
- * 启动通道。返回 handle 供主进程在浏览器 tab 切换时改附加目标。
- *
- * 口令只加在 WebSocket 段，不加在 HTTP 发现段 —— 这是被实测逼出来的设计：
- * puppeteer 拿 browserURL 后执行 `new URL('/json/version', browserURL)`，绝对路径会
- * 把 query 整段丢掉，所以口令放在 browserURL 的 ?token= 上根本传不到服务端，
- * 只会让 puppeteer 被自己的 403 挡死。
- *
- * 于是分两层：
- *  - HTTP 发现段（/json/version、/json/list）不校验口令，响应里带着含口令的 ws 地址。
- *  - WebSocket 段强制校验口令，所有实际控制都走这里。
- *
- * ⚠️ 威胁模型要说实话：因为发现段不鉴权且会吐出口令，同机同用户的任意进程扫到这个端口后
- * 一个 GET 就能取回口令再连 WS。所以口令的作用是**阻止盲连**（不知道端口/没读过发现段
- * 的连接一律 403），**不是身份证明** —— 它无法证明对端就是我们 spawn 的那个 MCP。
- * 对本机进程而言，真实屏障只有「listen(0) 随机分配的临时端口」这一层。
- *
- * 这与 Chrome 原生 remote-debugging-port 的 /json/version 是同一水平，不是回归；本方案真正
- * 的收益在别处：只暴露侧边浏览器那一个 webview，绝不暴露主窗口（见 attachInternal 的
- * getType() 校验）。把「同用户本机进程」算作可信边界是这里的显式假设。
- *
- * The token guards only the WebSocket leg, not HTTP discovery — a design forced by testing:
- * puppeteer runs `new URL('/json/version', browserURL)`, and an absolute path discards the
- * entire query string, so a token on browserURL never reaches the server and would only make
- * puppeteer trip over its own 403.
- *
- * Hence two tiers:
- *  - HTTP discovery (/json/version, /json/list) is unauthenticated and its response carries
- *    a tokened ws address.
- *  - The WebSocket enforces the token; all actual control flows there.
- *
- * ⚠️ Be honest about the threat model: because discovery is unauthenticated and hands the
- * token out, any process running as the same user can scan this port and retrieve the token
- * with one GET, then connect. The token therefore **prevents blind connections** (anything
- * that has not read discovery gets a 403); it is **not proof of identity** and cannot show
- * the peer is the MCP we spawned. Against local processes the only real barrier is the
- * ephemeral, OS-assigned listen(0) port.
- *
- * This matches Chrome's own remote-debugging-port /json/version and is not a regression. The
- * real gain of this design lies elsewhere: only the in-app browser webview is exposed and the
- * main window never is (see the getType() check in attachInternal). Treating same-user local
- * processes as inside the trust boundary is an explicit assumption here.
- */
-export const startCdpBridge = async (
-  onBrowserRequested?: () => void,
-  options: { keepAwake?: BrowserKeepAwake; leaseIdleMs?: number } = {}
-): Promise<CdpBridgeHandle> => {
-  keepAwake = options.keepAwake ?? platformKeepAwake;
-  leaseIdleMs = options.leaseIdleMs ?? LEASE_IDLE_MS;
   const token = randomBytes(24).toString('hex');
   const pendingDiscovery = new Map<ServerResponse, { timer: ReturnType<typeof setTimeout>; started: number }>();
   const syncDiscoveryWaiting = () => {

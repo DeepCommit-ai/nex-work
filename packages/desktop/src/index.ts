@@ -802,10 +802,15 @@ const handleAppReady = async (): Promise<void> => {
   const { cdpStartupEnabled, setActiveCdpPort } = await import('./process/utils/configureChromium');
   if (cdpStartupEnabled) {
     try {
-      const { startCdpBridge } = await import('./process/resources/builtinMcp/cdpBridge');
+      const { startBrowserBroker } = await import('./process/resources/builtinMcp/browserBroker');
       const { setCdpBridgeHandle } = await import('./process/utils/cdpBridgeRegistry');
-      const bridge = await startCdpBridge(() => {
-        ipcBridge.preview.requestBrowser.emit();
+      const { getDataPath } = await import('./process/utils/utils');
+      const { createBackendCall } = await import('./process/services/managedagents/backend');
+      const bridge = await startBrowserBroker({
+        requestBrowser: (conversationId) => ipcBridge.preview.requestBrowser.emit({ conversationId }),
+        getConversation: (id) =>
+          createBackendCall(backendManager.port)('GET', `/api/conversations/${encodeURIComponent(id)}`),
+        skillsRoot: prepareNexworkSkills(getDataPath()).AIONUI_BUILTIN_SKILLS_PATH,
       });
       setCdpBridgeHandle(bridge);
       /**

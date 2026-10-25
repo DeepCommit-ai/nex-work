@@ -192,6 +192,10 @@ export const assistants = {
 
 /** Desktop-owned managed catalog lifecycle. All windows share this instance. */
 export const managedAgents = {
+  prepareRuntime: bridge.buildProvider<
+    { success: boolean; repaired?: number; error?: string },
+    { conversationId: string }
+  >('enterprise.agents.prepare-runtime'),
   acquire: bridge.buildProvider<ManagedSyncResult & { lease?: string }, void>('enterprise.agents.acquire'),
   release: bridge.buildProvider<void, { lease: string }>('enterprise.agents.release'),
   connect: bridge.buildProvider<ManagedSyncResult, { serverUrl: string; deptKey: string }>('enterprise.agents.connect'),
@@ -733,8 +737,12 @@ export const application = {
    * in-app browser. Main validates getType() === 'webview', so even a misused call cannot
    * attach to the main window.
    */
-  reportBrowserWebContentsId: bridge.buildProvider<IBridgeResponse<void>, { webContentsId: number }>(
-    'app.report-browser-webcontents-id'
+  reportBrowserWebContentsId: bridge.buildProvider<
+    IBridgeResponse<void>,
+    { webContentsId: number; conversationId?: string }
+  >('app.report-browser-webcontents-id'),
+  releaseConversationBrowser: bridge.buildProvider<void, { conversationId: string }>(
+    'app.release-conversation-browser'
   ),
   getStartOnBootStatus: bridge.buildProvider<IBridgeResponse<IStartOnBootStatus>, void>('app.get-start-on-boot-status'),
   setStartOnBoot: bridge.buildProvider<IBridgeResponse<IStartOnBootStatus>, { enabled: boolean }>(
@@ -1429,7 +1437,7 @@ export const database = {
 // Preview panel
 export const preview = {
   // Electron owns the embedded browser; backend WS events cannot emit from main.
-  requestBrowser: bridge.buildEmitter<void>('preview:request-browser'),
+  requestBrowser: bridge.buildEmitter<{ conversationId: string } | void>('preview:request-browser'),
   open: wsEmitter<{
     content: string;
     content_type: import('../types/office/preview').PreviewContentType;

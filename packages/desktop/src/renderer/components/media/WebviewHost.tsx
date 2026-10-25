@@ -19,6 +19,9 @@ export interface WebviewHostProps {
   showNavBar?: boolean;
   /** Webview partition for cache/session isolation, e.g. "persist:ext-settings-feishu" */
   partition?: string;
+  browserConversationId?: string;
+  browserControlActive?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
   /** Extra class names for root container */
   className?: string;
   /** Extra styles for root container */
@@ -62,6 +65,9 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   id: _id,
   showNavBar = false,
   partition,
+  browserConversationId,
+  browserControlActive = true,
+  onDirtyChange,
   className,
   style,
   onDidFinishLoad,
@@ -85,6 +91,8 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   onTitleChangeRef.current = onTitleChange;
   const onFaviconChangeRef = useRef(onFaviconChange);
   onFaviconChangeRef.current = onFaviconChange;
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
 
   // Navigation state
   const [currentUrl, setCurrentUrl] = useState(url);
@@ -92,6 +100,13 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [zoomFactor, setZoomFactor] = useState(1);
   const [webviewReady, setWebviewReady] = useState(false);
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webviewReady || !webview || !browserConversationId || !browserControlActive) return;
+    void ipcBridge.application.reportBrowserWebContentsId
+      .invoke({ webContentsId: webview.getWebContentsId(), conversationId: browserConversationId })
+      .catch(() => {});
+  }, [webviewReady, browserConversationId, browserControlActive]);
 
   // <webview> 的 src 只绑定首次载入的地址，之后不再随导航状态重新渲染。
   // Electron 每次给 src 赋值都会重新载入，哪怕赋的是当前地址；src 绑在 currentUrl 上时，
@@ -278,6 +293,10 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
     };
 
     const handleConsoleMessage = (event: Electron.ConsoleMessageEvent) => {
+      if (event.message === '__NEXWORK_BROWSER_DIRTY__1' || event.message === '__NEXWORK_BROWSER_DIRTY__0') {
+        onDirtyChangeRef.current?.(event.message.endsWith('1'));
+        return;
+      }
       try {
         if (event.message.includes('__WEBVIEW_HOST_NAVIGATE__')) {
           const match = event.message.match(/"url":"([^"]+)"/);
@@ -319,6 +338,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
     };
 
     const handleDomReady = () => {
+      onDirtyChangeRef.current?.(false);
       setWebviewReady(true);
       syncNavState();
       injectClickInterceptor();
@@ -338,10 +358,12 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
        */
       try {
         const webContentsId = webviewEl.getWebContentsId?.();
-        if (typeof webContentsId === 'number') {
-          void ipcBridge.application.reportBrowserWebContentsId.invoke({ webContentsId }).then((res) => {
-            if (!res.success && res.msg) console.warn('[browser] agent control unavailable:', res.msg);
-          });
+        if (typeof webContentsId === 'number' && browserConversationId && browserControlActive) {
+          void ipcBridge.application.reportBrowserWebContentsId
+            .invoke({ webContentsId, conversationId: browserConversationId })
+            .then((res) => {
+              if (!res.success && res.msg) console.warn('[browser] agent control unavailable:', res.msg);
+            });
         }
       } catch (error) {
         console.warn('[browser] could not report webContents id:', error);
@@ -374,6 +396,11 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
             console.log('__WEBVIEW_HOST_NAVIGATE__', JSON.stringify(e.data));
           }
         });
+        if (!window.__nexworkDirtyTracking) {
+          window.__nexworkDirtyTracking = true;
+          document.addEventListener('input', () => console.log('__NEXWORK_BROWSER_DIRTY__1'), true);
+          document.addEventListener('submit', () => console.log('__NEXWORK_BROWSER_DIRTY__0'), true);
+        }
         true;
       `
         )
@@ -481,7 +508,15 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
       webviewEl.removeEventListener('page-title-updated', handlePageTitleUpdated as EventListener);
       webviewEl.removeEventListener('page-favicon-updated', handlePageFaviconUpdated as EventListener);
     };
-  }, [navigateToWithHistory, currentUrl, onDidFinishLoad, onDidFailLoad, isStarOfficeUrl]);
+  }, [
+    navigateToWithHistory,
+    currentUrl,
+    onDidFinishLoad,
+    onDidFailLoad,
+    isStarOfficeUrl,
+    browserConversationId,
+    browserControlActive,
+  ]);
 
   // Resize observer for content area
   useEffect(() => {

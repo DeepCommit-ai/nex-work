@@ -152,3 +152,15 @@ better 503 text.
 - The purchase-review skill (nex-agents `agents/purchase-req-review/SKILL.md`) tells its agent what
   to do with both texts: retry on "not attached yet"; tell the user and wait on "in use by another
   conversation".
+
+## 2026-10-24 follow-up
+
+The cross-repository Windows runtime repair is specified in cynapse
+`doc/spec/2026-10-24-nexwork-windows-runtime-local-regression-design.md`, including acceptance
+evidence and upstream-drift accounting. The global single-page boundary above is superseded:
+the desktop now brokers one independently scoped endpoint per conversation, while retaining
+shared cookies. The single-target protocol and lease remain local to each endpoint. Persistent
+renderer guests survive route/panel switches. Real Windows tests also require `Page.reload`
+to use the owned guest's WebContents API: forwarding that command through Electron's guest
+debugger reloaded the embedder and all other guests. See the canonical specification for the
+controlled two-page checks; this note does not create a second acceptance contract.

@@ -2,7 +2,11 @@
 import { mutate } from 'swr';
 import { managedAgents } from '@/common/adapter/ipcBridge';
 import { httpRequest } from '@/common/adapter/httpBridge';
-import { setManagedCatalogIds, setManagedConversationGate } from '@/common/deptconfig/managedConversation';
+import {
+  setManagedCatalogIds,
+  setManagedConversationGate,
+  setManagedRuntimePreparer,
+} from '@/common/deptconfig/managedConversation';
 import { normalizePolicy, setPolicy } from '@/common/capabilities/policy';
 import type { ManagedSyncResult, ManagedSyncStatus } from '@/common/deptconfig/catalog';
 import { buildReport } from '@/common/deptconfig/applyConfig';
@@ -32,6 +36,10 @@ async function refreshPolicy(status: ManagedSyncStatus): Promise<void> {
 export function bindManagedAgentSync(): void {
   if (bound) return;
   bound = true;
+  setManagedRuntimePreparer(async (conversationId) => {
+    const result = await managedAgents.prepareRuntime.invoke({ conversationId });
+    if (!result.success) throw new Error(result.error ?? 'MANAGED_SKILL_RUNTIME_UNAVAILABLE');
+  });
   setManagedConversationGate(async () => {
     const result = await managedAgents.acquire.invoke();
     if (!result.success || !result.lease) throw new Error(result.error ?? 'MANAGED_CATALOG_NOT_READY');

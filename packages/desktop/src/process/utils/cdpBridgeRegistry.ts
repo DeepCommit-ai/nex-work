@@ -17,12 +17,12 @@
  * layer never has to import the entry file.
  */
 
-import type { CdpBridgeHandle } from '../resources/builtinMcp/cdpBridge';
+import type { BrowserBrokerHandle } from '../resources/builtinMcp/browserBroker';
 
-let handle: CdpBridgeHandle | null = null;
+let handle: BrowserBrokerHandle | null = null;
 
-export const setCdpBridgeHandle = (next: CdpBridgeHandle | null): void => {
+export const setCdpBridgeHandle = (next: BrowserBrokerHandle | null): void => {
   handle = next;
 };
 
-export const getCdpBridgeHandle = (): CdpBridgeHandle | null => handle;
+export const getCdpBridgeHandle = (): BrowserBrokerHandle | null => handle;

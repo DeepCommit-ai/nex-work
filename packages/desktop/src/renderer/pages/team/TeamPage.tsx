@@ -1,6 +1,6 @@
 import { Button, Dropdown, Menu, Message, Modal, Spin, Tooltip } from '@arco-design/web-react';
 import { FullScreen, Left, MoreOne, OffScreen, Peoples, Right } from '@icon-park/react';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR, { useSWRConfig } from 'swr';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
@@ -613,11 +613,11 @@ const TeamPageContent: React.FC<TeamPageContentProps> = ({
 
   // Publish the active member column's conversation id so the Explorer's "add to
   // chat" targets the focused column's send box (activeSlotId defaults to the
-  // leader; every column is a real agent conversation). Only meaningful once the
-  // team is project-bound (host visible).
-  useEffect(() => {
-    setCurrentConversation(teamProjectId ? (activeAssistant?.conversation_id ?? null) : null);
-  }, [teamProjectId, activeAssistant?.conversation_id]);
+  // leader; every column is a real agent conversation). Browser ownership also
+  // needs this identity before the team's project backfill completes.
+  useLayoutEffect(() => {
+    setCurrentConversation(activeAssistant?.conversation_id ?? null);
+  }, [activeAssistant?.conversation_id]);
 
   // Backfill catch-up: the leader conversation lazily backfills its project_id on
   // resume and the backend emits one `conversation.listChanged` when it lands;
@@ -653,8 +653,11 @@ const TeamPageContent: React.FC<TeamPageContentProps> = ({
   // project_id is populated).
   const { closePreviewIfScopeChanged } = usePreviewContext();
   useEffect(() => {
-    closePreviewIfScopeChanged(previewScopeKey(teamProjectId, effectiveWorkspace ?? null));
-  }, [teamProjectId, effectiveWorkspace, closePreviewIfScopeChanged]);
+    closePreviewIfScopeChanged(
+      previewScopeKey(teamProjectId, effectiveWorkspace ?? null),
+      activeAssistant?.conversation_id
+    );
+  }, [teamProjectId, effectiveWorkspace, activeAssistant?.conversation_id, closePreviewIfScopeChanged]);
 
   const siderTitle = useMemo(
     () => (

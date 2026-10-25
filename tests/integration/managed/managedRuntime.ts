@@ -9,6 +9,7 @@ import { createBackendCall } from '@/process/services/managedagents/backend';
 import { ManagedAgentService } from '@/process/services/managedagents/ManagedAgentService';
 import { installCatalog } from '@/process/services/managedagents/install';
 import { runManagedModelProbe } from './managedModelProbe';
+import { runManagedWarmSkillProbe } from './managedWarmSkillProbe';
 import { runManagedUiProbe } from './managedUiProbe';
 import type { Assistant, AssistantDetail } from '@/common/types/agent/assistantTypes';
 import type { ManagedAgent } from '@/common/deptconfig/catalog';
@@ -196,126 +197,139 @@ try {
           throw new Error(`Missing installed rules ${agent.id}/${locale}`);
         setManagedCatalogIds(service.snapshot().assistantIds, service.snapshot().labels);
         const items = localizeManagedAssistant(detail).prompts.recommended_i18n?.[locale] ?? [];
-        if (items.length !== (agent.id === 'default-assistant' ? 0 : 3))
+        const published = JSON.parse(readFileSync(path.join(source, 'manifest.json'), 'utf8')).agents.find(
+          (entry: ManagedAgent) => entry.id === agent.id
+        ) as ManagedAgent;
+        if (JSON.stringify(items) !== JSON.stringify(published.recommended_prompts_i18n?.[locale] ?? []))
           throw new Error(`Missing published recommendations ${agent.id}/${locale}`);
       }
     }
     clients.push({ api, dataDir, service });
   }
   const first = clients[0];
-  await first.api('PUT', '/api/assistants/office-assistant', {
-    defaults: { model: { mode: 'fixed', value: 'retired-server-model' } },
-  });
-  const reapplied = await first.service.sync(true);
-  if (!reapplied.success) throw new Error('Could not reapply model policy');
-  const resetModel = await first.api<AssistantDetail>('GET', '/api/assistants/office-assistant');
-  if (resetModel.defaults.model.mode !== 'auto' || resetModel.defaults.model.value)
-    throw new Error('Removed server model pin remains active');
-  const workspace = path.join(first.dataDir, 'workspace');
-  mkdirSync(workspace);
-  const conversation = await first.api<{ id: string }>('POST', '/api/conversations', {
-    assistant: { id: 'office-assistant', locale: 'zh-CN' },
-    extra: { workspace },
-  });
-  const db = new Database(path.join(first.dataDir, 'aionui-backend.db'), { readonly: true });
-  const before = db
-    .query('SELECT * FROM conversation_assistant_snapshots WHERE conversation_id=?')
-    .get(conversation.id);
-  writeFileSync(path.join(root, 'snapshot-before.json'), JSON.stringify(before, null, 2));
-  const registered = await remote('/mcp/nexwork', {
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: {
-      name: 'register_agent',
-      arguments: {
-        id: 'research-helper',
-        name: '研究助手',
-        rules: '帮助整理用户提供的研究材料。',
-        request_id: 'probe-register-001',
+  if (process.env.NEXWORK_MANAGED_FOCUS === 'skills-warm') {
+    await runManagedWarmSkillProbe(first.api, root, (id) => first.service.prepareRuntime(id));
+  } else if (process.env.NEXWORK_MANAGED_FOCUS === 'skills') {
+    await runManagedModelProbe(first.api, root, 'claude', (id) => first.service.prepareRuntime(id));
+    console.log('PASS: published catalog -> native workspace -> bundled Claude Skill invocation');
+  } else {
+    await first.api('PUT', '/api/assistants/office-assistant', {
+      defaults: { model: { mode: 'fixed', value: 'retired-server-model' } },
+    });
+    const reapplied = await first.service.sync(true);
+    if (!reapplied.success) throw new Error('Could not reapply model policy');
+    const resetModel = await first.api<AssistantDetail>('GET', '/api/assistants/office-assistant');
+    if (resetModel.defaults.model.mode !== 'auto' || resetModel.defaults.model.value)
+      throw new Error('Removed server model pin remains active');
+    const workspace = path.join(first.dataDir, 'workspace');
+    mkdirSync(workspace);
+    const conversation = await first.api<{ id: string }>('POST', '/api/conversations', {
+      assistant: { id: 'office-assistant', locale: 'zh-CN' },
+      extra: { workspace },
+    });
+    const db = new Database(path.join(first.dataDir, 'aionui-backend.db'), { readonly: true });
+    const before = db
+      .query('SELECT * FROM conversation_assistant_snapshots WHERE conversation_id=?')
+      .get(conversation.id);
+    writeFileSync(path.join(root, 'snapshot-before.json'), JSON.stringify(before, null, 2));
+    const registered = await remote('/mcp/nexwork', {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'register_agent',
+        arguments: {
+          id: 'research-helper',
+          name: '研究助手',
+          rules: '帮助整理用户提供的研究材料。',
+          request_id: 'probe-register-001',
+        },
       },
-    },
-  });
-  console.log('MCP register:', JSON.stringify(registered));
-  await until(() => services.every((s) => s.snapshot().revision === 2), 'Push of registered Agent');
-  const bug = await remote('/mcp/nexwork', {
-    jsonrpc: '2.0',
-    id: 2,
-    method: 'tools/call',
-    params: {
-      name: 'submit_bug',
-      arguments: { title: '联调测试', description: '验证后台持久化。', request_id: 'probe-bug-001' },
-    },
-  });
-  console.log('MCP bug:', JSON.stringify(bug));
-  const office = path.join(source, 'office.md');
-  writeFileSync(office, readFileSync(office, 'utf8') + '\n发布测试版本三。\n');
-  const skill = path.join(source, 'skills/officecli-docx.md');
-  writeFileSync(skill, readFileSync(skill, 'utf8') + '\n发布测试技能三。\n');
-  const manifestPath = path.join(source, 'manifest.json');
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { agents: ManagedAgent[] };
-  const originalButler = await first.api<AssistantDetail>('GET', '/api/assistants/nexwork-butler');
-  const originalButlerLabels = first.service.snapshot().labels?.['nexwork-butler'];
-  manifest.agents.find((agent) => agent.id === 'nexwork-butler')!.recommended_prompts = ['发布后的管家推荐'];
-  manifest.agents.find((agent) => agent.id === 'nexwork-butler')!.recommended_prompts_i18n = {
-    'zh-CN': ['发布后的管家推荐'],
-  };
-  manifest.agents.find((agent) => agent.id === 'default-assistant')!.avatar = 'office-documents';
-  manifest.agents.find((agent) => agent.id === 'office-assistant')!.avatar = 'nexwork-logo';
-  writeFileSync(manifestPath, JSON.stringify(manifest));
-  failNextOfficeWrite = true;
-  await remote('/registry/publish', { request_id: 'probe-publish-003' });
-  await until(() => first.service.snapshot().phase === 'error', 'Injected installation failure');
-  if (first.service.snapshot().revision !== 2) throw new Error('Failed installation advanced the installed revision');
-  const restored = await first.api<AssistantDetail>('GET', '/api/assistants/default-assistant?locale=zh-CN');
-  if (!restored.rules.content.includes('catalog revision 2')) throw new Error('Previous prompt was not restored');
-  if (restored.profile.avatar) throw new Error('Rollback did not clear a newly added avatar');
-  const restoredOffice = await first.api<AssistantDetail>('GET', '/api/assistants/office-assistant');
-  if (restoredOffice.profile.avatar !== 'office-documents') throw new Error('Previous Office avatar was not restored');
-  const restoredButler = await first.api<AssistantDetail>('GET', '/api/assistants/nexwork-butler');
-  if (JSON.stringify(restoredButler.prompts) !== JSON.stringify(originalButler.prompts))
-    throw new Error('Previous recommendations were not restored');
-  if (JSON.stringify(first.service.snapshot().labels?.['nexwork-butler']) !== JSON.stringify(originalButlerLabels))
-    throw new Error('Failed installation replaced published recommendation translations');
-  const recovery = await first.service.sync(true);
-  if (!recovery.success) throw new Error('Installation did not recover: ' + recovery.error);
-  await until(() => services.every((s) => s.snapshot().revision === 3), 'Push of prompt and skill update');
-  for (const client of clients) {
-    const detail = await client.api<AssistantDetail>('GET', '/api/assistants/nexwork-butler');
-    setManagedCatalogIds(client.service.snapshot().assistantIds, client.service.snapshot().labels);
-    if (
-      JSON.stringify(localizeManagedAssistant(detail).prompts.recommended_i18n) !==
-      JSON.stringify({ 'zh-CN': ['发布后的管家推荐'] })
-    )
-      throw new Error('Pushed recommendations did not replace previous localized suggestions');
+    });
+    console.log('MCP register:', JSON.stringify(registered));
+    await until(() => services.every((s) => s.snapshot().revision === 2), 'Push of registered Agent');
+    const bug = await remote('/mcp/nexwork', {
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'submit_bug',
+        arguments: { title: '联调测试', description: '验证后台持久化。', request_id: 'probe-bug-001' },
+      },
+    });
+    console.log('MCP bug:', JSON.stringify(bug));
+    const office = path.join(source, 'office.md');
+    writeFileSync(office, readFileSync(office, 'utf8') + '\n发布测试版本三。\n');
+    const skill = path.join(source, 'skills/officecli-docx.md');
+    writeFileSync(skill, readFileSync(skill, 'utf8') + '\n发布测试技能三。\n');
+    const manifestPath = path.join(source, 'manifest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { agents: ManagedAgent[] };
+    const originalButler = await first.api<AssistantDetail>('GET', '/api/assistants/nexwork-butler');
+    const originalButlerLabels = first.service.snapshot().labels?.['nexwork-butler'];
+    manifest.agents.find((agent) => agent.id === 'nexwork-butler')!.recommended_prompts = ['发布后的管家推荐'];
+    manifest.agents.find((agent) => agent.id === 'nexwork-butler')!.recommended_prompts_i18n = {
+      'zh-CN': ['发布后的管家推荐'],
+    };
+    manifest.agents.find((agent) => agent.id === 'default-assistant')!.avatar = 'office-documents';
+    manifest.agents.find((agent) => agent.id === 'office-assistant')!.avatar = 'nexwork-logo';
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    failNextOfficeWrite = true;
+    await remote('/registry/publish', { request_id: 'probe-publish-003' });
+    await until(() => first.service.snapshot().phase === 'error', 'Injected installation failure');
+    if (first.service.snapshot().revision !== 2) throw new Error('Failed installation advanced the installed revision');
+    const restored = await first.api<AssistantDetail>('GET', '/api/assistants/default-assistant?locale=zh-CN');
+    if (!restored.rules.content.includes('catalog revision 2')) throw new Error('Previous prompt was not restored');
+    if (restored.profile.avatar) throw new Error('Rollback did not clear a newly added avatar');
+    const restoredOffice = await first.api<AssistantDetail>('GET', '/api/assistants/office-assistant');
+    if (restoredOffice.profile.avatar !== 'office-documents')
+      throw new Error('Previous Office avatar was not restored');
+    const restoredButler = await first.api<AssistantDetail>('GET', '/api/assistants/nexwork-butler');
+    if (JSON.stringify(restoredButler.prompts) !== JSON.stringify(originalButler.prompts))
+      throw new Error('Previous recommendations were not restored');
+    if (JSON.stringify(first.service.snapshot().labels?.['nexwork-butler']) !== JSON.stringify(originalButlerLabels))
+      throw new Error('Failed installation replaced published recommendation translations');
+    const recovery = await first.service.sync(true);
+    if (!recovery.success) throw new Error('Installation did not recover: ' + recovery.error);
+    await until(() => services.every((s) => s.snapshot().revision === 3), 'Push of prompt and skill update');
+    for (const client of clients) {
+      const detail = await client.api<AssistantDetail>('GET', '/api/assistants/nexwork-butler');
+      setManagedCatalogIds(client.service.snapshot().assistantIds, client.service.snapshot().labels);
+      if (
+        JSON.stringify(localizeManagedAssistant(detail).prompts.recommended_i18n) !==
+        JSON.stringify({ 'zh-CN': ['发布后的管家推荐'] })
+      )
+        throw new Error('Pushed recommendations did not replace previous localized suggestions');
+    }
+    const after = db
+      .query('SELECT * FROM conversation_assistant_snapshots WHERE conversation_id=?')
+      .get(conversation.id);
+    if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('Historical snapshot was changed');
+    const workspace2 = path.join(first.dataDir, 'workspace2');
+    mkdirSync(workspace2);
+    const fresh = await first.api<{ id: string }>('POST', '/api/conversations', {
+      assistant: { id: 'office-assistant', locale: 'zh-CN' },
+      extra: { workspace: workspace2 },
+    });
+    const latest = db.query('SELECT * FROM conversation_assistant_snapshots WHERE conversation_id=?').get(fresh.id);
+    writeFileSync(path.join(root, 'snapshot-latest.json'), JSON.stringify(latest, null, 2));
+    if (!JSON.stringify(latest).includes('发布测试版本三')) throw new Error('New conversation missed current prompt');
+    db.close();
+    await runManagedModelProbe(first.api, root);
+    await until(
+      () => services.every((s) => s.snapshot().assistantIds.includes('dialogue-created')),
+      'Native Butler-created Agent push'
+    );
+    services.forEach((s) => s.stop());
+    await runManagedModelProbe(first.api, root, 'claude', (id) => first.service.prepareRuntime(id));
+    if (process.env.NEXWORK_MANAGED_UI === '1') await runManagedUiProbe(root, serverUrl, deptKey);
+    writeFileSync(
+      path.join(root, 'result.json'),
+      JSON.stringify({ clients: services.map((s) => s.snapshot()), registered, bug, historyPreserved: true }, null, 2)
+    );
+    console.log(
+      'PASS: two native clients, 78 localized rules, push registration/publication, management MCP, immutable old snapshot and latest new conversation'
+    );
   }
-  const after = db.query('SELECT * FROM conversation_assistant_snapshots WHERE conversation_id=?').get(conversation.id);
-  if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('Historical snapshot was changed');
-  const workspace2 = path.join(first.dataDir, 'workspace2');
-  mkdirSync(workspace2);
-  const fresh = await first.api<{ id: string }>('POST', '/api/conversations', {
-    assistant: { id: 'office-assistant', locale: 'zh-CN' },
-    extra: { workspace: workspace2 },
-  });
-  const latest = db.query('SELECT * FROM conversation_assistant_snapshots WHERE conversation_id=?').get(fresh.id);
-  writeFileSync(path.join(root, 'snapshot-latest.json'), JSON.stringify(latest, null, 2));
-  if (!JSON.stringify(latest).includes('发布测试版本三')) throw new Error('New conversation missed current prompt');
-  db.close();
-  await runManagedModelProbe(first.api, root);
-  await until(
-    () => services.every((s) => s.snapshot().assistantIds.includes('dialogue-created')),
-    'Native Butler-created Agent push'
-  );
-  services.forEach((s) => s.stop());
-  await runManagedModelProbe(first.api, root, 'claude');
-  if (process.env.NEXWORK_MANAGED_UI === '1') await runManagedUiProbe(root, serverUrl, deptKey);
-  writeFileSync(
-    path.join(root, 'result.json'),
-    JSON.stringify({ clients: services.map((s) => s.snapshot()), registered, bug, historyPreserved: true }, null, 2)
-  );
-  console.log(
-    'PASS: two native clients, 78 localized rules, push registration/publication, management MCP, immutable old snapshot and latest new conversation'
-  );
 } finally {
   services.forEach((s) => s.stop());
   for (const child of children.toReversed()) {

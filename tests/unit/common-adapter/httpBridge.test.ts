@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { setManagedRuntimePreparer } from '@/common/deptconfig/managedConversation';
 import {
   getBaseUrl,
   httpGet,
@@ -79,7 +80,49 @@ describe('httpBridge', () => {
   });
 
   afterEach(() => {
+    setManagedRuntimePreparer();
     vi.unstubAllGlobals();
+  });
+
+  describe('selected skill readiness before sending', () => {
+    it('does not send the model turn until the desktop has verified its workspace skills', async () => {
+      let release!: () => void;
+      let entered!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      setManagedRuntimePreparer(async () => {
+        entered();
+        await gate;
+      });
+      const fetchSpy = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: { accepted: true } }), {
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+      vi.stubGlobal('fetch', fetchSpy);
+      const sending = httpRequest('POST', '/api/conversations/old-conversation/messages', { content: 'continue' });
+      await started;
+      expect(fetchSpy).not.toHaveBeenCalled();
+      release();
+      await sending;
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not send a turn when the desktop cannot prepare a selected skill', async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal('fetch', fetchSpy);
+      setManagedRuntimePreparer(async () => {
+        throw new Error('Selected skill unavailable');
+      });
+      await expect(
+        httpRequest('POST', '/api/conversations/new-conversation/messages', { content: 'start' })
+      ).rejects.toThrow('Selected skill unavailable');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('getBaseUrl', () => {

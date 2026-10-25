@@ -29,6 +29,18 @@ export function startManagedAgents(port: number, dataDir: string, skillsRoot: st
 
 /** Every provider returns an envelope, including startup and unexpected failure paths. */
 export function initManagedAgentsBridge(): void {
+  managedAgents.prepareRuntime.provider(async ({ conversationId }) => {
+    await bootstrap;
+    if (!service) return { success: false, error: 'Managed service is not ready' };
+    try {
+      return { success: true, repaired: await service.prepareRuntime(conversationId) };
+    } catch {
+      return {
+        success: false,
+        error: 'Selected skill files are unavailable; synchronize managed configuration and retry.',
+      };
+    }
+  });
   const safely = async (
     run: (current: ManagedAgentService) => Promise<ManagedSyncResult>
   ): Promise<ManagedSyncResult> => {

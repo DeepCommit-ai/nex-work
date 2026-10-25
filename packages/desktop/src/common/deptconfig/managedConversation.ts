@@ -7,6 +7,17 @@ type Release = () => Promise<void>;
 let waitForCatalog: (() => Promise<Release | void>) | undefined;
 let visibleIds: Set<string> | undefined;
 let labels: ManagedLabels = {};
+let prepareRuntime: ((conversationId: string) => Promise<void>) | undefined;
+
+/** A desktop-owned preflight protects both new and historical conversation turns. */
+export function setManagedRuntimePreparer(prepare?: (conversationId: string) => Promise<void>): void {
+  prepareRuntime = prepare;
+}
+
+export async function prepareManagedRuntime(method: string, route: string): Promise<void> {
+  const match = /^\/api\/conversations\/([^/?]+)\/(?:messages|side-question)(?:\?.*)?$/.exec(route);
+  if (method === 'POST' && match) await prepareRuntime?.(decodeURIComponent(match[1]));
+}
 
 export function setManagedCatalogIds(ids: readonly string[], localized: ManagedLabels = {}): void {
   visibleIds = new Set(['default-assistant', ...ids]);
