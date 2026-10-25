@@ -5,7 +5,7 @@ import type { Assistant, AssistantDetail, CreateAssistantRequest } from '@/commo
 import type { IMcpServer } from '@/common/config/storage';
 import type { DeptConfig } from '@/common/deptconfig/types';
 import type { ManagedCatalog } from '@/common/deptconfig/catalog';
-import { MANAGED_BUTLER_ID, MANAGED_DEFAULT_ID } from '@/common/deptconfig/catalog';
+import { MANAGED_BUTLER_ID, MANAGED_DEFAULT_ID, MANAGED_PERMISSION } from '@/common/deptconfig/catalog';
 import { buildEnvOverride, resolveNexworkProfilePath } from '@/common/gateway/provisionGateway';
 import { buildProvenanceEnvValue } from '@/common/deptconfig/client';
 import { pinnedModel } from '@/common/deptconfig/applyConfig';
@@ -183,6 +183,8 @@ export async function installCatalog(
           model: spec && pinnedModel(spec) ? { mode: 'fixed', value: pinnedModel(spec)! } : { mode: 'auto' },
           // spec 016: the department's thought level; the guide page starts new conversations on it
           thought_level: spec?.thought_level ? { mode: 'fixed', value: spec.thought_level } : { mode: 'auto' },
+          // spec 017: new conversations start on full-auto; employees can still switch per conversation
+          permission: { mode: 'fixed', value: MANAGED_PERMISSION[agent.engine] },
         },
       };
       if (old) {

@@ -6,6 +6,8 @@ import { migrateManagedProfile } from '@aionui/web-host';
 import { resolveNexworkProfilePath } from '@/common/gateway/provisionGateway';
 
 export const NEXWORK_OUTPUT_STYLE = 'NexWork';
+/** Claude Code's own developer skills (/init, /security-review, ...) stay out of the model's view; workspace skills are unaffected. */
+const NEXWORK_SETTINGS = { outputStyle: NEXWORK_OUTPUT_STYLE, disableBundledSkills: true };
 
 /** Install minimal product rules without changing credentials, permissions, or other settings. */
 export function prepareNexworkClaudeProfile(configDir: string): void {
@@ -27,9 +29,9 @@ export function prepareNexworkClaudeProfile(configDir: string): void {
     `---\nname: ${NEXWORK_OUTPUT_STYLE}\ndescription: NexWork general assistant\nkeep-coding-instructions: false\n---\nUse the instructions and tools provided for the current conversation.\n`,
     { mode: 0o600 }
   );
-  if (settings.outputStyle === NEXWORK_OUTPUT_STYLE) return;
+  if (Object.entries(NEXWORK_SETTINGS).every(([key, value]) => settings[key] === value)) return;
   const temporary = `${settingsPath}.${process.pid}.tmp`;
-  writeFileSync(temporary, JSON.stringify({ ...settings, outputStyle: NEXWORK_OUTPUT_STYLE }, null, 2) + '\n', {
+  writeFileSync(temporary, JSON.stringify({ ...settings, ...NEXWORK_SETTINGS }, null, 2) + '\n', {
     mode: 0o600,
   });
   renameSync(temporary, settingsPath);
