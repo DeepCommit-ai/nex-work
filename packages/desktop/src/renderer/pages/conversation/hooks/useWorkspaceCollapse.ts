@@ -9,6 +9,8 @@ import { useEffect, useRef, useState } from 'react';
 
 type UseWorkspaceCollapseParams = {
   workspaceEnabled: boolean;
+  /** False when the project host owns the shared workspace control state. */
+  ownsWorkspaceState?: boolean;
   isMobile: boolean;
   /**
    * Identifier whose change forces a mobile collapse (typically the active
@@ -54,6 +56,7 @@ type UseWorkspaceCollapseReturn = {
  */
 export function useWorkspaceCollapse({
   workspaceEnabled,
+  ownsWorkspaceState = true,
   isMobile,
   conversation_id,
   preferenceKey,
@@ -161,12 +164,13 @@ export function useWorkspaceCollapse({
 
   // Broadcast workspace state event
   useEffect(() => {
+    if (!ownsWorkspaceState) return;
     if (!workspaceEnabled) {
       dispatchWorkspaceStateEvent(true);
       return;
     }
     dispatchWorkspaceStateEvent(rightSiderCollapsed);
-  }, [rightSiderCollapsed, workspaceEnabled]);
+  }, [rightSiderCollapsed, workspaceEnabled, ownsWorkspaceState]);
 
   // Force collapse when workspace is disabled
   useEffect(() => {

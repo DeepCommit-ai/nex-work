@@ -96,6 +96,9 @@ const ChatLayout: React.FC<{
   // --- Hook A: workspace collapse ---
   const { rightSiderCollapsed, setRightSiderCollapsed } = useWorkspaceCollapse({
     workspaceEnabled,
+    // The project host owns workspace state on desktop and mobile, regardless
+    // of whether the preview is hosted here or at the Layout level.
+    ownsWorkspaceState: !props.previewHosted,
     isMobile,
     conversation_id,
     preferenceKey: workspacePreferenceKey ?? conversation_id,
