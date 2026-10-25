@@ -88,8 +88,10 @@ vi.mock('@/renderer/components/Markdown', () => ({
   default: ({
     children,
     onLocalFileLink,
+    baseDirectory,
   }: {
     children?: React.ReactNode;
+    baseDirectory?: string;
     onLocalFileLink?: (
       path: string,
       reference?: {
@@ -101,7 +103,7 @@ vi.mock('@/renderer/components/Markdown', () => ({
       }
     ) => void | Promise<void>;
   }) => (
-    <div>
+    <div data-markdown-base-directory={baseDirectory}>
       {children}
       {onLocalFileLink && (
         <button
@@ -457,6 +459,14 @@ describe('MessageText attachment paths', () => {
     await waitFor(() => {
       expect(copyText).toHaveBeenCalledWith(content);
     });
+  });
+
+  it('gives Markdown file links the current conversation workspace as their base', () => {
+    renderMessageWithLocalLink('[report.md](runs/2026-10-25/report.md)');
+    expect(document.querySelector('[data-markdown-base-directory]')).toHaveAttribute(
+      'data-markdown-base-directory',
+      '/workspace/demo'
+    );
   });
 
   it('opens a missing-file preview when a local markdown link no longer exists', async () => {

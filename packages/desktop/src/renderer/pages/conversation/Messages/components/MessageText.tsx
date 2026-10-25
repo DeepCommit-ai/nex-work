@@ -334,12 +334,17 @@ const MessageText: React.FC<{
                 <MarkdownView
                   codeStyle={CODE_STYLE}
                   onLocalFileLink={handleLocalFileLink}
+                  baseDirectory={conversationContext?.workspace}
                 >{`\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``}</MarkdownView>
               </div>
             </CollapsibleContent>
           ) : (
             <div data-testid='message-text-content'>
-              <MarkdownView codeStyle={CODE_STYLE} onLocalFileLink={handleLocalFileLink}>
+              <MarkdownView
+                codeStyle={CODE_STYLE}
+                onLocalFileLink={handleLocalFileLink}
+                baseDirectory={conversationContext?.workspace}
+              >
                 {data}
               </MarkdownView>
             </div>

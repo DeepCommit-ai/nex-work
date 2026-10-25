@@ -143,6 +143,56 @@ const normalizeLocalFileHrefToPath = (href: string): LocalFilePathCandidate | nu
   return null;
 };
 
+const hasControlCharacters = (value: string): boolean => {
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+};
+
+/** Resolve file-like relative hrefs only inside an explicit backend workspace. */
+const resolveWorkspaceFileHref = (href: string, baseDirectory?: string): LocalFilePathCandidate | null => {
+  if (!baseDirectory) return null;
+  const candidate = splitHashLocation(href);
+  const relativePath = candidate.filePath.replace(/\\/g, '/');
+  const pathWithoutLocation = relativePath.replace(/:\d+(?::\d+)?$/, '');
+  if (
+    candidate.hasInvalidHash ||
+    relativePath.startsWith('/') ||
+    /^[a-z][a-z\d+.-]*:/i.test(pathWithoutLocation) ||
+    relativePath.includes('?') ||
+    hasControlCharacters(relativePath) ||
+    !/(?:^|\/)[^/]+\.[^./\s][^/]*$/.test(pathWithoutLocation)
+  ) {
+    return null;
+  }
+
+  const base = baseDirectory.replace(/\\/g, '/');
+  const root = /^(?:[A-Za-z]:\/|\/(?!\/))/.exec(base)?.[0];
+  if (!root || hasControlCharacters(base)) return null;
+  const segments: string[] = [];
+  for (const segment of base.slice(root.length).split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      if (!segments.length) return null;
+      segments.pop();
+    } else segments.push(segment);
+  }
+  const workspaceDepth = segments.length;
+  for (const segment of relativePath.split('/')) {
+    if (!segment || segment === '.') continue;
+    // Win32 trims trailing dots/spaces, so disguised parent segments must not
+    // pass the lexical root check and resolve outside it on the backend.
+    if (/^[A-Za-z]:/.test(root) && segment !== '..' && /^\.+[ .]+$/.test(segment)) return null;
+    if (segment === '..') {
+      if (segments.length <= workspaceDepth) return null;
+      segments.pop();
+    } else segments.push(segment);
+  }
+  return { ...candidate, filePath: root + segments.join('/') };
+};
+
 const splitLocationSuffix = (filePath: string): Omit<LocalFileLinkReference, 'rawReference'> & LocalFileLocation => {
   const lineColumnMatch = /^(.*):(\d+):(\d+)$/.exec(filePath);
   if (lineColumnMatch) {
@@ -185,12 +235,13 @@ const formatRawReference = (
 
 export const resolveLocalFileLinkReference = (
   rawHref: string,
-  resolvedHref?: string
+  resolvedHref?: string,
+  baseDirectory?: string
 ): LocalFileLinkReference | null => {
   const href = safeDecodeURIComponent((rawHref || resolvedHref || '').trim());
   if (!href) return null;
 
-  const candidate = normalizeLocalFileHrefToPath(href);
+  const candidate = normalizeLocalFileHrefToPath(href) ?? resolveWorkspaceFileHref(href, baseDirectory);
   if (!candidate || candidate.hasInvalidHash) return null;
 
   const colonReference = splitLocationSuffix(candidate.filePath);
@@ -212,8 +263,12 @@ export const resolveLocalFileLinkReference = (
   };
 };
 
-export const resolveLocalFileLinkPath = (rawHref: string, resolvedHref?: string): string | null => {
-  return resolveLocalFileLinkReference(rawHref, resolvedHref)?.filePath ?? null;
+export const resolveLocalFileLinkPath = (
+  rawHref: string,
+  resolvedHref?: string,
+  baseDirectory?: string
+): string | null => {
+  return resolveLocalFileLinkReference(rawHref, resolvedHref, baseDirectory)?.filePath ?? null;
 };
 
 export const toLocalFileHref = (filePath: string): string => {

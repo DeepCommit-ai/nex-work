@@ -5,11 +5,32 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MarkdownView from '@/renderer/components/Markdown';
+import { useLocalFilePreview } from '@/renderer/pages/conversation/Preview/hooks/useLocalFilePreview';
 
 const copyTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const previewMocks = vi.hoisted(() => ({
+  openPreview: vi.fn(),
+  metadata: vi.fn().mockResolvedValue({ size: 128, lastModified: 1 }),
+  read: vi.fn().mockResolvedValue('Synthetic report fixture'),
+  external: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('@/common', () => ({
+  ipcBridge: {
+    fs: {
+      getContentMetadata: { invoke: previewMocks.metadata },
+      readContent: { invoke: previewMocks.read },
+    },
+  },
+}));
+vi.mock('@/renderer/pages/conversation/Preview/context/PreviewContext', () => ({
+  useOptionalPreviewContext: () => null,
+  usePreviewContext: () => ({ openPreview: previewMocks.openPreview }),
+}));
+vi.mock('@/renderer/pages/conversation/explorer/currentProjectStore', () => ({ getCurrentProject: () => null }));
+vi.mock('@/renderer/services/clientBusinessSettings', () => ({ getClientBusinessSetting: async () => 1 }));
 
 vi.mock('@/renderer/components/Markdown/ShadowView', () => ({
   __esModule: true,
@@ -31,7 +52,7 @@ vi.mock('@/renderer/utils/chat/latexDelimiters', () => ({
 }));
 
 vi.mock('@/renderer/utils/platform', () => ({
-  openExternalUrl: vi.fn(),
+  openExternalUrl: previewMocks.external,
 }));
 
 vi.mock('@/renderer/utils/ui/clipboard', () => ({
@@ -68,6 +89,60 @@ vi.mock('react-i18next', () => ({
 describe('MarkdownView local file links', () => {
   beforeEach(() => {
     copyTextMock.mockClear();
+    previewMocks.openPreview.mockClear();
+    previewMocks.metadata.mockClear();
+    previewMocks.read.mockClear();
+    previewMocks.external.mockClear();
+  });
+
+  it('routes a relative workspace report click through ChatFileRef metadata and content preview', async () => {
+    const Harness = () => {
+      const open = useLocalFilePreview('C:\\NexWork\\conversation');
+      return (
+        <MarkdownView baseDirectory='C:\\NexWork\\conversation' onLocalFileLink={open}>
+          {'[runs/2026-10-25/report.md](runs/2026-10-25/report.md)'}
+        </MarkdownView>
+      );
+    };
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'runs/2026-10-25/report.md' }));
+
+    await waitFor(() =>
+      expect(previewMocks.openPreview).toHaveBeenCalledWith(
+        'Synthetic report fixture',
+        'markdown',
+        expect.objectContaining({
+          fileRef: { kind: 'local', path: 'C:/NexWork/conversation/runs/2026-10-25/report.md' },
+          file_path: 'C:/NexWork/conversation/runs/2026-10-25/report.md',
+          workspace: 'C:\\NexWork\\conversation',
+        }),
+        { replace: true }
+      )
+    );
+    expect(previewMocks.read).toHaveBeenCalledWith({
+      file: { kind: 'local', path: 'C:/NexWork/conversation/runs/2026-10-25/report.md' },
+      encoding: 'utf8',
+    });
+    expect(previewMocks.external).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'https://example.com/report.md',
+    'http://example.com/report.md',
+    'mailto:test@example.com',
+    '#heading',
+    '//example.com/report.md',
+  ])('keeps non-file targets outside the workspace preview: %s', (href) => {
+    render(<MarkdownView baseDirectory='C:/workspace' onLocalFileLink={vi.fn()}>{`[target](${href})`}</MarkdownView>);
+    expect(screen.getByRole('link', { name: 'target' })).toHaveAttribute('href', href);
+    expect(screen.queryByRole('button', { name: 'target' })).not.toBeInTheDocument();
+  });
+
+  it('does not resolve a relative report using the renderer URL when the workspace is absent', () => {
+    const onLocalFileLink = vi.fn();
+    render(<MarkdownView onLocalFileLink={onLocalFileLink}>{'[report](runs/report.md)'}</MarkdownView>);
+    expect(screen.getByRole('link', { name: 'report' })).toHaveAttribute('href', 'runs/report.md');
+    expect(screen.queryByRole('button', { name: 'report' })).not.toBeInTheDocument();
   });
 
   it('renders local file links as app controls instead of browser anchors', () => {

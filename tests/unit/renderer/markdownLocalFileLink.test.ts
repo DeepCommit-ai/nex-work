@@ -12,6 +12,58 @@ import {
 } from '@/renderer/components/Markdown/markdownUtils';
 
 describe('resolveLocalFileLinkPath', () => {
+  it('resolves a report link against an explicit Windows conversation workspace', () => {
+    expect(resolveLocalFileLinkReference('runs/2026-10-25/report.md', undefined, 'C:\\NexWork\\conversation')).toEqual({
+      filePath: 'C:/NexWork/conversation/runs/2026-10-25/report.md',
+      rawReference: 'C:/NexWork/conversation/runs/2026-10-25/report.md',
+    });
+  });
+
+  it('decodes relative Chinese filenames and normalizes segments within the workspace', () => {
+    expect(
+      resolveLocalFileLinkReference(
+        './runs/tmp/../%E4%B8%AD%E6%96%87%20%E6%8A%A5%E5%91%8A.md#L12',
+        undefined,
+        'C:\\测试 用户\\任务目录'
+      )
+    ).toEqual({
+      filePath: 'C:/测试 用户/任务目录/runs/中文 报告.md',
+      rawReference: 'C:/测试 用户/任务目录/runs/中文 报告.md#L12',
+      line: 12,
+    });
+  });
+
+  it('resolves a POSIX workspace without losing its filesystem root', () => {
+    expect(resolveLocalFileLinkPath('runs/report.md', undefined, '/workspace/demo')).toBe(
+      '/workspace/demo/runs/report.md'
+    );
+  });
+
+  it.each(['../outside.md', 'runs/../../outside.md', '%2e%2e/outside.md', '..\\outside.md', '..%20/outside.md'])(
+    'rejects workspace escapes: %s',
+    (href) => {
+      expect(resolveLocalFileLinkPath(href, undefined, 'C:/workspace')).toBeNull();
+    }
+  );
+
+  it.each([
+    'https://example.com/report.md',
+    'http://example.com/report.md',
+    'mailto:test@example.com',
+    '#heading',
+    '//example.com/report.md',
+    'javascript:alert(1)',
+    'data:text/plain,report.md',
+    '/settings',
+  ])('does not turn a non-file link into a workspace file: %s', (href) => {
+    expect(resolveLocalFileLinkPath(href, undefined, 'C:/workspace')).toBeNull();
+  });
+
+  it('does not guess a root for relative files when the workspace is missing or relative', () => {
+    expect(resolveLocalFileLinkPath('runs/report.md')).toBeNull();
+    expect(resolveLocalFileLinkPath('runs/report.md', undefined, 'relative-workspace')).toBeNull();
+  });
+
   it('recognizes Windows absolute paths emitted as root-relative markdown links', () => {
     expect(resolveLocalFileLinkPath('/C:/Users/Administrator/AppData/Roaming/AionUi/report.xlsx')).toBe(
       'C:/Users/Administrator/AppData/Roaming/AionUi/report.xlsx'
