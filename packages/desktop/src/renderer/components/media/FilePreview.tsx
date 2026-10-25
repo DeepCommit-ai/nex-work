@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { formatByteSize } from '@/renderer/services/i18n/format';
 import { getFileExtension } from '@/renderer/services/FileService';
 import { ipcBridge } from '@/common';
-import { Image, Tooltip } from '@arco-design/web-react';
+import { Button, Image, Tooltip } from '@arco-design/web-react';
 import fileIcon from '@/renderer/assets/icons/file-icon.svg';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg']);
@@ -30,11 +30,13 @@ interface FilePreviewProps {
   path: string;
   onRemove: () => void;
   readonly?: boolean;
+  /** Open the literal native path; omitted for attachment-picker chips. */
+  onOpen?: (path: string) => void | Promise<void>;
   /** Optional tooltip shown on the chip (e.g. "sent as a file path"). */
   hint?: string;
 }
 
-const FilePreview: React.FC<FilePreviewProps> = ({ path, onRemove, readonly = false, hint }) => {
+const FilePreview: React.FC<FilePreviewProps> = ({ path, onRemove, readonly = false, onOpen, hint }) => {
   // Defensive check: ensure path is a string
   if (typeof path !== 'string') {
     console.error('[FilePreview] Invalid path type:', typeof path, path);
@@ -136,22 +138,37 @@ const FilePreview: React.FC<FilePreviewProps> = ({ path, onRemove, readonly = fa
     );
   }
 
+  const fileCard = (
+    <div
+      className='h-60px flex items-center gap-12px px-12px rd-8px bg-bg-2 border border-solid'
+      style={{ borderColor: 'var(--border-base)', boxShadow: '0 0 0 1px rgba(0,0,0,0.02)' }}
+    >
+      <div className='w-40px h-40px rd-8px flex items-center justify-center flex-shrink-0'>
+        <img className='w-full h-full object-contain' src={fileIcon} alt='File Icon' />
+      </div>
+      <div className='flex flex-col gap-2px min-w-0'>
+        <span className='text-14px text-t-primary max-w-150px truncate'>{file_name}</span>
+        <span className='text-12px text-t-secondary'>
+          {fileExt}: {fileSize || '...'}
+        </span>
+      </div>
+    </div>
+  );
+
   return withHint(
     <div className='relative inline-block mb-10px'>
-      <div
-        className='h-60px flex items-center gap-12px px-12px rd-8px bg-bg-2 border border-solid'
-        style={{ borderColor: 'var(--border-base)', boxShadow: '0 0 0 1px rgba(0,0,0,0.02)' }}
-      >
-        <div className='w-40px h-40px rd-8px flex items-center justify-center flex-shrink-0'>
-          <img className='w-full h-full object-contain' src={fileIcon} alt='File Icon' />
-        </div>
-        <div className='flex flex-col gap-2px min-w-0'>
-          <span className='text-14px text-t-primary max-w-150px truncate'>{file_name}</span>
-          <span className='text-12px text-t-secondary'>
-            {fileExt}: {fileSize || '...'}
-          </span>
-        </div>
-      </div>
+      {onOpen ? (
+        <Button
+          type='text'
+          aria-label={file_name}
+          className='!h-auto !p-0 !text-left !align-top'
+          onClick={() => void onOpen(path)}
+        >
+          {fileCard}
+        </Button>
+      ) : (
+        fileCard
+      )}
       {!readonly && (
         <div
           className='absolute -top-4px -end-4px w-16px h-16px rd-50% bg-white dark:bg-gray-700 cursor-pointer flex items-center justify-center shadow-md hover:shadow-lg transition-all z-10 border-1 border-solid border-gray-200 dark:border-gray-600'

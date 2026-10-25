@@ -9,10 +9,12 @@ import { render, waitFor } from '@testing-library/react';
 import React from 'react';
 
 const writeRendererLogInvoke = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const readContentInvoke = vi.hoisted(() => vi.fn());
 
 vi.mock('@/common', () => ({
   ipcBridge: {
     fs: {
+      readContent: { invoke: readContentInvoke },
       getImageBase64: { invoke: vi.fn(() => Promise.resolve('')) },
       readFile: { invoke: vi.fn(() => Promise.resolve('')) },
     },
@@ -63,6 +65,13 @@ function createConsoleMessageEvent({
 }
 
 describe('HTMLViewer', () => {
+  it('uses an encoded Windows file directory for relative HTML resources', () => {
+    const { container } = render(<HTMLViewer content='<h1>Test</h1>' file_path={'C:\\报告 #100%\\index.html'} />);
+    expect(container.querySelector('iframe')?.contentDocument?.querySelector('base')?.getAttribute('href')).toBe(
+      'file:///C:/%E6%8A%A5%E5%91%8A%20%23100%25/'
+    );
+  });
+
   it('renders iframe with HTML content', () => {
     const { container } = render(<HTMLViewer content='<h1>Test</h1>' />);
     const iframe = container.querySelector('iframe');
@@ -86,6 +95,86 @@ describe('HTMLRenderer', () => {
   afterEach(() => {
     Reflect.deleteProperty(window, 'electronAPI');
     vi.clearAllMocks();
+  });
+
+  it('loads project HTML assets by the owning file reference without an absolute path', async () => {
+    Object.defineProperty(window, 'electronAPI', { configurable: true, value: electronAPI });
+    readContentInvoke.mockImplementation(({ file }: { file: { relative_path: string } }) => {
+      if (file.relative_path === 'reports/style.css') return Promise.resolve('.report { color: green }');
+      if (file.relative_path === 'assets/图 #1.png') return Promise.resolve('data:image/png;base64,cGl4ZWw=');
+      return Promise.reject(new Error('unexpected project asset'));
+    });
+    const { container } = render(
+      <HTMLRenderer
+        content={'<link rel="stylesheet" href="style.css"><img src="../assets/%E5%9B%BE%20%231.png">'}
+        fileRef={{ kind: 'project', pe_id: 'owning-project-root', relative_path: 'reports/index.html' }}
+      />
+    );
+    await waitFor(() => {
+      const source = container.querySelector('webview')?.getAttribute('src') || '';
+      expect(decodeURIComponent(source)).toContain('.report { color: green }');
+    });
+    expect(readContentInvoke).toHaveBeenCalledWith({
+      file: { kind: 'project', pe_id: 'owning-project-root', relative_path: 'assets/图 #1.png' },
+      encoding: 'dataurl',
+    });
+    expect(decodeURIComponent(container.querySelector('webview')?.getAttribute('src') || '')).toContain(
+      'data:image/png;base64,cGl4ZWw='
+    );
+  });
+
+  it('does not read a project HTML resource outside its root', async () => {
+    const { container } = render(
+      <HTMLRenderer
+        content='<img src="../../outside.png">'
+        fileRef={{ kind: 'project', pe_id: 'root', relative_path: 'index.html' }}
+      />
+    );
+    await waitFor(() => expect(container.querySelector('iframe')?.getAttribute('srcdoc')).toContain('outside.png'));
+    expect(readContentInvoke).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['C:\\报告 #100%\\index.html', 'file:///C:/%E6%8A%A5%E5%91%8A%20%23100%25/index.html'],
+    ['/Users/demo/报告 #100%/index.html', 'file:///Users/demo/%E6%8A%A5%E5%91%8A%20%23100%25/index.html'],
+    ['\\\\server\\share\\report #1.html', 'file://server/share/report%20%231.html'],
+  ])('opens the exact local HTML path without interpreting filename punctuation: %s', (filePath, expected) => {
+    Object.defineProperty(window, 'electronAPI', { configurable: true, value: electronAPI });
+    const { container } = render(<HTMLRenderer content='<h1>Test</h1>' file_path={filePath} />);
+    expect(container.querySelector('webview')?.getAttribute('src')).toBe(expected);
+  });
+
+  it('waits for project resources before mounting executable HTML', async () => {
+    Object.defineProperty(window, 'electronAPI', { configurable: true, value: electronAPI });
+    let complete: ((value: string) => void) | undefined;
+    readContentInvoke.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          complete = resolve;
+        })
+    );
+    const { container } = render(
+      <HTMLRenderer
+        content='<script src="lib.js"></script><script>renderChart()</script>'
+        fileRef={{ kind: 'project', pe_id: 'pe-wait', relative_path: 'report.html' }}
+      />
+    );
+    expect(container.querySelector('webview')).toBeNull();
+    await waitFor(() => expect(complete).toBeDefined());
+    complete?.('function renderChart() {}');
+    await waitFor(() =>
+      expect(container.querySelector('webview')?.getAttribute('src')).toContain('function%20renderChart')
+    );
+  });
+
+  it('gives dirty Windows HTML an encoded base directory for relative links', () => {
+    Object.defineProperty(window, 'electronAPI', { configurable: true, value: electronAPI });
+    const { container } = render(
+      <HTMLRenderer content='<h1>Unsaved</h1>' file_path={'C:\\报告 #100%\\index.html'} isDirty />
+    );
+    const source = container.querySelector('webview')?.getAttribute('src') || '';
+    const html = decodeURIComponent(source.slice(source.indexOf(',') + 1));
+    expect(html).toContain('<base href="file:///C:/%E6%8A%A5%E5%91%8A%20%23100%25/">');
   });
 
   it('loads clean local HTML files through file URL in Electron', () => {

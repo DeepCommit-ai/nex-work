@@ -81,12 +81,23 @@ describe('parseFileMarker', () => {
 });
 
 describe('resolveMessageFilePath', () => {
+  it('retains the UNC host and literal filename characters for relative attachments', () => {
+    expect(resolveMessageFilePath('reports/a#%23.md', '\\\\server\\share\\workspace')).toBe(
+      '//server/share/workspace/reports/a#%23.md'
+    );
+  });
+
+  it('keeps POSIX backslashes as filename characters while joining Windows separators', () => {
+    expect(resolveMessageFilePath('a\\b.md', '/Users/me/ws')).toBe('/Users/me/ws/a\\b.md');
+    expect(resolveMessageFilePath('a\\b.md', 'C:\\Users\\me\\ws')).toBe('C:/Users/me/ws/a/b.md');
+  });
   it('leaves absolute paths alone', () => {
     expect(resolveMessageFilePath('/abs/a.rs', '/ws')).toBe('/abs/a.rs');
   });
 
   it('joins a relative path onto the workspace', () => {
     expect(resolveMessageFilePath('src/a.rs', '/ws/')).toBe('/ws/src/a.rs');
+    expect(resolveMessageFilePath('src/a.rs', '/')).toBe('/src/a.rs');
   });
 
   it('returns the path unchanged without a workspace', () => {

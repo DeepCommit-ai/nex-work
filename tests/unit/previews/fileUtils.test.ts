@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { getLocalFileDirectory, toLocalFileHref } from '@/renderer/utils/file/fileUrls';
 import {
   getFileExtension,
   getContentTypeByExtension,
@@ -13,6 +14,37 @@ import {
   isOfficeFile,
   FILE_EXTENSION_MAP,
 } from '@/renderer/pages/conversation/Preview/fileUtils';
+
+describe('native file URLs', () => {
+  it.each([
+    ['C:\\目录 #1%\\a?.html', 'file:///C:/%E7%9B%AE%E5%BD%95%20%231%25/a%3F.html'],
+    ['/Users/demo/目录 #1%/a?.html', 'file:///Users/demo/%E7%9B%AE%E5%BD%95%20%231%25/a%3F.html'],
+    ['\\\\server\\share\\a%23.md', 'file://server/share/a%2523.md'],
+    ['\\\\?\\C:\\报告\\a.md', 'file:///C:/%E6%8A%A5%E5%91%8A/a.md'],
+    ['\\\\?\\UNC\\server\\share\\a.md', 'file://server/share/a.md'],
+    ['/tmp/a\\b.md', 'file:///tmp/a%5Cb.md'],
+  ])('preserves the exact native filename: %s', (filePath, expected) => {
+    expect(toLocalFileHref(filePath)).toBe(expected);
+  });
+
+  it.each([
+    ['/report.md', '/'],
+    ['C:\\report.md', 'C:/'],
+    ['\\\\server\\share\\report.md', '//server/share'],
+    ['\\\\?\\C:\\reports\\report.md', 'C:/reports'],
+    ['/Users/demo/reports/report.md', '/Users/demo/reports'],
+  ])('retains the filesystem root in a parent directory: %s', (filePath, expected) => {
+    expect(getLocalFileDirectory(filePath)).toBe(expected);
+  });
+
+  it.each(['relative/report.md', 'https://example.com/report.md', '\\\\.\\pipe\\name'])(
+    'does not invent a file root: %s',
+    (filePath) => {
+      expect(() => toLocalFileHref(filePath)).toThrow();
+      expect(getLocalFileDirectory(filePath)).toBeUndefined();
+    }
+  );
+});
 
 describe('fileUtils', () => {
   describe('getFileExtension', () => {

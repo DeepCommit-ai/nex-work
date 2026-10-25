@@ -40,6 +40,7 @@ import { projectFileRef } from '@/common/types/chatFile';
 import type { ChatFileRef } from '@/common/types/chatFile';
 import type { FileOrFolderItem } from '@/renderer/utils/file/fileTypes';
 import { resolvePreviewPayload } from '@/renderer/utils/file/previewPayload';
+import { toLocalFileHref } from '@/renderer/utils/file/fileUrls';
 
 import { ExplorerPanel } from './ExplorerPanel';
 import {
@@ -66,13 +67,6 @@ import { ScmPanel } from '../SourceControl/ScmPanel';
 export type ExplorerContainerProps = {
   /** Owning project id — scopes the store's fact cache + localStorage UI state. */
   projectId: string;
-};
-
-/** A local absolute path → `file://` URI (normalize `\`, ensure leading slash, encode). */
-const pathToFileUri = (p: string): string => {
-  const normalized = p.replace(/\\/g, '/');
-  const withLeadingSlash = normalized.startsWith('/') ? normalized : `/${normalized}`;
-  return `file://${encodeURI(withLeadingSlash)}`;
 };
 
 /**
@@ -218,7 +212,7 @@ export const ExplorerContainer: React.FC<ExplorerContainerProps> = ({ projectId 
     const path = paths?.[0];
     if (!path) return; // cancelled
     try {
-      const entry = await ipcBridge.project.attachFolder.invoke({ project_id: projectId, uri: pathToFileUri(path) });
+      const entry = await ipcBridge.project.attachFolder.invoke({ project_id: projectId, uri: toLocalFileHref(path) });
       await mutate();
       // Focus the attached (or, for a subdir, the existing focused) root.
       select(peKey(entry.pe_id, ''));

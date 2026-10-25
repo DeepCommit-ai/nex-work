@@ -27,11 +27,7 @@ import { MARKDOWN_REMARK_PLUGINS, MarkdownTable, MarkdownTd } from './markdownCo
 import { resolveLocalFileLinkPath, resolveLocalFileLinkReference } from './markdownUtils';
 import type { LocalFileLinkReference } from './markdownUtils';
 
-const isLocalFilePath = (src: string): boolean => {
-  if (src.startsWith('http://') || src.startsWith('https://')) return false;
-  if (src.startsWith('data:')) return false;
-  return true;
-};
+const isInlineImageSource = (src: string): boolean => /^(?:data:image\/|blob:)/i.test(src);
 
 type MarkdownViewProps = {
   children: string;
@@ -62,9 +58,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
 
     const normalizedChildren = useMemo(() => {
       if (typeof childrenProp === 'string') {
-        let text = childrenProp.replace(/file:\/\//g, '');
-        text = convertLatexDelimiters(text);
-        return text;
+        return convertLatexDelimiters(childrenProp);
       }
       return childrenProp;
     }, [childrenProp]);
@@ -73,16 +67,35 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
       (e: React.MouseEvent<HTMLAnchorElement>) => {
         e.preventDefault();
         e.stopPropagation();
-        const href = (e.currentTarget as HTMLAnchorElement).href;
+        const href = e.currentTarget.getAttribute('href')?.trim();
         if (!href) return;
+        if (href.startsWith('#')) {
+          let id = href.slice(1);
+          try {
+            id = decodeURIComponent(id);
+          } catch {
+            // Malformed percent text is a literal anchor, never a file path.
+          }
+          const root = e.currentTarget.getRootNode();
+          if (root instanceof Document || root instanceof ShadowRoot) {
+            Array.from(root.querySelectorAll<HTMLElement>('[id]'))
+              .find((element) => element.id === id)
+              ?.scrollIntoView({ block: 'start' });
+          }
+          return;
+        }
+        const externalHref = href.startsWith('//') ? `https:${href}` : href;
         // Prefer the built-in browser tab for http(s) links; fall back to the
         // system browser for other schemes or when no Preview panel is available.
-        const httpUrl = parseHttpUrl(href);
+        const httpUrl = parseHttpUrl(externalHref);
         if (httpUrl && preview) {
           preview.openBrowserTab(httpUrl);
           return;
         }
-        openExternalUrl(href).catch((error: unknown) => {
+        // Unresolved local/relative targets must never become renderer file://
+        // URLs. Only explicit external schemes reach the external opener.
+        if (!/^[a-z][a-z\d+.-]*:/i.test(externalHref) || /^(?:file:|[a-z]:[\\/])/i.test(externalHref)) return;
+        openExternalUrl(externalHref).catch((error: unknown) => {
           console.error(t('messages.openLinkFailed'), error);
         });
       },
@@ -126,11 +139,19 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
         td: MarkdownTd,
         img: ({ node: _node, ...rest }: Record<string, unknown>) => {
           const imgProps = rest as React.ImgHTMLAttributes<HTMLImageElement>;
-          if (isLocalFilePath(imgProps.src || '')) {
-            const src = decodeURIComponent(imgProps.src || '');
-            return <LocalImageView src={src} alt={imgProps.alt || ''} className={imgProps.className} />;
+          const rawSrc = imgProps.src || '';
+          const file = resolveLocalFileLinkReference(rawSrc, undefined, baseDirectory);
+          if (file) {
+            return <LocalImageView src={file.filePath} alt={imgProps.alt || ''} className={imgProps.className} />;
           }
-          return <img {...imgProps} alt={imgProps.alt || ''} />;
+          const remoteSrc = rawSrc.startsWith('//') ? `https:${rawSrc}` : rawSrc;
+          return (
+            <img
+              {...imgProps}
+              src={parseHttpUrl(remoteSrc) || isInlineImageSource(remoteSrc) ? remoteSrc : undefined}
+              alt={imgProps.alt || ''}
+            />
+          );
         },
       }),
       [codeStyle, hiddenCodeCopyButton, handleLinkClick, onLocalFileLink, baseDirectory]
@@ -146,8 +167,10 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
               remarkPlugins={MARKDOWN_REMARK_PLUGINS}
               rehypePlugins={rehypePlugins}
               components={components}
-              urlTransform={(url) =>
-                resolveLocalFileLinkPath(url, undefined, baseDirectory) ? url : defaultUrlTransform(url)
+              urlTransform={(url, key) =>
+                resolveLocalFileLinkPath(url, undefined, baseDirectory) || (key === 'src' && isInlineImageSource(url))
+                  ? url
+                  : defaultUrlTransform(url)
               }
             >
               {normalizedChildren}

@@ -5,6 +5,13 @@
  */
 
 import { ipcBridge } from '@/common';
+import { chatFileRefKey, chatFileRefPath } from '@/common/types/chatFile';
+import type { ChatFileRef, ContentEncoding } from '@/common/types/chatFile';
+import {
+  resolveLocalFileLinkReference,
+  resolveRelativeFileLinkReference,
+} from '@/renderer/components/Markdown/markdownUtils';
+import { getLocalFileDirectory, toLocalFileHref } from '@/renderer/utils/file/fileUrls';
 import { useTypingAnimation } from '@/renderer/hooks/chat/useTypingAnimation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useScrollSyncTarget } from '../../hooks/useScrollSyncHelpers';
@@ -21,6 +28,7 @@ export interface InspectedElement {
 interface HTMLRendererProps {
   content: string;
   file_path?: string;
+  fileRef?: ChatFileRef;
   workspace?: string;
   isDirty?: boolean;
   containerRef?: React.RefObject<HTMLDivElement>;
@@ -75,84 +83,43 @@ function summarizePreviewUrl(url?: string): string | undefined {
  * 判断绝对路径是否在可信根目录内（纯字符串实现，renderer 不可用 node:path）。
  * 通过比较路径段前缀实现，避免 `..`/`../` 逃逸。
  */
-function isWithinRoot(root: string, target: string): boolean {
-  if (!root) return true;
-  const rootParts = root.replace(/\\/g, '/').replace(/\/+$/, '').split('/').filter(Boolean);
-  const targetParts = target.replace(/\\/g, '/').split('/').filter(Boolean);
-  if (rootParts.length === 0) return true;
-  if (targetParts.length < rootParts.length) return false;
-  return rootParts.every((part, i) => part === targetParts[i]);
+function isWithinRoot(root: URL, target: URL): boolean {
+  if (root.hostname !== target.hostname) return false;
+  const windows = Boolean(root.hostname) || /^\/[a-z]:\//i.test(root.pathname);
+  const normalize = (path: string) => (windows ? path.toLowerCase() : path);
+  const rootPath = normalize(root.pathname).replace(/\/+$/, '');
+  const targetPath = normalize(target.pathname);
+  return targetPath === rootPath || targetPath.startsWith(rootPath + '/');
 }
 
 /**
- * 归一化绝对路径中的 `.`/`..` 段（纯字符串，renderer 不可用 node:path）。
- * 保留 POSIX 根 `/` 与 Windows 盘符前缀。
- * Normalize `.`/`..` segments in an absolute path (pure string; the renderer
- * cannot use node:path). Preserves the POSIX root `/` and the Windows drive prefix.
- */
-function normalizeAbsolute(path: string): string {
-  const unified = path.replace(/\\/g, '/');
-  const isWindowsDrive = /^[a-zA-Z]:/.test(unified);
-  const stack: string[] = [];
-  for (const segment of unified.split('/').filter(Boolean)) {
-    if (segment === '.') continue;
-    if (segment === '..') {
-      stack.pop();
-      continue;
-    }
-    stack.push(segment);
-  }
-  return isWindowsDrive ? stack.join('/') : '/' + stack.join('/');
-}
-
-/**
- * 解析相对路径为绝对路径 / Resolve relative path to absolute path
- * @param basePath 基础文件路径 / Base file path
- * @param relativePath 相对路径 / Relative path
- * @param workspace 可信工作区根目录（可选）/ Trusted workspace root (optional)
- * @returns 绝对路径 / Absolute path
+ * Resolve HTML resource URLs with browser URL rules, then recover the native
+ * file identity once. The workspace check applies after dot-segment resolution.
  */
 export function resolveRelativePath(basePath: string, relativePath: string, workspace?: string): string {
-  // 去除协议前缀 / Remove protocol prefix
-  const cleanBasePath = basePath.replace(/^file:\/\//, '');
-  const baseDir =
-    cleanBasePath.substring(0, cleanBasePath.lastIndexOf('/') + 1) ||
-    cleanBasePath.substring(0, cleanBasePath.lastIndexOf('\\') + 1);
-
-  // 如果相对路径已经是绝对路径 / If relative path is already absolute
-  if (relativePath.startsWith('/') || /^[a-zA-Z]:/.test(relativePath)) {
-    // 先归一化 `.`/`..` 段再做边界检查，避免形如 `<workspace>/../../secret`
-    // 的字面遍历：它以工作区前缀开头却实际逃逸，未归一时会骗过 isWithinRoot。
-    // Normalize `.`/`..` before the boundary check: a literal
-    // `<workspace>/../../secret` starts with the workspace prefix yet escapes
-    // it, so an un-normalized string would slip past isWithinRoot.
-    const normalizedAbsolute = normalizeAbsolute(relativePath);
-    if (workspace && !isWithinRoot(workspace, normalizedAbsolute)) {
-      throw new Error(`Path traversal blocked: "${relativePath}" resolves outside workspace`);
-    }
-    return normalizedAbsolute;
+  try {
+    const baseUrl = /^file:/i.test(basePath) ? new URL(basePath) : new URL(toLocalFileHref(basePath));
+    const href = relativePath.replace(/\\/g, '/');
+    const resourceUrl = new URL(/^[a-z]:\//i.test(href) ? 'file:///' + href : href, baseUrl);
+    if (
+      resourceUrl.protocol !== 'file:' ||
+      resourceUrl.username ||
+      resourceUrl.password ||
+      /%(?:2f|5c)/i.test(resourceUrl.pathname)
+    )
+      throw new Error('Invalid local resource');
+    // Query strings and SVG fragments identify resource variants, not filename characters.
+    resourceUrl.search = '';
+    resourceUrl.hash = '';
+    const resolved = resolveLocalFileLinkReference(resourceUrl.href);
+    if (!resolved) throw new Error('Invalid local resource');
+    // Canonicalize encoded and literal Unicode identically before containment checks.
+    const target = new URL(toLocalFileHref(resolved.filePath));
+    if (workspace && !isWithinRoot(new URL(toLocalFileHref(workspace)), target)) throw new Error('Outside workspace');
+    return resolved.filePath;
+  } catch {
+    throw new Error(`Path traversal blocked: "${relativePath}" is not a local resource inside workspace`);
   }
-
-  // 处理 ./ 和 ../ / Handle ./ and ../
-  const parts = baseDir.replace(/\\/g, '/').split('/').filter(Boolean);
-  const relParts = relativePath.replace(/\\/g, '/').split('/');
-
-  for (const part of relParts) {
-    if (part === '..') {
-      parts.pop();
-    } else if (part !== '.') {
-      parts.push(part);
-    }
-  }
-
-  // 保留 Windows 盘符格式 / Preserve Windows drive letter format
-  const result = /^[a-zA-Z]:/.test(baseDir) ? parts.join('/') : '/' + parts.join('/');
-
-  // 相对路径解析结果必须落在可信工作区内，否则视为逃逸
-  if (workspace && !isWithinRoot(workspace, result)) {
-    throw new Error(`Path traversal blocked: "${relativePath}" resolves outside workspace`);
-  }
-  return result;
 }
 
 /**
@@ -167,8 +134,34 @@ export function resolveRelativePath(basePath: string, relativePath: string, work
  * @param basePath 基础文件路径 / Base file path
  * @returns 处理后的 HTML / Processed HTML
  */
-async function inlineRelativeResources(html: string, basePath: string, workspace?: string): Promise<string> {
+async function inlineRelativeResources(
+  html: string,
+  basePath: string,
+  workspace?: string,
+  fileRef?: ChatFileRef
+): Promise<string> {
   let result = html;
+  type Resource = { path: string; fileRef?: ChatFileRef };
+  const document: Resource = { path: basePath, fileRef };
+  const resolveResource = (base: Resource, href: string): Resource => {
+    if (base.fileRef?.kind === 'project') {
+      const relative = base.fileRef.relative_path.replace(/\\/g, '/');
+      const parent = relative.includes('/') ? relative.slice(0, relative.lastIndexOf('/')) : '';
+      const resolved = resolveRelativeFileLinkReference(href.split(/[?#]/, 1)[0], parent);
+      if (!resolved) throw new Error('Project resource must stay inside its owning root');
+      return {
+        path: resolved.filePath,
+        fileRef: { kind: 'project', pe_id: base.fileRef.pe_id, relative_path: resolved.filePath },
+      };
+    }
+    return { path: resolveRelativePath(base.path, href, workspace) };
+  };
+  const readResource = (resource: Resource, encoding: ContentEncoding): Promise<string | null> => {
+    if (resource.fileRef) return ipcBridge.fs.readContent.invoke({ file: resource.fileRef, encoding });
+    return encoding === 'dataurl'
+      ? ipcBridge.fs.getImageBase64.invoke({ path: resource.path, workspace })
+      : ipcBridge.fs.readFile.invoke({ path: resource.path, workspace });
+  };
 
   // 1. 处理 <img src="relative"> -> base64 / Handle <img src="relative"> -> base64
   const imgRegex = /<img([^>]*)\ssrc=["'](?!https?:\/\/|data:|\/\/)([^"']+)["']([^>]*)>/gi;
@@ -177,8 +170,8 @@ async function inlineRelativeResources(html: string, basePath: string, workspace
   for (const match of imgMatches) {
     const [fullMatch, before, src, after] = match;
     try {
-      const absolutePath = resolveRelativePath(basePath, src, workspace);
-      const dataUrl = await ipcBridge.fs.getImageBase64.invoke({ path: absolutePath, workspace });
+      const resource = resolveResource(document, src);
+      const dataUrl = await readResource(resource, 'dataurl');
       if (dataUrl) {
         // getImageBase64 已经返回完整的 data URL / getImageBase64 already returns complete data URL
         const newTag = `<img${before} src="${dataUrl}"${after}>`;
@@ -199,8 +192,8 @@ async function inlineRelativeResources(html: string, basePath: string, workspace
     const isStylesheet = /rel=["']stylesheet["']/i.test(fullMatch) || href.endsWith('.css');
     if (isStylesheet) {
       try {
-        const absolutePath = resolveRelativePath(basePath, href, workspace);
-        const cssContent = await ipcBridge.fs.readFile.invoke({ path: absolutePath, workspace });
+        const cssResource = resolveResource(document, href);
+        const cssContent = await readResource(cssResource, 'utf8');
         if (cssContent) {
           // 替换 CSS 中的相对 url() 引用为 base64 / Replace relative url() references in CSS with base64
           let processedCss = cssContent;
@@ -211,9 +204,8 @@ async function inlineRelativeResources(html: string, basePath: string, workspace
             const [urlFullMatch, urlPath] = urlMatch;
             try {
               // CSS 文件的基础路径 / Base path for CSS file
-              const cssBasePath = absolutePath;
-              const resourcePath = resolveRelativePath(cssBasePath, urlPath, workspace);
-              const dataUrl = await ipcBridge.fs.getImageBase64.invoke({ path: resourcePath, workspace });
+              const resource = resolveResource(cssResource, urlPath);
+              const dataUrl = await readResource(resource, 'dataurl');
               if (dataUrl) {
                 // getImageBase64 已经返回完整的 data URL / getImageBase64 already returns complete data URL
                 processedCss = processedCss.replace(urlFullMatch, `url("${dataUrl}")`);
@@ -239,8 +231,8 @@ async function inlineRelativeResources(html: string, basePath: string, workspace
   for (const match of scriptMatches) {
     const [fullMatch, before, src, after] = match;
     try {
-      const absolutePath = resolveRelativePath(basePath, src, workspace);
-      const scriptContent = await ipcBridge.fs.readFile.invoke({ path: absolutePath, workspace });
+      const resource = resolveResource(document, src);
+      const scriptContent = await readResource(resource, 'utf8');
       if (scriptContent) {
         // 保留其他属性（如 type, defer, async 等，但 async/defer 对 inline 无效）
         // Keep other attributes (like type, but defer/async don't work for inline)
@@ -266,6 +258,7 @@ async function inlineRelativeResources(html: string, basePath: string, workspace
 const HTMLRenderer: React.FC<HTMLRendererProps> = ({
   content,
   file_path,
+  fileRef,
   workspace,
   isDirty = false,
   containerRef,
@@ -281,7 +274,10 @@ const HTMLRenderer: React.FC<HTMLRendererProps> = ({
   const lastLoggedSourceRef = useRef<string | null>(null);
   const isSyncingScrollRef = useRef(false); // 防止滚动同步循环 / Prevent scroll sync loops
   const [webviewContentHeight, setWebviewContentHeight] = useState(0); // webview 内容高度 / webview content height
-  const [inlinedHtmlContent, setInlinedHtmlContent] = useState<string>(''); // 内联化后的 HTML（用于 browser iframe）/ Inlined HTML (for browser iframe)
+  const [inlinedHtml, setInlinedHtml] = useState<{ key: string; content: string }>();
+  const projectOnly = fileRef?.kind === 'project' && !file_path;
+  const inlineKey = JSON.stringify([content, file_path, workspace, fileRef ? chatFileRefKey(fileRef) : null]);
+  const inlinedHtmlContent = inlinedHtml?.key === inlineKey ? inlinedHtml.content : '';
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark'>(() => {
     return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light';
   });
@@ -337,48 +333,48 @@ const HTMLRenderer: React.FC<HTMLRendererProps> = ({
   // 在 browser 环境下，当有相对资源时进行内联化处理
   // In browser environment, inline relative resources when present
   useEffect(() => {
-    if (isElectron) {
+    if (isElectron && !projectOnly) {
       // Electron 环境不需要内联化，使用 webview 加载
       // Electron environment doesn't need inlining, uses webview loading
       return;
     }
 
-    if (!hasRelativeResources || !file_path) {
+    if (!hasRelativeResources || (!file_path && !fileRef)) {
       // 没有相对资源或没有文件路径，使用原始内容
       // No relative resources or no file path, use original content
-      setInlinedHtmlContent(content);
+      setInlinedHtml({ key: inlineKey, content });
       return;
     }
 
     // Browser 环境且有相对资源，进行内联化处理
     // Browser environment with relative resources, perform inlining
     let cancelled = false;
-    inlineRelativeResources(content, file_path, workspace)
+    inlineRelativeResources(content, file_path || (fileRef ? chatFileRefPath(fileRef) : ''), workspace, fileRef)
       .then((inlined) => {
         if (!cancelled) {
-          setInlinedHtmlContent(inlined);
+          setInlinedHtml({ key: inlineKey, content: inlined });
         }
       })
       .catch((e) => {
         console.warn('[HTMLRenderer] Failed to inline resources:', e);
         if (!cancelled) {
-          setInlinedHtmlContent(content); // 回退到原始内容 / Fallback to original content
+          setInlinedHtml({ key: inlineKey, content });
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [content, file_path, isElectron, hasRelativeResources, workspace]);
+  }, [content, file_path, fileRef, isElectron, hasRelativeResources, workspace, projectOnly, inlineKey]);
 
   // 用于 browser iframe 的最终 HTML 内容
   // Final HTML content for browser iframe
   const browserHtmlContent = useMemo(() => {
-    if (hasRelativeResources && file_path) {
+    if (hasRelativeResources && (file_path || fileRef)) {
       return inlinedHtmlContent || content; // 在内联化完成前显示原始内容 / Show original content before inlining completes
     }
     return displayedContent;
-  }, [hasRelativeResources, file_path, inlinedHtmlContent, content, displayedContent]);
+  }, [hasRelativeResources, file_path, fileRef, inlinedHtmlContent, content, displayedContent]);
 
   // 计算 webview 的 src
   // Calculate webview src
@@ -386,17 +382,17 @@ const HTMLRenderer: React.FC<HTMLRendererProps> = ({
     // 如果有文件路径且内容未被编辑，直接用 file:// URL 加载，避免 data: URL 的 opaque origin 限制
     // If file path exists and content is clean, load via file:// to avoid data: URL opaque origin limits
     if (shouldLoadFromFile && file_path) {
-      return `file://${file_path}`;
+      return toLocalFileHref(file_path);
     }
 
     // 否则使用 data URL（适用于动态生成的 HTML 或没有外部资源的情况）
     // Otherwise use data URL (for dynamically generated HTML or no external resources)
-    let html = htmlContent;
+    let html = projectOnly && hasRelativeResources ? inlinedHtmlContent || content : htmlContent;
 
     // 注入 base 标签支持相对路径 / Inject base tag for relative paths
-    if (file_path) {
-      const fileDir = file_path.substring(0, file_path.lastIndexOf('/') + 1);
-      const base_url = `file://${fileDir}`;
+    const fileDir = file_path ? getLocalFileDirectory(file_path) : undefined;
+    if (fileDir) {
+      const base_url = toLocalFileHref(fileDir.endsWith('/') ? fileDir : `${fileDir}/`);
 
       // 检查是否已有 base 标签 / Check if base tag exists
       if (!html.match(/<base\s+href=/i)) {
@@ -412,7 +408,7 @@ const HTMLRenderer: React.FC<HTMLRendererProps> = ({
 
     const encoded = encodeURIComponent(html);
     return `data:text/html;charset=utf-8,${encoded}`;
-  }, [htmlContent, file_path, shouldLoadFromFile]);
+  }, [htmlContent, file_path, shouldLoadFromFile, projectOnly, hasRelativeResources, inlinedHtmlContent, content]);
 
   const webviewSourceKind: HtmlPreviewSourceKind = shouldLoadFromFile ? 'file' : 'data';
   const webviewSourceReason = useMemo(() => {
@@ -716,13 +712,17 @@ const HTMLRenderer: React.FC<HTMLRendererProps> = ({
 
   // 计算代理滚动层的高度 / Calculate proxy scroll layer height
   const proxyHeight = webviewContentHeight > 0 ? webviewContentHeight : '100%';
+  // Do not run project HTML once without its dependencies and then a second
+  // time after inlining. The data URL has no project-relative resource origin.
+  const waitingForProjectResources = projectOnly && hasRelativeResources && inlinedHtml?.key !== inlineKey;
 
   return (
     <div
       ref={containerRef || divRef}
+      aria-busy={waitingForProjectResources}
       className={`h-full w-full overflow-auto relative ${currentTheme === 'dark' ? 'bg-bg-1' : 'bg-white'}`}
     >
-      {isElectron ? (
+      {waitingForProjectResources ? null : isElectron ? (
         <>
           {/* 代理滚动层：使容器可滚动 / Proxy scroll layer: makes container scrollable */}
           <div style={{ height: proxyHeight, width: '100%', pointerEvents: 'none' }} />

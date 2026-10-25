@@ -10,8 +10,7 @@ const LocalImageView: React.FC<{
   alt: string;
   className?: string;
 }> = ({ src, alt, className }) => {
-  const [loading, setLoading] = useState(true);
-  const [url, setUrl] = useState(src);
+  const [image, setImage] = useState<{ key: string; loading: boolean; url?: string }>({ key: '', loading: true });
   // Resolve relative image paths (e.g. ![](./chart.png)) against the conversation
   // workspace = the agent cwd, and pass it as the fs sandbox workspace. Outside a
   // conversation (settings markdown) there is no workspace, so the src is sent
@@ -32,26 +31,30 @@ const LocalImageView: React.FC<{
     }
     return joinPath(root, src);
   }, [src, root]);
+  const requestKey = JSON.stringify([absolutePath, root]);
 
   useEffect(() => {
-    setLoading(true);
+    let obsolete = false;
+    setImage({ key: requestKey, loading: true });
     ipcBridge.fs.getImageBase64
       .invoke({ path: absolutePath, workspace: root || undefined })
       .then((base64) => {
-        if (base64) {
-          setUrl(base64);
-        }
-        setLoading(false);
+        if (!obsolete) setImage({ key: requestKey, loading: false, url: base64 || undefined });
       })
       .catch((error) => {
+        if (obsolete) return;
         console.error('[LocalImageView] Failed to load image:', {
           path: absolutePath,
           error,
         });
-        setLoading(false);
+        setImage({ key: requestKey, loading: false });
       });
-  }, [absolutePath]);
-  if (loading)
+    return () => {
+      obsolete = true;
+    };
+  }, [absolutePath, root, requestKey]);
+  // Hide a previous source immediately, before the replacement effect runs.
+  if (image.key !== requestKey || image.loading)
     return (
       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
         <LoadingTwo
@@ -65,7 +68,8 @@ const LocalImageView: React.FC<{
         <span>{alt}</span>
       </span>
     );
-  return <img src={url} alt={alt} className={className} />;
+  if (!image.url) return <span className={className}>{alt}</span>;
+  return <img src={image.url} alt={alt} className={className} />;
 };
 
 export default LocalImageView;

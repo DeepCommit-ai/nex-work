@@ -10,6 +10,44 @@ import { resolveRelativePath } from '@/renderer/pages/conversation/Preview/compo
 const WORKSPACE = '/home/user/workspace';
 
 describe('resolveRelativePath with workspace boundary', () => {
+  it('decodes resource URLs once while preserving literal encoded names and ignoring URL suffixes', () => {
+    expect(
+      resolveRelativePath('/Users/me/reports/index.html', './a%23%20%2523.svg?v=2#icon', '/Users/me/reports')
+    ).toBe('/Users/me/reports/a# %23.svg');
+  });
+
+  it('resolves a file URL base without introducing a duplicate Windows root slash', () => {
+    expect(resolveRelativePath('file:///C:/Reports/a%23b/index.html', '../x%25.css', 'C:/Reports')).toBe(
+      'C:/Reports/x%.css'
+    );
+  });
+
+  it('preserves UNC host and share identity', () => {
+    expect(resolveRelativePath('\\\\server\\share\\reports\\index.html', '../a%23.css', '\\\\server\\share')).toBe(
+      '\\\\server\\share\\a#.css'
+    );
+    expect(() =>
+      resolveRelativePath('\\\\server\\share\\index.html', 'file://other/share/a.css', '\\\\server\\share')
+    ).toThrow('Path traversal blocked');
+  });
+
+  it('compares Windows boundaries case-insensitively without changing the target spelling', () => {
+    expect(resolveRelativePath('C:/Reports/index.html', 'file:///c:/reports/a.css', 'C:/Reports')).toBe(
+      'c:/reports/a.css'
+    );
+    expect(() =>
+      resolveRelativePath('/Users/me/reports/index.html', '/Users/me/Reports/a.css', '/Users/me/reports')
+    ).toThrow('Path traversal blocked');
+  });
+
+  it('rejects URL-encoded traversal and separators before reading resources', () => {
+    expect(() => resolveRelativePath('/Users/me/reports/index.html', '%2e%2e/secret.svg', '/Users/me/reports')).toThrow(
+      'Path traversal blocked'
+    );
+    expect(() => resolveRelativePath('/Users/me/reports/index.html', 'a%2fb.svg', '/Users/me/reports')).toThrow(
+      'Path traversal blocked'
+    );
+  });
   it('resolves a relative path inside the workspace', () => {
     expect(resolveRelativePath('/home/user/workspace/index.html', 'img.png', WORKSPACE)).toBe(
       '/home/user/workspace/img.png'

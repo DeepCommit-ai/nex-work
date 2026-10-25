@@ -13,8 +13,8 @@
  */
 
 import React from 'react';
-import { cleanup, render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
   getImageBase64: vi.fn(() => Promise.resolve<string | null>(null)),
@@ -32,6 +32,8 @@ vi.mock('@/common', () => ({
 import LocalImageView from '@renderer/components/media/LocalImageView';
 import { ConversationProvider } from '@/renderer/hooks/context/ConversationContext';
 
+beforeEach(() => hoisted.getImageBase64.mockReset().mockResolvedValue(null));
+
 afterEach(() => {
   cleanup();
   hoisted.getImageBase64.mockClear();
@@ -45,6 +47,47 @@ const renderInConversation = (workspace: string | undefined, src: string) =>
   );
 
 describe('LocalImageView workspace root from ConversationContext', () => {
+  it('ignores an old source response that arrives after the new image has loaded', async () => {
+    let finishOld!: (value: string | null) => void;
+    const oldImage = new Promise<string | null>((resolve) => {
+      finishOld = resolve;
+    });
+    hoisted.getImageBase64.mockReturnValueOnce(oldImage).mockResolvedValueOnce('data:image/png;base64,NEW');
+    const view = renderInConversation('/workspace/a', '/workspace/a/old.png');
+    view.rerender(
+      <ConversationProvider value={{ conversation_id: 'conv-2', workspace: '/workspace/b', type: 'acp' }}>
+        <LocalImageView src='/workspace/b/new.png' alt='demo' />
+      </ConversationProvider>
+    );
+    await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,NEW'));
+    await act(async () => finishOld('data:image/png;base64,OLD'));
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,NEW');
+  });
+
+  it('reloads the same absolute source when its sandbox workspace changes', async () => {
+    hoisted.getImageBase64.mockResolvedValue('data:image/png;base64,OK');
+    const view = renderInConversation('/workspace/a', '/shared/image.png');
+    await waitFor(() => expect(screen.getByRole('img')).toBeInTheDocument());
+    view.rerender(
+      <ConversationProvider value={{ conversation_id: 'conv-2', workspace: '/workspace/b', type: 'acp' }}>
+        <LocalImageView src='/shared/image.png' alt='demo' />
+      </ConversationProvider>
+    );
+    await waitFor(() =>
+      expect(hoisted.getImageBase64).toHaveBeenLastCalledWith({ path: '/shared/image.png', workspace: '/workspace/b' })
+    );
+  });
+
+  it.each(['empty', 'rejected'])(
+    'shows alt text without exposing a native URL after an %s image result',
+    async (mode) => {
+      if (mode === 'rejected') hoisted.getImageBase64.mockRejectedValueOnce(new Error('synthetic image failure'));
+      const view = renderInConversation('/workspace/a', '/workspace/a/private image.png');
+      await waitFor(() => expect(view.container.querySelector('.loading')).not.toBeInTheDocument());
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(screen.getByText('demo')).toBeInTheDocument();
+    }
+  );
   it('joins a relative src onto the conversation workspace and forwards it as the fs workspace', async () => {
     renderInConversation('/workspace/demo', './material.jpeg');
     await waitFor(() => expect(hoisted.getImageBase64).toHaveBeenCalled());

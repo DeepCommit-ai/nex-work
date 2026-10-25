@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { localFileRef } from '@/common/types/chatFile';
+import { chatFileRefPath, localFileRef, type ChatFileRef } from '@/common/types/chatFile';
 import type { LocalFileLinkReference } from '@/renderer/components/Markdown/markdownUtils';
 import { getContentTypeByExtension } from '@/renderer/pages/conversation/Preview/fileUtils';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview/context/PreviewContext';
@@ -26,8 +26,9 @@ export const useLocalFilePreview = (workspace?: string) => {
   const { openPreview } = usePreviewContext();
 
   return useCallback(
-    async (file_path: string, reference?: LocalFileLinkReference) => {
-      const fileName = getFileNameFromPath(file_path);
+    async (target: string | ChatFileRef, reference?: LocalFileLinkReference) => {
+      const incoming = typeof target === 'string' ? localFileRef(target) : target;
+      const fileName = getFileNameFromPath(chatFileRefPath(incoming));
       const contentType = getContentTypeByExtension(fileName);
       // Local-file links point at a backend-host absolute path (no pe identity) →
       // a Local ChatFileRef, read over /api/fs/content.
@@ -35,7 +36,10 @@ export const useLocalFilePreview = (workspace?: string) => {
       // Upgraded before anything else uses it: the same file opened from the
       // explorer carries a project ref, so without this the two entry points would
       // produce two tabs for one file, and this one would get no change signals.
-      const fileRef = await upgradeFileRef(localFileRef(file_path), getCurrentProject());
+      // Explicit document refs already own their project/upload identity. Only the
+      // legacy absolute-path entry point may upgrade against the active project.
+      const fileRef = typeof target === 'string' ? await upgradeFileRef(incoming, getCurrentProject()) : incoming;
+      const file_path = typeof target === 'string' ? target : incoming.kind === 'project' ? undefined : incoming.path;
 
       try {
         // Shared gate: applies the size ceiling, reads content only when the file

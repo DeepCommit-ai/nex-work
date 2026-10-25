@@ -23,11 +23,10 @@ import {
   wouldDownloadEmptyFile,
 } from './previewToolbarUtils';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
-import { toLocalFileHref } from '@/renderer/components/Markdown/markdownUtils';
 import { PreviewToolbarExtrasProvider, type PreviewToolbarExtras } from '../../context/PreviewToolbarExtrasContext';
 import { usePreviewContext } from '../../context/PreviewContext';
 import { useResizableSplit } from '@/renderer/hooks/ui/useResizableSplit';
-import { Link, Message } from '@arco-design/web-react';
+import { Button, Message } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DiffPreview from '../viewers/DiffViewer';
 import ExcelPreview from '../viewers/ExcelViewer';
@@ -836,7 +835,6 @@ const PreviewPanel: React.FC = () => {
 
   const renderMissingFile = () => {
     const filePath = metadata?.file_path;
-    const externalHref = filePath ? toLocalFileHref(filePath) : undefined;
 
     return (
       <div className='flex flex-1 flex-col items-center justify-center gap-10px px-24px text-center'>
@@ -846,10 +844,10 @@ const PreviewPanel: React.FC = () => {
         <div className='max-w-560px break-all text-12px leading-18px text-t-secondary'>
           {filePath || t('preview.errors.missingFilePath')}
         </div>
-        {externalHref && (
-          <Link href={externalHref} target='_blank' rel='noreferrer' className='text-13px'>
-            {t('preview.missingFile.openInNewTab', { defaultValue: 'Try opening in a new tab' })}
-          </Link>
+        {canOpenInSystem(Boolean(filePath), metadata?.fileRef) && (
+          <Button type='text' onClick={() => void handleOpenInSystem()} className='text-13px'>
+            {t('preview.openInSystemApp')}
+          </Button>
         )}
       </div>
     );
@@ -994,6 +992,7 @@ const PreviewPanel: React.FC = () => {
             <div className='flex-1 overflow-hidden'>
               <HTMLRenderer
                 content={content}
+                fileRef={metadata?.fileRef}
                 file_path={metadata?.file_path}
                 workspace={metadata?.workspace}
                 isDirty={activeTab?.isDirty}
@@ -1037,6 +1036,7 @@ const PreviewPanel: React.FC = () => {
                 {/* eslint-disable-next-line max-len */}
                 <HTMLRenderer
                   content={content}
+                  fileRef={metadata?.fileRef}
                   file_path={metadata?.file_path}
                   workspace={metadata?.workspace}
                   isDirty={activeTab?.isDirty}
@@ -1070,6 +1070,7 @@ const PreviewPanel: React.FC = () => {
           <div className='flex-1 overflow-hidden'>
             <HTMLRenderer
               content={content}
+              fileRef={metadata?.fileRef}
               file_path={metadata?.file_path}
               workspace={metadata?.workspace}
               isDirty={activeTab?.isDirty}

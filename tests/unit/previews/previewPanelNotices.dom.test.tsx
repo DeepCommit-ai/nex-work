@@ -29,6 +29,8 @@ import enPreview from '@/renderer/services/i18n/locales/en-US/preview.json';
 const mocks = vi.hoisted(() => ({
   readContent: vi.fn(),
   fetch: vi.fn(),
+  openFile: vi.fn(),
+  openSystem: vi.fn(),
 }));
 
 // `t` echoes the key, so asserting on the key proves the pipeline delivered a
@@ -63,7 +65,7 @@ vi.mock('@/common', () => ({
     return {
       fileStream: { contentUpdate: { on: () => () => {} } },
       preview: { open: { on: () => () => {} } },
-      shell: { openFile: { invoke: async () => undefined } },
+      shell: { openFile: { invoke: mocks.openFile } },
       excelPreview: officePreview,
       wordPreview: officePreview,
       pptPreview: officePreview,
@@ -71,7 +73,7 @@ vi.mock('@/common', () => ({
         writeContent: { invoke: async () => true },
         getContentMetadata: { invoke: async () => null },
         readContent: { invoke: mocks.readContent },
-        openSystem: { invoke: async () => undefined },
+        openSystem: { invoke: mocks.openSystem },
         writeFile: { invoke: async () => true },
         getFileMetadata: { invoke: async () => null },
         getImageBase64: { invoke: async () => null },
@@ -161,6 +163,8 @@ beforeEach(() => {
   localStorage.clear();
   mocks.readContent.mockReset().mockResolvedValue(null);
   mocks.fetch.mockReset();
+  mocks.openFile.mockReset().mockResolvedValue(undefined);
+  mocks.openSystem.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal('fetch', mocks.fetch);
 });
 
@@ -172,6 +176,31 @@ afterEach(() => {
 });
 
 const TIMEOUT_MS = 30000;
+
+describe('missing file opening', () => {
+  it.each(['local', 'project'] as const)(
+    'uses the typed system opener for a %s file instead of a file URL popup',
+    async (kind) => {
+      const { rerender } = render(<Harness showPanel={false} />);
+      const filePath = 'C:/Reports/a#%23.md';
+      const fileRef = { kind: 'project' as const, pe_id: 'original-project', relative_path: 'Reports/a#%23.md' };
+      act(() =>
+        ctx.openPreview('', 'markdown', {
+          title: 'a#%23.md',
+          missingFile: true,
+          ...(kind === 'local' ? { file_path: filePath } : { fileRef }),
+        })
+      );
+      act(() => rerender(<Harness showPanel />));
+      fireEvent.click(screen.getByRole('button', { name: 'preview.openInSystemApp' }));
+      await waitFor(() => {
+        if (kind === 'local') expect(mocks.openFile).toHaveBeenCalledWith(filePath);
+        else expect(mocks.openSystem).toHaveBeenCalledWith({ file: fileRef });
+      });
+      expect(document.querySelector('a[href^="file:"]')).toBeNull();
+    }
+  );
+});
 
 describe('preview download behavior', () => {
   const originalCreateObjectUrl = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');

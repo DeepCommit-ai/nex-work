@@ -4,9 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { joinPath } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
-import type { ChatFileRef } from '@/common/types/chatFile';
+import { chatFileRefKey, localFileRef, projectFileRef, uploadFileRef, type ChatFileRef } from '@/common/types/chatFile';
 import CodeBlock from '@/renderer/components/Markdown/CodeBlock';
 import LocalFileLink from '@/renderer/components/Markdown/LocalFileLink';
 import {
@@ -15,11 +14,17 @@ import {
   MarkdownTd,
   SANITIZED_HTML_REHYPE_PLUGINS,
 } from '@/renderer/components/Markdown/markdownComponents';
-import { resolveLocalFileLinkReference } from '@/renderer/components/Markdown/markdownUtils';
+import {
+  resolveLocalFileLinkReference,
+  resolveRelativeFileLinkReference,
+  type LocalFileLinkReference,
+} from '@/renderer/components/Markdown/markdownUtils';
+import { getLocalFileDirectory } from '@/renderer/utils/file/fileUrls';
+import { resolvePreviewPayload } from '@/renderer/utils/file/previewPayload';
 import { useTextSelection } from '@/renderer/hooks/ui/useTextSelection';
 import 'katex/dist/katex.min.css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import MarkdownEditor from '../editors/MarkdownEditor';
 import SelectionToolbar from '../renderers/SelectionToolbar';
 import { useContainerScroll, useContainerScrollTarget } from '../../hooks/useScrollSyncHelpers';
@@ -38,171 +43,100 @@ interface MarkdownPreviewProps {
   fileRef?: ChatFileRef; // 当前 Markdown 文件的 ChatFileRef（project 文档据此解析相对图片，无需绝对路径）/ The doc's ChatFileRef; project docs resolve relative images through it (no absolute path)
 }
 
-const isDataOrRemoteUrl = (value?: string): boolean => {
-  if (!value) return false;
-  return /^(https?:|data:|blob:|file:)/i.test(value);
-};
+type DocumentTarget = { file: ChatFileRef; reference: LocalFileLinkReference };
 
-const isAbsoluteLocalPath = (value?: string): boolean => {
-  if (!value) return false;
-  return /^([a-zA-Z]:\\|\\\\|\/)/.test(value);
-};
-
-// Join a project-relative directory with a relative image src, resolving `.`/`..`
-// segments. Project `relative_path` is always POSIX ('/'-separated) regardless of
-// host OS, so this stays cross-platform (no node `path`, which would use '\' on win).
-const joinRelativePosix = (dir: string, rel: string): string => {
-  const out: string[] = [];
-  for (const seg of `${dir}/${rel}`.split('/')) {
-    if (seg === '' || seg === '.') continue;
-    if (seg === '..') {
-      out.pop();
-      continue;
-    }
-    out.push(seg);
+/** Resolve against the displayed document's identity, never the active conversation's project. */
+const resolveDocumentTarget = (
+  href: string,
+  documentRef?: ChatFileRef,
+  filePath?: string,
+  workspace?: string
+): DocumentTarget | null => {
+  const absolute = resolveLocalFileLinkReference(href);
+  if (absolute) return { file: localFileRef(absolute.filePath), reference: absolute };
+  if (documentRef?.kind === 'project') {
+    const path = documentRef.relative_path.replace(/\\/g, '/');
+    const slash = path.lastIndexOf('/');
+    const reference = resolveRelativeFileLinkReference(href, slash < 0 ? '' : path.slice(0, slash));
+    return reference ? { file: projectFileRef(documentRef.pe_id, reference.filePath), reference } : null;
   }
-  return out.join('/');
+  const knownPath = documentRef?.path ?? filePath;
+  const base = knownPath ? getLocalFileDirectory(knownPath) : workspace;
+  if (!base) return null;
+  const boundary = documentRef?.kind === 'upload' ? base : (workspace ?? base);
+  const reference = resolveLocalFileLinkReference(href, undefined, base, { rootDirectory: boundary });
+  if (!reference) return null;
+  return {
+    file: documentRef?.kind === 'upload' ? uploadFileRef(reference.filePath) : localFileRef(reference.filePath),
+    reference,
+  };
+};
+
+// Keep the shared sanitizer's protocol policy unchanged. A parse-local opaque
+// token carries only a target already validated by the path parser; it is never
+// a browser navigation URL. Random tokens prevent author-supplied hrefs from
+// impersonating another node, and a new map is populated for every parse.
+const createDocumentFilePlugin = (resolve: (href: string) => DocumentTarget | null) => {
+  const targets = new Map<string, DocumentTarget>();
+  const plugin = () => (tree: unknown) => {
+    targets.clear();
+    const nonce = Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(16)).join('-');
+    let index = 0;
+    type Node = { tagName?: string; properties?: Record<string, unknown>; children?: Node[] };
+    const visit = (node: Node): void => {
+      const key = node.tagName === 'a' ? 'href' : node.tagName === 'img' ? 'src' : null;
+      const href = key && node.properties?.[key];
+      if (key && typeof href === 'string') {
+        const target = resolve(href);
+        if (target) {
+          const token = `./__nexwork_document_file_${nonce}_${index++}`;
+          targets.set(token, target);
+          node.properties![key] = token;
+        }
+      }
+      node.children?.forEach(visit);
+    };
+    visit(tree as Node);
+  };
+  return { targets, plugin };
 };
 
 interface MarkdownImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
-  baseDir?: string;
-  workspace?: string;
-  // The markdown document's own ChatFileRef. For project docs the renderer never
-  // has an absolute path, so a relative image is resolved as a sibling project
-  // ref (same pe_id, joined relative_path) and read via /api/fs/content — the
-  // backend does the pe_id → absolute resolution. No absolute path in the renderer.
-  docFileRef?: ChatFileRef;
+  target?: DocumentTarget;
 }
 
-const useImageResolverCache = () => {
-  const cacheRef = useRef(new Map<string, string>());
-  const inflightRef = useRef(new Map<string, Promise<string>>());
-
-  const resolve = useCallback((key: string, loader: () => Promise<string>): Promise<string> => {
-    const cache = cacheRef.current;
-    if (cache.has(key)) {
-      return Promise.resolve(cache.get(key)!);
-    }
-
-    const inflight = inflightRef.current;
-    if (inflight.has(key)) {
-      return inflight.get(key)!;
-    }
-
-    const promise = loader()
-      .then((result) => {
-        cache.set(key, result);
-        return result;
-      })
-      .finally(() => {
-        inflight.delete(key);
-      });
-
-    inflight.set(key, promise);
-    return promise;
-  }, []);
-
-  return resolve;
-};
-
-const MarkdownImage: React.FC<MarkdownImageProps> = ({ src, alt, baseDir, workspace, docFileRef, ...props }) => {
-  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(undefined);
-  const resolveImage = useImageResolverCache();
-
+const MarkdownImage: React.FC<MarkdownImageProps> = ({ src, alt, target, ...props }) => {
+  const sourceKey = target ? chatFileRefKey(target.file) : (src ?? '');
+  const [loaded, setLoaded] = useState<{ key: string; url: string } | null>(null);
   useEffect(() => {
     let cancelled = false;
-
-    const loadImage = () => {
-      if (!src) {
-        setResolvedSrc(undefined);
-        return;
-      }
-
-      if (isDataOrRemoteUrl(src)) {
-        if (/^https?:/i.test(src)) {
-          resolveImage(src, () => ipcBridge.fs.fetchRemoteImage.invoke({ url: src }))
-            .then((dataUrl) => {
-              if (!cancelled) {
-                setResolvedSrc(dataUrl);
-              }
-            })
-            .catch((error) => {
-              console.error('[MarkdownPreview] Failed to fetch remote image:', src, error);
-              if (!cancelled) {
-                setResolvedSrc(src);
-              }
-            });
-          return;
+    if (!src) return;
+    const load = async (): Promise<string | undefined> => {
+      if (target) return (await resolvePreviewPayload(target.file, 'image')).content || undefined;
+      if (/^https?:/i.test(src)) {
+        try {
+          return (await ipcBridge.fs.fetchRemoteImage.invoke({ url: src })) || src;
+        } catch {
+          return src;
         }
-        setResolvedSrc(src);
-        return;
       }
-
-      const cleanedSrc = src.replace(/\\/g, '/');
-
-      // Project doc: resolve the image as a sibling project ref and read it via
-      // /api/fs/content (backend does pe_id → absolute). The renderer never builds
-      // an absolute path here, matching the Explorer "no absolute path" contract.
-      if (docFileRef?.kind === 'project' && !isAbsoluteLocalPath(cleanedSrc)) {
-        const mdRel = docFileRef.relative_path.replace(/\\/g, '/');
-        const slash = mdRel.lastIndexOf('/');
-        const dir = slash === -1 ? '' : mdRel.slice(0, slash);
-        const imgRel = joinRelativePosix(dir, cleanedSrc);
-        const imgRef: ChatFileRef = { kind: 'project', pe_id: docFileRef.pe_id, relative_path: imgRel };
-        resolveImage(`project:${docFileRef.pe_id}:${imgRel}`, async () => {
-          const dataUrl = await ipcBridge.fs.readContent.invoke({ file: imgRef, encoding: 'dataurl' });
-          return dataUrl || src;
-        })
-          .then((dataUrl) => {
-            if (!cancelled) setResolvedSrc(dataUrl);
-          })
-          .catch((error) => {
-            console.error('[MarkdownPreview] Failed to load project image:', { src, imgRel, error });
-            if (!cancelled) setResolvedSrc(src);
-          });
-        return;
-      }
-
-      const normalizedBase = baseDir ? baseDir.replace(/\\/g, '/') : undefined;
-      const absolutePath = isAbsoluteLocalPath(cleanedSrc)
-        ? cleanedSrc
-        : normalizedBase
-          ? joinPath(normalizedBase, cleanedSrc)
-          : cleanedSrc;
-
-      if (!absolutePath) {
-        setResolvedSrc(src);
-        return;
-      }
-
-      resolveImage(absolutePath, async () => {
-        const dataUrl = await ipcBridge.fs.getImageBase64.invoke({ path: absolutePath, workspace });
-        return dataUrl ?? src;
-      })
-        .then((dataUrl) => {
-          if (!cancelled) {
-            setResolvedSrc(dataUrl);
-          }
-        })
-        .catch((error) => {
-          console.error('[MarkdownPreview] Failed to load local image:', { src, absolutePath, error });
-          if (!cancelled) {
-            setResolvedSrc(src);
-          }
-        });
+      // Only sanitized non-file URLs get here. Never fall back to a relative
+      // native img URL after a local read failure (that would use app.asar).
+      return /^(data:|blob:)/i.test(src) ? src : undefined;
     };
-
-    loadImage();
-
+    void load()
+      .then((url) => {
+        if (!cancelled) setLoaded(url ? { key: sourceKey, url } : null);
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded(null);
+      });
     return () => {
       cancelled = true;
     };
-  }, [src, baseDir, resolveImage, workspace, docFileRef]);
-
-  if (!resolvedSrc) {
-    return alt ? <span>{alt}</span> : null;
-  }
-
+  }, [src, sourceKey, target]);
+  const resolvedSrc = loaded?.key === sourceKey ? loaded.url : undefined;
+  if (!resolvedSrc) return alt ? <span>{alt}</span> : null;
   return (
     <img
       src={resolvedSrc}
@@ -227,10 +161,6 @@ const rewriteExternalMediaUrls = (markdown: string): string => {
       return `${attr}=${quote}${encodeHtmlAttribute(value)}${closingQuote}`;
     });
   });
-};
-
-const normalizeLocalFileSchemeLinks = (markdown: string): string => {
-  return markdown.replace(/file:\/\//gi, '');
 };
 
 // Plain heading overrides that apply consistent spacing/size classes and always
@@ -292,21 +222,20 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   const viewMode = externalViewMode ?? 'preview';
 
   // 预览源：转换 LaTeX 分隔符并重写外部媒体 URL / Preview source: convert LaTeX delimiters and rewrite external media URLs
-  const previewSource = useMemo(
-    () => convertLatexDelimiters(normalizeLocalFileSchemeLinks(rewriteExternalMediaUrls(content))),
-    [content]
-  );
+  const previewSource = useMemo(() => convertLatexDelimiters(rewriteExternalMediaUrls(content)), [content]);
 
   // 监听文本选择 / Monitor text selection
   const { selectedText, selectedUrl, selectionPosition, clearSelection } = useTextSelection(containerRef);
 
-  const baseDir = useMemo(() => {
-    if (!file_path) return undefined;
-    const normalized = file_path.replace(/\\/g, '/');
-    const lastSlash = normalized.lastIndexOf('/');
-    if (lastSlash === -1) return undefined;
-    return normalized.slice(0, lastSlash);
-  }, [file_path]);
+  const resolveTarget = useCallback(
+    (href: string) => resolveDocumentTarget(href, fileRef, file_path, workspace),
+    [fileRef, file_path, workspace]
+  );
+  const localFiles = useMemo(() => createDocumentFilePlugin(resolveTarget), [resolveTarget]);
+  const rehypePlugins = useMemo(
+    () => [SANITIZED_HTML_REHYPE_PLUGINS[0], localFiles.plugin, ...SANITIZED_HTML_REHYPE_PLUGINS.slice(1)],
+    [localFiles]
+  );
 
   // Memoize component overrides so React keeps a stable identity across re-renders.
   // Code fences and Mermaid diagrams reuse the shared CodeBlock (chat/preview parity);
@@ -319,29 +248,66 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
         <CodeBlock {...(props as Parameters<typeof CodeBlock>[0])} diagramPanZoom />
       ),
       a({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
-        const localFileReference = resolveLocalFileLinkReference(typeof href === 'string' ? href : '');
-        if (localFileReference) {
+        const target = typeof href === 'string' ? localFiles.targets.get(href) : undefined;
+        if (target) {
           return (
-            <LocalFileLink reference={localFileReference} onOpen={handleLocalFileLink}>
+            <LocalFileLink
+              reference={target.reference}
+              onOpen={() => handleLocalFileLink(target.file, target.reference)}
+            >
               {children}
             </LocalFileLink>
           );
         }
-        return (
-          <a href={href} target='_blank' rel='noreferrer' {...props}>
-            {children}
-          </a>
-        );
+        if (href?.startsWith('#')) {
+          return (
+            <a
+              {...props}
+              href={href}
+              target={undefined}
+              onClick={(event) => {
+                // HashRouter owns the app URL. A document anchor may scroll this
+                // report, but must never replace the conversation route's hash.
+                event.preventDefault();
+                event.stopPropagation();
+                let id: string;
+                try {
+                  id = decodeURIComponent(href.slice(1));
+                } catch {
+                  return;
+                }
+                const anchorTarget = Array.from(
+                  containerRef.current?.querySelectorAll<HTMLElement>('[id], [name]') ?? []
+                ).find(
+                  (element) =>
+                    element.id === id || element.id === `user-content-${id}` || element.getAttribute('name') === id
+                );
+                anchorTarget?.scrollIntoView?.({ block: 'start' });
+              }}
+            >
+              {children}
+            </a>
+          );
+        }
+        const external = href?.startsWith('//') ? `https:${href}` : href;
+        if (external && /^(https?|ircs?|mailto|xmpp):/i.test(external)) {
+          return (
+            <a {...props} href={external} target='_blank' rel='noreferrer'>
+              {children}
+            </a>
+          );
+        }
+        // No document identity, an out-of-root path, or an unsupported native
+        // reference must not fall back to app.asar/file:// browser navigation.
+        return <span>{children}</span>;
       },
       img({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
-        return (
-          <MarkdownImage src={src} alt={alt} baseDir={baseDir} workspace={workspace} docFileRef={fileRef} {...props} />
-        );
+        return <MarkdownImage src={src} alt={alt} target={src ? localFiles.targets.get(src) : undefined} {...props} />;
       },
       table: MarkdownTable,
       td: MarkdownTd,
     }),
-    [handleLocalFileLink, baseDir, workspace, fileRef]
+    [handleLocalFileLink, localFiles, containerRef]
   );
 
   return (
@@ -370,7 +336,8 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
           >
             <ReactMarkdown
               remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-              rehypePlugins={SANITIZED_HTML_REHYPE_PLUGINS}
+              rehypePlugins={rehypePlugins}
+              urlTransform={(url) => (localFiles.targets.has(url) ? url : defaultUrlTransform(url))}
               components={components}
             >
               {previewSource}

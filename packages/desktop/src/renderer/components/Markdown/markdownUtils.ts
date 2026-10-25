@@ -35,13 +35,14 @@ export const logicRender = <T, F>(condition: boolean, trueComponent: T, falseCom
   return condition ? trueComponent : (falseComponent as F);
 };
 
-const safeDecodeURIComponent = (value: string): string => {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-};
+const decodeHrefPath = (value: string): string =>
+  value.replace(/(?:%[a-f\d]{2})+/gi, (encoded) => {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return encoded;
+    }
+  });
 
 export type LocalFileLinkReference = {
   filePath: string;
@@ -51,6 +52,12 @@ export type LocalFileLinkReference = {
   endLine?: number;
 };
 
+export type LocalFileLinkOptions = {
+  inputKind?: 'href' | 'path';
+  /** Explicit containment root; defaults to baseDirectory for relative links. */
+  rootDirectory?: string;
+};
+
 type LocalFileLocation = {
   line?: number;
   column?: number;
@@ -58,224 +65,216 @@ type LocalFileLocation = {
   source?: 'hash' | 'colon';
 };
 
-type LocalFilePathCandidate = {
-  filePath: string;
-  hashLocation?: LocalFileLocation;
-  hasInvalidHash?: boolean;
+type NativePath = { prefix: string; rootKey: string; parts: string[]; windows: boolean };
+type ParsedHref = { path: string; location: LocalFileLocation; explicitFile: boolean; absoluteHint: boolean };
+
+const hasControlCharacters = (value: string): boolean =>
+  Array.from(value).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
+
+const normalizeSegments = (
+  initial: string[],
+  tail: string,
+  floor: number,
+  windows: boolean,
+  guardWindows = false
+): string[] | null => {
+  const parts = [...initial];
+  for (const part of (windows ? tail.replace(/\\/g, '/') : tail).split('/')) {
+    if (!part || part === '.') continue;
+    if (guardWindows && part !== '..' && /^\.+[ .]+$/.test(part)) return null;
+    if (part === '..') {
+      if (parts.length <= floor) return null;
+      parts.pop();
+    } else parts.push(part);
+  }
+  return parts;
 };
+
+/** Interpret an already-decoded absolute filesystem identity, never a URL. */
+const parseNativePath = (value: string): NativePath | null => {
+  if (!value || hasControlCharacters(value)) return null;
+  const input = /^\/[A-Za-z]:[\\/]/.test(value) ? value.slice(1) : value;
+  const windows = /^[A-Za-z]:[\\/]/.test(input) || input.startsWith('\\\\') || input.startsWith('//');
+  let path = windows ? input.replace(/\\/g, '/') : input;
+  const extended = path.startsWith('//?/');
+  if (extended) path = path.slice(4);
+  let prefix: string;
+  let rootKey: string;
+  let tail: string;
+  const drive = /^([A-Za-z]):\//.exec(path);
+  const unc = /^(?:\/\/|UNC\/)([^/]+)\/([^/]+)(?:\/|$)/i.exec(path);
+  if (drive) {
+    prefix = extended ? '\\\\?\\' + drive[1] + ':\\' : drive[1] + ':/';
+    rootKey = 'drive:' + drive[1].toLowerCase();
+    tail = path.slice(drive[0].length);
+  } else if (unc) {
+    if ([unc[1], unc[2]].some((part) => !part || part === '.' || part === '..' || /[:?*|<>"]/.test(part))) return null;
+    prefix = (extended ? '\\\\?\\UNC\\' : '\\\\') + unc[1] + '\\' + unc[2] + '\\';
+    rootKey = 'unc:' + unc[1].toLowerCase() + '/' + unc[2].toLowerCase();
+    tail = path.slice(unc[0].length);
+  } else if (!extended && path.startsWith('/') && !path.startsWith('//')) {
+    prefix = '/';
+    rootKey = '/';
+    tail = path.slice(1);
+  } else return null;
+  const parts = normalizeSegments([], tail, 0, windows);
+  return parts ? { prefix, rootKey, parts, windows } : null;
+};
+
+const nativePathText = (path: NativePath, parts = path.parts): string =>
+  path.prefix + parts.join(path.prefix.startsWith('\\\\') ? '\\' : '/');
 
 const parseHashLocation = (hash: string): LocalFileLocation | null => {
   const match = /^#L(\d+)(?:-L(\d+))?$/.exec(hash);
   if (!match) return null;
-
-  const [, lineText, endLineText] = match;
-  return {
-    line: Number(lineText),
-    endLine: endLineText == null ? undefined : Number(endLineText),
-    source: 'hash',
-  };
-};
-
-const splitHashLocation = (href: string): LocalFilePathCandidate => {
-  const hashIndex = href.indexOf('#');
-  if (hashIndex < 0) return { filePath: href };
-
-  const hashLocation = parseHashLocation(href.slice(hashIndex));
-  if (!hashLocation) {
-    return {
-      filePath: href.slice(0, hashIndex),
-      hasInvalidHash: true,
-    };
-  }
-
-  return {
-    filePath: href.slice(0, hashIndex),
-    hashLocation,
-  };
-};
-
-const normalizeFilePath = (path: string): string => {
-  return /^\/[A-Za-z]:[\\/]/.test(path) ? path.slice(1) : path;
-};
-
-const normalizeLocalFileHrefToPath = (href: string): LocalFilePathCandidate | null => {
-  if (/^https?:\/\//i.test(href)) return null;
-
-  if (/^file:/i.test(href)) {
-    try {
-      const url = new URL(href);
-      const path = normalizeFilePath(safeDecodeURIComponent(url.pathname));
-      const rawHash = safeDecodeURIComponent(url.hash);
-      if (!rawHash) return { filePath: path };
-
-      const hashLocation = parseHashLocation(rawHash);
-      return hashLocation ? { filePath: path, hashLocation } : { filePath: path, hasInvalidHash: true };
-    } catch {
-      const stripped = href.replace(/^file:(?:\/\/)?/i, '');
-      const candidate = splitHashLocation(stripped);
-      return {
-        ...candidate,
-        filePath: normalizeFilePath(candidate.filePath),
-      };
-    }
-  }
-
-  const candidate = splitHashLocation(href);
-  const path = candidate.filePath;
-
-  if (/^[A-Za-z]:[\\/]/.test(path)) {
-    return {
-      ...candidate,
-      filePath: path,
-    };
-  }
-
-  if (/^\/[A-Za-z]:[\\/]/.test(path)) {
-    return {
-      ...candidate,
-      filePath: path.slice(1),
-    };
-  }
-
-  if (/^\/(Users|home|tmp|private|var|mnt|Volumes)\//.test(path)) return candidate;
-  if (/^\/[^/?#]+\/.+\.[^/?#/.]+$/.test(path)) return candidate;
-
-  return null;
-};
-
-const hasControlCharacters = (value: string): boolean => {
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
-    if (code < 32 || code === 127) return true;
-  }
-  return false;
-};
-
-/** Resolve file-like relative hrefs only inside an explicit backend workspace. */
-const resolveWorkspaceFileHref = (href: string, baseDirectory?: string): LocalFilePathCandidate | null => {
-  if (!baseDirectory) return null;
-  const candidate = splitHashLocation(href);
-  const relativePath = candidate.filePath.replace(/\\/g, '/');
-  const pathWithoutLocation = relativePath.replace(/:\d+(?::\d+)?$/, '');
+  const line = Number(match[1]);
+  const endLine = match[2] == null ? undefined : Number(match[2]);
   if (
-    candidate.hasInvalidHash ||
-    relativePath.startsWith('/') ||
-    /^[a-z][a-z\d+.-]*:/i.test(pathWithoutLocation) ||
-    relativePath.includes('?') ||
-    hasControlCharacters(relativePath) ||
-    !/(?:^|\/)[^/]+\.[^./\s][^/]*$/.test(pathWithoutLocation)
-  ) {
+    !Number.isSafeInteger(line) ||
+    line < 1 ||
+    (endLine != null && (!Number.isSafeInteger(endLine) || endLine < line))
+  )
     return null;
-  }
-
-  const base = baseDirectory.replace(/\\/g, '/');
-  const root = /^(?:[A-Za-z]:\/|\/(?!\/))/.exec(base)?.[0];
-  if (!root || hasControlCharacters(base)) return null;
-  const segments: string[] = [];
-  for (const segment of base.slice(root.length).split('/')) {
-    if (!segment || segment === '.') continue;
-    if (segment === '..') {
-      if (!segments.length) return null;
-      segments.pop();
-    } else segments.push(segment);
-  }
-  const workspaceDepth = segments.length;
-  for (const segment of relativePath.split('/')) {
-    if (!segment || segment === '.') continue;
-    // Win32 trims trailing dots/spaces, so disguised parent segments must not
-    // pass the lexical root check and resolve outside it on the backend.
-    if (/^[A-Za-z]:/.test(root) && segment !== '..' && /^\.+[ .]+$/.test(segment)) return null;
-    if (segment === '..') {
-      if (segments.length <= workspaceDepth) return null;
-      segments.pop();
-    } else segments.push(segment);
-  }
-  return { ...candidate, filePath: root + segments.join('/') };
+  return { line, ...(endLine == null ? {} : { endLine }), source: 'hash' };
 };
 
-const splitLocationSuffix = (filePath: string): Omit<LocalFileLinkReference, 'rawReference'> & LocalFileLocation => {
-  const lineColumnMatch = /^(.*):(\d+):(\d+)$/.exec(filePath);
-  if (lineColumnMatch) {
-    const [, pathWithoutLocation, lineText, columnText] = lineColumnMatch;
-    if (normalizeLocalFileHrefToPath(pathWithoutLocation)) {
-      return {
-        filePath: pathWithoutLocation,
-        line: Number(lineText),
-        column: Number(columnText),
-        source: 'colon',
-      };
+/** Split actual URI syntax before decoding the path once. Encoded #/? stay names. */
+const parseHref = (input: string): ParsedHref | null => {
+  const raw = input.trim();
+  if (!raw || raw.startsWith('#') || (raw.startsWith('//') && !raw.startsWith('//?/')) || hasControlCharacters(raw))
+    return null;
+  let path: string;
+  let hash = '';
+  let host = '';
+  const explicitFile = /^file:/i.test(raw);
+  const windowsAbsolute = /^(?:\/?[A-Za-z]:[\\/]|\\\\)/.test(raw) || raw.startsWith('//?/');
+  if (explicitFile) {
+    if (!/^file:(?:[\\/]|[A-Za-z]:[\\/])/i.test(raw)) return null;
+    try {
+      const url = new URL(raw);
+      if (url.search || url.username || url.password || url.port) return null;
+      path = url.pathname;
+      hash = url.hash;
+      host = url.hostname;
+    } catch {
+      return null;
     }
+  } else {
+    if (/^[a-z][a-z\d+.-]*:/i.test(raw) && !windowsAbsolute) return null;
+    const namespaceLength = /^(?:\\\\\?\\|\/\/\?\/)/.test(raw) ? 4 : 0;
+    if (raw.indexOf('?', namespaceLength) >= 0) return null;
+    const hashIndex = raw.indexOf('#');
+    path = hashIndex < 0 ? raw : raw.slice(0, hashIndex);
+    hash = hashIndex < 0 ? '' : raw.slice(hashIndex);
   }
-
-  const lineMatch = /^(.*):(\d+)$/.exec(filePath);
-  if (!lineMatch) return { filePath };
-
-  const [, pathWithoutLocation, lineText] = lineMatch;
-  if (!normalizeLocalFileHrefToPath(pathWithoutLocation)) return { filePath };
-
-  return {
-    filePath: pathWithoutLocation,
-    line: Number(lineText),
-    source: 'colon',
-  };
+  if (!path || /%(?:2f|5c)/i.test(path)) return null;
+  let location: LocalFileLocation = {};
+  const column = /^(.*):(\d+):(\d+)$/.exec(path);
+  const line = column ? null : /^(.*):(\d+)$/.exec(path);
+  if (column || line) {
+    const match = (column ?? line)!;
+    location = { line: Number(match[2]), ...(column ? { column: Number(match[3]) } : {}), source: 'colon' };
+    if (
+      !Number.isSafeInteger(location.line) ||
+      location.line! < 1 ||
+      (location.column != null && (!Number.isSafeInteger(location.column) || location.column < 1))
+    )
+      return null;
+    path = match[1];
+  }
+  if (hash) {
+    const parsed = parseHashLocation(decodeHrefPath(hash));
+    if (!parsed) return null;
+    location = parsed;
+  }
+  path = decodeHrefPath(path);
+  if (!path || hasControlCharacters(path)) return null;
+  if (host && host.toLowerCase() !== 'localhost') path = '\\\\' + host + path.replace(/\//g, '\\');
+  const posixHint =
+    raw.startsWith('/') &&
+    (/^\/(?:Users|home|tmp|private|var|mnt|Volumes)(?:\/|$)/.test(path) || /(?:^|\/)[^/]*\.[^/]+$/.test(path));
+  return { path, location, explicitFile, absoluteHint: explicitFile || windowsAbsolute || posixHint };
 };
 
-const formatRawReference = (
-  reference: Omit<LocalFileLinkReference, 'rawReference'>,
-  source?: 'hash' | 'colon'
-): string => {
-  if (reference.line == null) return reference.filePath;
-
-  if (source === 'hash') {
-    return `${reference.filePath}#L${reference.line}${reference.endLine == null ? '' : `-L${reference.endLine}`}`;
-  }
-
-  return `${reference.filePath}:${reference.line}${reference.column == null ? '' : `:${reference.column}`}`;
+const formatReference = (filePath: string, location: LocalFileLocation): LocalFileLinkReference => {
+  const { source, ...position } = location;
+  const suffix =
+    location.line == null
+      ? ''
+      : source === 'hash'
+        ? '#L' + location.line + (location.endLine == null ? '' : '-L' + location.endLine)
+        : ':' + location.line + (location.column == null ? '' : ':' + location.column);
+  return { filePath, rawReference: filePath + suffix, ...position };
 };
 
+const isRelativeTarget = (path: string): boolean =>
+  Boolean(path) &&
+  !/^(?:[\\/]|[a-z][a-z\d+.-]*:|~(?:[\\/]|$))/i.test(path) &&
+  !/[\\/]$/.test(path) &&
+  !['.', '..'].includes(path);
+
+const resolveWorkspacePath = (path: string, baseDirectory: string, rootDirectory = baseDirectory): string | null => {
+  if (!isRelativeTarget(path)) return null;
+  const base = parseNativePath(baseDirectory);
+  const root = parseNativePath(rootDirectory);
+  if (!base || !root || base.rootKey !== root.rootKey || base.parts.length < root.parts.length) return null;
+  const equal = (left: string, right: string) =>
+    base.windows ? left.toLowerCase() === right.toLowerCase() : left === right;
+  if (!root.parts.every((part, index) => equal(part, base.parts[index]))) return null;
+  const parts = normalizeSegments(base.parts, path, root.parts.length, base.windows, base.windows);
+  return parts ? nativePathText(base, parts) : null;
+};
+
+/** Parse a Markdown file target; relative targets require an explicit filesystem base. */
 export const resolveLocalFileLinkReference = (
   rawHref: string,
   resolvedHref?: string,
-  baseDirectory?: string
+  baseDirectory?: string,
+  options: LocalFileLinkOptions = {}
 ): LocalFileLinkReference | null => {
-  const href = safeDecodeURIComponent((rawHref || resolvedHref || '').trim());
-  if (!href) return null;
-
-  const candidate = normalizeLocalFileHrefToPath(href) ?? resolveWorkspaceFileHref(href, baseDirectory);
-  if (!candidate || candidate.hasInvalidHash) return null;
-
-  const colonReference = splitLocationSuffix(candidate.filePath);
-  const reference =
-    candidate.hashLocation?.line == null
-      ? colonReference
-      : {
-          ...candidate.hashLocation,
-          filePath: colonReference.filePath,
-        };
-
-  if (!normalizeLocalFileHrefToPath(reference.filePath)) return null;
-
-  const source = candidate.hashLocation?.line == null ? colonReference.source : 'hash';
-  const { source: _source, ...publicReference } = reference;
-  return {
-    ...publicReference,
-    rawReference: formatRawReference(publicReference, source),
-  };
+  const input = rawHref || resolvedHref || '';
+  const raw = options.inputKind === 'path' ? input : input.trim();
+  if (options.inputKind === 'path') {
+    const native = parseNativePath(raw);
+    // A known native path is already an identity; preserve literal separators,
+    // percent characters, suffix whitespace and symlink-sensitive dot segments.
+    const path = native ? raw : baseDirectory ? resolveWorkspacePath(raw, baseDirectory, options.rootDirectory) : null;
+    return path ? formatReference(path, {}) : null;
+  }
+  const parsed = parseHref(raw);
+  if (!parsed) return null;
+  const native = parseNativePath(parsed.path);
+  if (native) return parsed.absoluteHint ? formatReference(nativePathText(native), parsed.location) : null;
+  const path = baseDirectory ? resolveWorkspacePath(parsed.path, baseDirectory, options.rootDirectory) : null;
+  return path ? formatReference(path, parsed.location) : null;
 };
 
 export const resolveLocalFileLinkPath = (
   rawHref: string,
   resolvedHref?: string,
-  baseDirectory?: string
-): string | null => {
-  return resolveLocalFileLinkReference(rawHref, resolvedHref, baseDirectory)?.filePath ?? null;
+  baseDirectory?: string,
+  options: LocalFileLinkOptions = {}
+): string | null => resolveLocalFileLinkReference(rawHref, resolvedHref, baseDirectory, options)?.filePath ?? null;
+
+/** Resolve a project-relative href without filesystem, drive or host assumptions. */
+export const resolveRelativeFileLinkReference = (
+  rawHref: string,
+  relativeDirectory: string
+): LocalFileLinkReference | null => {
+  const parsed = parseHref(rawHref);
+  if (
+    !parsed ||
+    parsed.explicitFile ||
+    !isRelativeTarget(parsed.path) ||
+    (relativeDirectory && !isRelativeTarget(relativeDirectory.replace(/[\\/]+$/, '')))
+  )
+    return null;
+  const directory = normalizeSegments([], relativeDirectory, 0, true, true);
+  const parts = directory && normalizeSegments(directory, parsed.path, 0, true, true);
+  return parts?.length ? formatReference(parts.join('/'), parsed.location) : null;
 };
 
-export const toLocalFileHref = (filePath: string): string => {
-  const normalized = filePath.replace(/\\/g, '/');
-  const withScheme = /^[A-Za-z]:\//.test(normalized) ? `file:///${normalized}` : `file://${normalized}`;
-  return encodeURI(withScheme);
-};
+export { toLocalFileHref } from '@/renderer/utils/file/fileUrls';
 
 /**
  * Get line background style for diff rendering.

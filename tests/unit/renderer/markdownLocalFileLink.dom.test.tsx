@@ -44,7 +44,7 @@ vi.mock('@/renderer/components/Markdown/CodeBlock', () => ({
 
 vi.mock('@/renderer/components/media/LocalImageView', () => ({
   __esModule: true,
-  default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
+  default: ({ src, alt }: { src: string; alt: string }) => <img data-local-image='true' src={src} alt={alt} />,
 }));
 
 vi.mock('@/renderer/utils/chat/latexDelimiters', () => ({
@@ -93,6 +93,79 @@ describe('MarkdownView local file links', () => {
     previewMocks.metadata.mockClear();
     previewMocks.read.mockClear();
     previewMocks.external.mockClear();
+  });
+
+  it('leaves file URL text inside a code block unchanged', () => {
+    render(<MarkdownView>{'```text\nfile:///C:/Reports/report.md\n```'}</MarkdownView>);
+    expect(screen.getByText('file:///C:/Reports/report.md')).toBeInTheDocument();
+  });
+
+  it('scrolls a local heading anchor without opening the renderer URL', () => {
+    render(<MarkdownView allowHtml>{'<h2 id="section">Section</h2>\n\n[Jump](#section)'}</MarkdownView>);
+    const target = screen.getByRole('heading', { name: 'Section' });
+    target.scrollIntoView = vi.fn();
+    fireEvent.click(screen.getByRole('link', { name: 'Jump' }));
+    expect(target.scrollIntoView).toHaveBeenCalled();
+    expect(previewMocks.external).not.toHaveBeenCalled();
+  });
+
+  it('uses explicit https for a protocol-relative external link', () => {
+    render(<MarkdownView>{'[remote](//example.com/report.md)'}</MarkdownView>);
+    fireEvent.click(screen.getByRole('link', { name: 'remote' }));
+    expect(previewMocks.external).toHaveBeenCalledWith('https://example.com/report.md');
+  });
+
+  it('does not send an unresolved relative file through openExternal', () => {
+    render(<MarkdownView>{'[report](runs/report.md)'}</MarkdownView>);
+    fireEvent.click(screen.getByRole('link', { name: 'report' }));
+    expect(previewMocks.external).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['assets/%E4%B8%AD%E6%96%87%20report%23draft%3F1.png', 'C:/workspace/assets/中文 report#draft?1.png'],
+    ['assets/100%25%20report.png', 'C:/workspace/assets/100% report.png'],
+    ['assets/100%.png', 'C:/workspace/assets/100%.png'],
+    ['file:///C:/reports/literal%2523.png', 'C:/reports/literal%23.png'],
+  ])('resolves a local image once against the workspace: %s', (src, expected) => {
+    render(<MarkdownView baseDirectory='C:/workspace'>{`![plot](${src})`}</MarkdownView>);
+    expect(screen.getByRole('img', { name: 'plot' })).toHaveAttribute('src', expected);
+    expect(screen.getByRole('img', { name: 'plot' })).toHaveAttribute('data-local-image', 'true');
+  });
+
+  it('keeps a protocol-relative image remote and does not guess a missing image workspace', () => {
+    const view = render(<MarkdownView>{'![plot](//images.example/report.png)'}</MarkdownView>);
+    expect(screen.getByRole('img', { name: 'plot' })).toHaveAttribute('src', 'https://images.example/report.png');
+    view.rerender(<MarkdownView>{'![plot](assets/report.png)'}</MarkdownView>);
+    expect(screen.getByRole('img', { name: 'plot' })).not.toHaveAttribute('src');
+  });
+
+  it.each([
+    ['file://localhost/Users/demo/README', '/Users/demo/README'],
+    ['file://server/share/literal%2525.md', '\\\\server\\share\\literal%25.md'],
+    ['file:///tmp/a%23b%3Fc%2520.md', '/tmp/a#b?c%20.md'],
+  ])('opens an explicit file URL through the local callback once: %s', (href, expected) => {
+    const onLocalFileLink = vi.fn();
+    render(<MarkdownView onLocalFileLink={onLocalFileLink}>{`[target](${href})`}</MarkdownView>);
+    fireEvent.click(screen.getByRole('button', { name: 'target' }));
+    expect(onLocalFileLink).toHaveBeenCalledWith(expected, expect.objectContaining({ filePath: expected }));
+    expect(previewMocks.external).not.toHaveBeenCalled();
+  });
+
+  it('uses the new conversation workspace after the same Markdown view rerenders', () => {
+    const open = vi.fn();
+    const view = render(
+      <MarkdownView baseDirectory='C:/workspace-a' onLocalFileLink={open}>
+        {'[report](report.md)'}
+      </MarkdownView>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'report' }));
+    view.rerender(
+      <MarkdownView baseDirectory='C:/workspace-b' onLocalFileLink={open}>
+        {'[report](report.md)'}
+      </MarkdownView>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'report' }));
+    expect(open.mock.calls.map(([path]) => path)).toEqual(['C:/workspace-a/report.md', 'C:/workspace-b/report.md']);
   });
 
   it('routes a relative workspace report click through ChatFileRef metadata and content preview', async () => {

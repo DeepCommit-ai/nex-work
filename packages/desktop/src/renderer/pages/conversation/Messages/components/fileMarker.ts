@@ -115,7 +115,9 @@ export const resolveMessageFilePath = (file_path: string, workspace?: string): s
     return file_path;
   }
 
-  const normalizedWorkspace = workspace.replace(/[\\/]+$/, '').replace(/\\/g, '/');
-  const normalizedFilePath = file_path.replace(/^\.?[\\/]+/, '').replace(/\\/g, '/');
-  return `${normalizedWorkspace}/${normalizedFilePath}`.replace(/\/+/g, '/');
+  const windows = /^[A-Za-z]:[\\/]/.test(workspace) || /^(?:\\\\|\/\/)/.test(workspace);
+  const normalizedWorkspace = (windows ? workspace.replace(/\\/g, '/') : workspace).replace(/\/+$/, '');
+  const normalizedFilePath = (windows ? file_path.replace(/\\/g, '/') : file_path).replace(/^\.?\/+/, '');
+  const prefix = normalizedWorkspace.startsWith('//') ? '//' : workspace.startsWith('/') ? '/' : '';
+  return prefix + `${normalizedWorkspace}/${normalizedFilePath}`.split('/').filter(Boolean).join('/');
 };

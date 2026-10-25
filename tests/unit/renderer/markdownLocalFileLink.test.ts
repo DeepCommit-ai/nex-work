@@ -8,10 +8,75 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveLocalFileLinkPath,
   resolveLocalFileLinkReference,
+  resolveRelativeFileLinkReference,
   toLocalFileHref,
 } from '@/renderer/components/Markdown/markdownUtils';
 
 describe('resolveLocalFileLinkPath', () => {
+  it.each([
+    ['file://localhost/Users/demo/README', '/Users/demo/README'],
+    ['file:///README', '/README'],
+    ['/report.md', '/report.md'],
+    ['file://server/share/中文%20报告.md', '\\\\server\\share\\中文 报告.md'],
+    ['\\\\server\\share\\report.md', '\\\\server\\share\\report.md'],
+    ['\\\\?\\C:\\reports\\report.md', '\\\\?\\C:\\reports\\report.md'],
+    ['\\\\?\\UNC\\server\\share\\report.md', '\\\\?\\UNC\\server\\share\\report.md'],
+    ['file:///tmp/report%23draft%3F1.md', '/tmp/report#draft?1.md'],
+    ['file:///tmp/literal%2520name.md', '/tmp/literal%20name.md'],
+    ['file:///tmp/100%25%20中文.md', '/tmp/100% 中文.md'],
+  ])('resolves unambiguous native/file URL identity %s', (href, expected) => {
+    expect(resolveLocalFileLinkPath(href)).toBe(expected);
+  });
+
+  it('preserves known native names without decoding or parsing #?% as link syntax', () => {
+    expect(resolveLocalFileLinkPath('/tmp/literal%20name#draft?.md', undefined, undefined, { inputKind: 'path' })).toBe(
+      '/tmp/literal%20name#draft?.md'
+    );
+    expect(resolveLocalFileLinkPath('/README', undefined, undefined, { inputKind: 'path' })).toBe('/README');
+    expect(resolveLocalFileLinkPath('/tmp/a\\b%20.md ', undefined, undefined, { inputKind: 'path' })).toBe(
+      '/tmp/a\\b%20.md '
+    );
+  });
+
+  it('recognizes extensionless workspace links and keeps a literal percent filename intact', () => {
+    expect(resolveLocalFileLinkPath('docs/README', undefined, '/workspace')).toBe('/workspace/docs/README');
+    expect(resolveLocalFileLinkPath('100%25%20report.md', undefined, '/workspace')).toBe('/workspace/100% report.md');
+  });
+
+  it('uses an explicit outer root for document-directory links without escaping it', () => {
+    expect(
+      resolveLocalFileLinkPath('../report.md', undefined, 'C:/workspace/docs', { rootDirectory: 'C:/workspace' })
+    ).toBe('C:/workspace/report.md');
+    expect(
+      resolveLocalFileLinkPath('../../outside.md', undefined, 'C:/workspace/docs', { rootDirectory: 'C:/workspace' })
+    ).toBeNull();
+  });
+
+  it('shares single-decoding and project-root containment for relative project identities', () => {
+    expect(resolveRelativeFileLinkReference('../assets/a%23b%3Fc%2520.md#L5', 'docs')).toEqual({
+      filePath: 'assets/a#b?c%20.md',
+      rawReference: 'assets/a#b?c%20.md#L5',
+      line: 5,
+    });
+    expect(resolveRelativeFileLinkReference('../../outside.md', 'docs')).toBeNull();
+  });
+
+  it.each([
+    'file:///tmp/report.md',
+    'C:/report.md',
+    '\\\\server\\share\\report.md',
+    '//example.com/report.md',
+    'https://example.com/report.md',
+    '#heading',
+    '/settings',
+    '~/report.md',
+  ])('does not reinterpret a non-relative project link: %s', (href) => {
+    expect(resolveRelativeFileLinkReference(href, 'docs')).toBeNull();
+  });
+
+  it('encodes literal reserved characters without decoding existing native percent characters', () => {
+    expect(toLocalFileHref('/tmp/a#b?c%20.md')).toBe('file:///tmp/a%23b%3Fc%2520.md');
+  });
   it('resolves a report link against an explicit Windows conversation workspace', () => {
     expect(resolveLocalFileLinkReference('runs/2026-10-25/report.md', undefined, 'C:\\NexWork\\conversation')).toEqual({
       filePath: 'C:/NexWork/conversation/runs/2026-10-25/report.md',

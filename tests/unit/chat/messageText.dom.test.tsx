@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageText } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
@@ -32,7 +33,17 @@ const localFileLinkMocks = vi.hoisted(() => ({
       | undefined,
   },
 }));
-const mockFilePreview = vi.fn(({ path }: { path: string }) => <div data-testid='file-preview'>{path}</div>);
+type FilePreviewTestProps = { path: string; onOpen?: (path: string) => void | Promise<void> };
+const mockFilePreview = vi.fn(({ path, onOpen }: FilePreviewTestProps) => (
+  <div data-testid='file-preview'>
+    {path}
+    {onOpen && (
+      <button type='button' onClick={() => void onOpen(path)}>
+        open attachment {path}
+      </button>
+    )}
+  </div>
+));
 
 const forkMocks = vi.hoisted(() => ({
   fork: vi.fn(),
@@ -75,7 +86,7 @@ vi.mock('@/renderer/components/chat/CollapsibleContent', () => ({
 
 vi.mock('@/renderer/components/media/FilePreview', () => ({
   __esModule: true,
-  default: (props: { path: string }) => mockFilePreview(props),
+  default: (props: FilePreviewTestProps) => mockFilePreview(props),
 }));
 
 vi.mock('@/renderer/components/media/HorizontalFileList', () => ({
@@ -141,7 +152,11 @@ vi.mock('@/renderer/utils/ui/clipboard', () => ({
   copyText: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@arco-design/web-react', () => ({
+vi.mock('@arco-design/web-react', async (importOriginal) => ({
+  Button: (await importOriginal<typeof import('@arco-design/web-react')>()).Button,
+  Image: ({ src, alt, preview }: { src: string; alt: string; preview: boolean }) => (
+    <img src={src || undefined} alt={alt} data-image-preview={preview} />
+  ),
   Alert: () => null,
   Message: {
     error: vi.fn(),
@@ -151,13 +166,21 @@ vi.mock('@arco-design/web-react', () => ({
 
 vi.mock('@icon-park/react', () => ({
   Copy: () => <span data-testid='copy-icon' />,
+  Close: () => <span data-testid='remove-file-icon' />,
 }));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+    i18n: { language: 'zh-CN' },
   }),
 }));
+
+const ActualFilePreview = (
+  await vi.importActual<typeof import('@/renderer/components/media/FilePreview')>(
+    '@/renderer/components/media/FilePreview'
+  )
+).default;
 
 const fileMetadata = (path: string) => ({
   name: path.split(/[\\/]/).pop() || path,
@@ -165,6 +188,60 @@ const fileMetadata = (path: string) => ({
   size: 128,
   type: 'file',
   lastModified: 1_717_000_000,
+});
+
+describe('FilePreview open interaction', () => {
+  beforeEach(() => {
+    vi.mocked(ipcBridge.fs.getFileMetadata.invoke).mockReset().mockResolvedValue(fileMetadata('/fixture/report.pdf'));
+    vi.mocked(ipcBridge.fs.getImageBase64.invoke).mockReset().mockResolvedValue('data:image/png;base64,fixture');
+  });
+
+  it('opens a non-image chip with Enter and Space through a native button', async () => {
+    const onOpen = vi.fn();
+    const user = userEvent.setup();
+    render(<ActualFilePreview path='/fixture/report.pdf' onOpen={onOpen} onRemove={vi.fn()} readonly />);
+
+    await user.tab();
+    const button = screen.getByRole('button', { name: 'report.pdf' });
+    expect(button).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onOpen).toHaveBeenLastCalledWith('/fixture/report.pdf');
+  });
+
+  it('removes an openable chip without also opening it', () => {
+    const onOpen = vi.fn();
+    const onRemove = vi.fn();
+    render(<ActualFilePreview path='/fixture/report.pdf' onOpen={onOpen} onRemove={onRemove} />);
+
+    fireEvent.click(screen.getByTestId('remove-file-icon').parentElement as HTMLElement);
+
+    expect(onRemove).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('keeps picker chips non-interactive when no open callback is supplied', () => {
+    const onRemove = vi.fn();
+    render(<ActualFilePreview path='/fixture/report.pdf' onRemove={onRemove} />);
+
+    fireEvent.click(screen.getByText('report.pdf'));
+
+    expect(screen.queryByRole('button', { name: 'report.pdf' })).not.toBeInTheDocument();
+    expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it('keeps image chips on the existing image preview path', async () => {
+    const onOpen = vi.fn();
+    render(<ActualFilePreview path='/fixture/photo.png' onOpen={onOpen} onRemove={vi.fn()} readonly />);
+
+    const image = await screen.findByRole('img', { name: 'photo.png' });
+    await waitFor(() => expect(image).toHaveAttribute('data-image-preview', 'true'));
+    fireEvent.click(image);
+
+    expect(onOpen).not.toHaveBeenCalled();
+  });
 });
 
 describe('MessageText attachment paths', () => {
@@ -207,7 +284,8 @@ describe('MessageText attachment paths', () => {
   const renderMessageText = (
     content: string,
     overrides: Partial<IMessageText> = {},
-    contentOverrides: Partial<IMessageText['content']> = {}
+    contentOverrides: Partial<IMessageText['content']> = {},
+    workspace = '/workspace/demo'
   ) => {
     const message: IMessageText = {
       id: 'msg-marker',
@@ -224,7 +302,7 @@ describe('MessageText attachment paths', () => {
     };
 
     render(
-      <ConversationProvider value={{ conversationId: 'conv-1', workspace: '/workspace/demo', type: 'acp' }}>
+      <ConversationProvider value={{ conversationId: 'conv-1', workspace, type: 'acp' }}>
         <MessageText message={message} />
       </ConversationProvider>
     );
@@ -309,6 +387,62 @@ describe('MessageText attachment paths', () => {
     );
 
     expect(screen.getByTestId('file-preview')).toHaveTextContent('/Users/demo/Desktop/photo.png');
+  });
+
+  it.each([
+    {
+      path: 'C:\\员工 电脑\\报告#L10%25.txt',
+      resolved: 'C:\\员工 电脑\\报告#L10%25.txt',
+      workspace: '/workspace/demo',
+    },
+    { path: '/Users/demo/报告#L10%25.txt', resolved: '/Users/demo/报告#L10%25.txt', workspace: '/workspace/demo' },
+    {
+      path: 'uploads/报告#L10%25.txt',
+      resolved: '/workspace/demo/uploads/报告#L10%25.txt',
+      workspace: '/workspace/demo',
+    },
+    {
+      path: 'uploads/报告#L10%25.txt',
+      resolved: '//server/share/team/uploads/报告#L10%25.txt',
+      workspace: '\\\\server\\share\\team',
+    },
+  ])(
+    'opens a non-image attachment as a literal local path in $workspace: $path',
+    async ({ path, resolved, workspace }) => {
+      vi.mocked(ipcBridge.fs.readContent.invoke).mockResolvedValue('synthetic attachment');
+      renderMessageText(`attachment\n\n[[AION_FILES]]\n${path}`, { position: 'right' }, {}, workspace);
+
+      fireEvent.click(screen.getByRole('button', { name: `open attachment ${resolved}` }));
+
+      await waitFor(() => {
+        expect(ipcBridge.fs.readContent.invoke).toHaveBeenCalledWith({
+          file: { kind: 'local', path: resolved },
+          encoding: 'utf8',
+        });
+      });
+      expect(previewMocks.openPreview).toHaveBeenCalledWith(
+        'synthetic attachment',
+        'code',
+        expect.objectContaining({ fileRef: { kind: 'local', path: resolved }, targetLine: undefined }),
+        { replace: true }
+      );
+    }
+  );
+
+  it('opens the selected file among multiple user attachments', async () => {
+    vi.mocked(ipcBridge.fs.readContent.invoke).mockResolvedValue('second attachment');
+    renderMessageText('attachments\n\n[[AION_FILES]]\nuploads/first.txt\nuploads/第二份 #%25.txt', {
+      position: 'right',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'open attachment /workspace/demo/uploads/第二份 #%25.txt' }));
+
+    await waitFor(() => {
+      expect(ipcBridge.fs.readContent.invoke).toHaveBeenCalledExactlyOnceWith({
+        file: { kind: 'local', path: '/workspace/demo/uploads/第二份 #%25.txt' },
+        encoding: 'utf8',
+      });
+    });
   });
 
   it('previews valid user attachment paths with Windows, relative, spaces, and Chinese filenames', () => {

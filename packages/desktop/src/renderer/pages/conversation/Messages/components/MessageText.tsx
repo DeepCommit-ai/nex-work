@@ -5,6 +5,7 @@
  */
 
 import type { IMessageText } from '@/common/chat/chatLib';
+import { localFileRef } from '@/common/types/chatFile';
 import { parseFileMarker, resolveMessageFilePath } from './fileMarker';
 import SessionMentionAction from './SessionMentionAction';
 import { parseSessionMessageBlock, parseSessionsBlock } from './sessionMarkers';
@@ -15,7 +16,7 @@ import { iconColors } from '@/renderer/styles/colors';
 import { Alert, Message, Tooltip } from '@arco-design/web-react';
 import { Copy } from '@icon-park/react';
 import classNames from 'classnames';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@/renderer/utils/ui/clipboard';
 import CollapsibleContent from '@renderer/components/chat/CollapsibleContent';
@@ -169,6 +170,10 @@ const MessageText: React.FC<{
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
   const handleLocalFileLink = useLocalFilePreview(conversationContext?.workspace);
+  const handleAttachmentOpen = useCallback(
+    (filePath: string) => handleLocalFileLink(localFileRef(filePath)),
+    [handleLocalFileLink]
+  );
   const resolvedFiles = useMemo(
     () => files.map((file_path) => resolveMessageFilePath(file_path, conversationContext?.workspace)),
     [conversationContext?.workspace, files]
@@ -295,12 +300,23 @@ const MessageText: React.FC<{
           <div className={classNames('mt-6px min-w-0 max-w-full', { 'self-end': isUserMessage })}>
             {resolvedFiles.length === 1 ? (
               <div className='flex items-center'>
-                <FilePreview path={resolvedFiles[0]} onRemove={() => undefined} readonly />
+                <FilePreview
+                  path={resolvedFiles[0]}
+                  onOpen={handleAttachmentOpen}
+                  onRemove={() => undefined}
+                  readonly
+                />
               </div>
             ) : (
               <HorizontalFileList>
                 {resolvedFiles.map((path) => (
-                  <FilePreview key={path} path={path} onRemove={() => undefined} readonly />
+                  <FilePreview
+                    key={path}
+                    path={path}
+                    onOpen={handleAttachmentOpen}
+                    onRemove={() => undefined}
+                    readonly
+                  />
                 ))}
               </HorizontalFileList>
             )}

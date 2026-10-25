@@ -203,6 +203,18 @@ const clickAdd = async () => {
 };
 
 describe('ExplorerContainer attach/remove', () => {
+  it.each([
+    ['C:\\Reports #100%', 'file:///C:/Reports%20%23100%25'],
+    ['/Users/me/Reports #100%', 'file:///Users/me/Reports%20%23100%25'],
+    ['\\\\server\\share\\Reports #100%', 'file://server/share/Reports%20%23100%25'],
+  ])('attaches the exact selected folder even when it contains URL punctuation: %s', async (folder, uri) => {
+    showOpen.mockResolvedValue([folder]);
+    attachFolder.mockResolvedValue(entry({ pe_id: 'peB', role: 'attached' }));
+    renderIt();
+    await clickAdd();
+    await waitFor(() => expect(attachFolder).toHaveBeenCalledWith({ project_id: 'p1', uri }));
+  });
+
   it('attaches a picked directory as a file:// URI and revalidates the tree', async () => {
     showOpen.mockResolvedValue(['/Users/me/lib']);
     attachFolder.mockResolvedValue(entry({ pe_id: 'peB', role: 'attached' }));
