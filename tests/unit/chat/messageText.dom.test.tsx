@@ -423,8 +423,7 @@ describe('MessageText attachment paths', () => {
       expect(previewMocks.openPreview).toHaveBeenCalledWith(
         'synthetic attachment',
         'code',
-        expect.objectContaining({ fileRef: { kind: 'local', path: resolved }, targetLine: undefined }),
-        { replace: true }
+        expect.objectContaining({ fileRef: { kind: 'local', path: resolved }, targetLine: undefined })
       );
     }
   );
@@ -631,8 +630,7 @@ describe('MessageText attachment paths', () => {
           editable: false,
           targetLine: 10,
           targetColumn: 2,
-        }),
-        { replace: true }
+        })
       );
     });
   });
@@ -668,8 +666,7 @@ describe('MessageText attachment paths', () => {
           targetColumn: 7,
           oversized: false,
           lastModified: 1_717_000_000,
-        }),
-        { replace: true }
+        })
       );
     });
     // Content read by Local ChatFileRef over /content (utf8), not the legacy path endpoints.
@@ -709,8 +706,7 @@ describe('MessageText attachment paths', () => {
           targetColumn: undefined,
           oversized: false,
           lastModified: 1_717_000_000,
-        }),
-        { replace: true }
+        })
       );
     });
 
@@ -737,8 +733,7 @@ describe('MessageText attachment paths', () => {
           file_path: filePath,
           workspace: '/workspace/demo',
           language: 'pdf',
-        }),
-        { replace: true }
+        })
       );
     });
     expect(ipcBridge.fs.readFile.invoke).not.toHaveBeenCalled();
@@ -765,8 +760,7 @@ describe('MessageText attachment paths', () => {
           workspace: '/workspace/demo',
           language: 'png',
           editable: false,
-        }),
-        { replace: true }
+        })
       );
     });
     // Image read as a data URL over /content (dataurl encoding).
@@ -806,8 +800,7 @@ describe('MessageText attachment paths', () => {
           sizeBytes: oversize,
           thresholdBytes: 1024 * 1024,
           editable: false,
-        }),
-        { replace: true }
+        })
       );
     });
     // The whole point: the content endpoint is never hit for an oversized file.

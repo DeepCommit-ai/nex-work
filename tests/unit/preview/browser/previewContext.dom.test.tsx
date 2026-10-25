@@ -20,6 +20,10 @@ import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const browserRequests = vi.hoisted(() => new Set<() => void>());
+const fileReads = vi.hoisted(() => ({
+  metadata: vi.fn().mockResolvedValue({ size: 128, lastModified: 1 }),
+  content: vi.fn().mockResolvedValue('Report fixture'),
+}));
 vi.mock('@/common', () => ({
   ipcBridge: {
     fileStream: { contentUpdate: { on: () => () => {} } },
@@ -33,13 +37,20 @@ vi.mock('@/common', () => ({
       },
     },
     conversation: { responseStream: { on: () => () => {} } },
-    fs: { getFileContent: { invoke: vi.fn() }, writeFile: { invoke: vi.fn() } },
+    fs: {
+      getFileContent: { invoke: vi.fn() },
+      writeFile: { invoke: vi.fn() },
+      getContentMetadata: { invoke: fileReads.metadata },
+      readContent: { invoke: fileReads.content },
+    },
   },
 }));
 
 vi.mock('@/renderer/pages/conversation/Preview/browser/firstUseNotice', () => ({
   maybeNotifyFirstAgentBrowserUse: vi.fn(),
 }));
+vi.mock('@/renderer/pages/conversation/explorer/currentProjectStore', () => ({ getCurrentProject: () => null }));
+vi.mock('@/renderer/services/clientBusinessSettings', () => ({ getClientBusinessSetting: async () => 1 }));
 
 import {
   PreviewProvider,
@@ -47,15 +58,18 @@ import {
   type PreviewContextValue,
 } from '@/renderer/pages/conversation/Preview/context/PreviewContext';
 import { MAX_BROWSER_TABS } from '@/renderer/pages/conversation/Preview/browser/constants';
+import { useLocalFilePreview } from '@/renderer/pages/conversation/Preview/hooks/useLocalFilePreview';
 import {
   resetCurrentConversationForTest,
   setCurrentConversation,
 } from '@/renderer/pages/conversation/explorer/currentConversationStore';
 
 let ctx: PreviewContextValue;
+let openFile: ReturnType<typeof useLocalFilePreview>;
 
 const Probe: React.FC = () => {
   ctx = usePreviewContext();
+  openFile = useLocalFilePreview('C:/workspace');
   return null;
 };
 
@@ -71,10 +85,65 @@ const browserTabs = () => ctx.tabs.filter((tab) => tab.content_type === 'browser
 beforeEach(() => {
   localStorage.clear();
   resetCurrentConversationForTest();
+  fileReads.metadata.mockReset().mockResolvedValue({ size: 128, lastModified: 1 });
+  fileReads.content.mockReset().mockResolvedValue('Report fixture');
 });
 afterEach(() => resetCurrentConversationForTest());
 
 describe('PreviewContext browser tabs', () => {
+  it('opens a linked report beside the browser and closing it restores that browser tab', async () => {
+    renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com/form'));
+    const browser = browserTabs()[0];
+    await act(async () => openFile('C:/workspace/report.md'));
+    expect(ctx.tabs.map((tab) => tab.content_type)).toEqual(['browser', 'markdown']);
+    expect(browserTabs()).toEqual([browser]);
+    act(() => ctx.closeTab(ctx.activeTabId!));
+    expect([ctx.tabs, ctx.activeTabId]).toEqual([[browser], browser.id]);
+  });
+
+  it('opens different linked files separately and reuses the tab for the same file', async () => {
+    renderProvider();
+    await act(async () => openFile('C:/workspace/report.md'));
+    const report = ctx.activeTab;
+    await act(async () => openFile('C:/workspace/attachment.txt'));
+    expect(ctx.tabs.map((tab) => tab.title)).toEqual(['report.md', 'attachment.txt']);
+    await act(async () => openFile('C:/workspace/report.md'));
+    expect(ctx.tabs).toHaveLength(2);
+    expect(ctx.activeTabId).toBe(report?.id);
+  });
+
+  it('keeps the browser when a linked file cannot be read', async () => {
+    renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com/form'));
+    const browser = browserTabs()[0];
+    fileReads.content.mockRejectedValueOnce(new Error('File missing'));
+    await act(async () => openFile('C:/workspace/missing.md'));
+    expect(ctx.tabs).toHaveLength(2);
+    expect(browserTabs()).toEqual([browser]);
+    expect(ctx.activeTab?.metadata?.missingFile).toBe(true);
+  });
+
+  it('never turns a browser tab into a file even when replacement is explicitly requested', () => {
+    renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com/form'));
+    const browser = browserTabs()[0];
+    act(() => ctx.openPreview('report', 'markdown', { file_name: 'report.md' }, { replace: true }));
+    expect(ctx.tabs).toHaveLength(2);
+    expect(browserTabs()).toEqual([browser]);
+    expect(ctx.activeTab?.content_type).toBe('markdown');
+  });
+
+  it('does not replace an open file when a browser is requested with the replacement option', () => {
+    renderProvider();
+    act(() => ctx.openPreview('report', 'markdown', { file_name: 'report.md' }));
+    const report = ctx.activeTab;
+    act(() => ctx.openPreview('https://example.com/form', 'browser', undefined, { replace: true }));
+    expect(ctx.tabs).toHaveLength(2);
+    expect(ctx.tabs[0]).toEqual(report);
+    expect(ctx.activeTab?.content_type).toBe('browser');
+  });
+
   it('opens one browser for repeated native connection requests before rendering', () => {
     const { unmount } = renderProvider();
     act(() => {
@@ -181,6 +250,40 @@ describe('PreviewContext browser tab persistence', () => {
       setCurrentConversation(conversationId);
       ctx.closePreviewIfScopeChanged(project, conversationId);
     });
+
+  it.each(['toggle', 'native request'])('restores a legacy replaced browser ID without losing a draft: %s', (entry) => {
+    const draft = {
+      id: 'browser-conversation-a',
+      title: 'report.md',
+      content_type: 'markdown',
+      content: 'unsaved report',
+      originalContent: 'saved report',
+      isDirty: true,
+      metadata: { fileRef: { kind: 'local', path: 'C:/workspace/report.md' } },
+    };
+    const other = { id: 'markdown-browser-conversation-a', title: 'other.txt', content_type: 'code', content: 'other' };
+    localStorage.setItem(
+      'preview-ui:project-a',
+      JSON.stringify({ isOpen: true, tabs: [other, draft], activeTabId: draft.id })
+    );
+    renderProvider();
+    enter('conversation-a', 'project-a');
+    expect(ctx.activeTab).toMatchObject({
+      title: 'report.md',
+      content: 'unsaved report',
+      originalContent: 'saved report',
+      isDirty: true,
+    });
+    act(() => (entry === 'toggle' ? ctx.toggleBrowser() : browserRequests.forEach((request) => request())));
+    expect([ctx.tabs.length, new Set(ctx.tabs.map((tab) => tab.id)).size, ctx.activeTab?.content_type]).toEqual([
+      3,
+      3,
+      'browser',
+    ]);
+    const restoredDraft = ctx.tabs.find((tab) => tab.title === 'report.md')!;
+    act(() => ctx.closeTab(restoredDraft.id));
+    expect(ctx.tabs.map((tab) => tab.content_type)).toEqual(['code', 'browser']);
+  });
 
   it('persists browser URLs with their conversation while project switches restore the right previews', () => {
     renderProvider();

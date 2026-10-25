@@ -177,8 +177,7 @@ describe('MarkdownViewer', () => {
           file_path: filePath,
           language: 'jpg',
           editable: false,
-        }),
-        { replace: true }
+        })
       );
     });
     // Image link content read as a data URL over /content by Local ref.
@@ -210,8 +209,7 @@ describe('MarkdownViewer', () => {
           targetColumn: undefined,
           oversized: false,
           lastModified: 1_717_000_000,
-        }),
-        { replace: true }
+        })
       );
     });
 
@@ -242,8 +240,7 @@ describe('MarkdownViewer', () => {
           targetColumn: undefined,
           oversized: false,
           lastModified: 1_717_000_000,
-        }),
-        { replace: true }
+        })
       );
     });
   });
@@ -290,8 +287,7 @@ describe('MarkdownViewer', () => {
       expect(previewMocks.openPreview).toHaveBeenCalledWith(
         'Synthetic sibling file',
         'markdown',
-        expect.objectContaining({ fileRef: { kind: 'local', path: expected }, file_path: expected }),
-        { replace: true }
+        expect.objectContaining({ fileRef: { kind: 'local', path: expected }, file_path: expected })
       )
     );
   });
@@ -325,8 +321,7 @@ describe('MarkdownViewer', () => {
         expect.objectContaining({
           fileRef: { kind: 'project', pe_id: 'document-pe', relative_path: 'data/details.md' },
           targetLine: 3,
-        }),
-        { replace: true }
+        })
       )
     );
     expect(previewMocks.openPreview.mock.calls[0][2].file_path).toBeUndefined();
@@ -347,8 +342,7 @@ describe('MarkdownViewer', () => {
       expect(previewMocks.openPreview).toHaveBeenCalledWith(
         'Uploaded sibling',
         'markdown',
-        expect.objectContaining({ fileRef: { kind: 'upload', path: '/managed/uploads/sibling.md' } }),
-        { replace: true }
+        expect.objectContaining({ fileRef: { kind: 'upload', path: '/managed/uploads/sibling.md' } })
       )
     );
   });
@@ -483,8 +477,7 @@ describe('MarkdownViewer', () => {
         expect.objectContaining({
           fileRef: { kind: 'project', pe_id: 'resolved-pe', relative_path: 'report.md' },
           file_path: 'C:/workspace/report.md',
-        }),
-        { replace: true }
+        })
       )
     );
   });

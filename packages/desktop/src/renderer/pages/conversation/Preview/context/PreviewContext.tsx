@@ -81,10 +81,9 @@ export interface PreviewTab {
 
 export interface OpenPreviewOptions {
   /**
-   * Reuse the active tab instead of opening a new one — used by file-tree
-   * browsing so switching files swaps the single preview instead of stacking
-   * tabs. Ignored when the active tab has unsaved edits (falls back to a new
-   * tab to avoid losing changes).
+   * Reuse a clean active file preview instead of opening a new one. Browser
+   * tabs and unsaved edits are never replacement targets. File links and the
+   * explorer append by default and deduplicate by file identity.
    */
   replace?: boolean;
 }
@@ -434,6 +433,19 @@ const loadScopeState = (scope: string): PersistedScopeState => {
     const parsed = JSON.parse(raw) as { isOpen?: unknown; tabs?: unknown; activeTabId?: unknown };
     const tabs = parsePersistedTabs(parsed.tabs);
     let activeTabId = typeof parsed.activeTabId === 'string' ? parsed.activeTabId : null;
+    // Older file links replaced a browser in place, retaining its reserved ID.
+    // Give those files their own IDs before browser ownership or ensure() runs;
+    // keep their content, unsaved state and selection, including on first upgrade.
+    const usedIds = new Set(tabs.map((tab) => tab.id));
+    for (const tab of tabs) {
+      if (tab.content_type === 'browser' || !tab.id.startsWith('browser-')) continue;
+      const previousId = tab.id;
+      let recoveredId = `${tab.content_type}-${previousId}`;
+      while (usedIds.has(recoveredId)) recoveredId += '-restored';
+      usedIds.add(recoveredId);
+      tab.id = recoveredId;
+      if (activeTabId === previousId) activeTabId = recoveredId;
+    }
     if (activeTabId && !tabs.some((tab) => tab.id === activeTabId)) activeTabId = tabs[0]?.id || null;
     return { isOpen: parsed.isOpen === true && tabs.length > 0, tabs, activeTabId };
   } catch {
@@ -854,14 +866,14 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const title = extractFileName(meta?.file_name) || extractFileName(meta?.title) || fallbackTitle;
 
       // Single-preview browse mode: reuse the active tab in place instead of
-      // stacking a new one — unless it has unsaved edits, then fall back to a
-      // new tab so changes aren't lost.
+      // stacking a new one. Browser tabs own live pages, so they must never be
+      // converted to file tabs (or vice versa). Unsaved edits are also retained.
       const replaceTarget = (() => {
-        if (existingTab || !options?.replace) return null;
+        if (existingTab || !options?.replace || type === 'browser') return null;
         const activeTab = activeTabIdRef.current
           ? currentTabs.find((tab) => tab.id === activeTabIdRef.current)
           : undefined;
-        return activeTab && !activeTab.isDirty ? activeTab : null;
+        return activeTab && activeTab.content_type !== 'browser' && !activeTab.isDirty ? activeTab : null;
       })();
 
       // 上限触发时被复用的最旧浏览器 tab / Oldest browser tab reused at the cap

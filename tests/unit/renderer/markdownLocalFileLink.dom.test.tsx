@@ -188,8 +188,7 @@ describe('MarkdownView local file links', () => {
           fileRef: { kind: 'local', path: 'C:/NexWork/conversation/runs/2026-10-25/report.md' },
           file_path: 'C:/NexWork/conversation/runs/2026-10-25/report.md',
           workspace: 'C:\\NexWork\\conversation',
-        }),
-        { replace: true }
+        })
       )
     );
     expect(previewMocks.read).toHaveBeenCalledWith({

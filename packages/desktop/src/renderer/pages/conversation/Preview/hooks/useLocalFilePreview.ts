@@ -48,46 +48,36 @@ export const useLocalFilePreview = (workspace?: string) => {
         // entry point has always relied on.
         const payload = await resolvePreviewPayload(fileRef, contentType);
 
-        openPreview(
-          payload.content,
-          contentType,
-          {
-            title: fileName,
-            file_name: fileName,
-            fileRef,
-            file_path,
-            workspace,
-            language: getPreviewLanguage(fileName),
-            targetLine: reference?.line,
-            targetColumn: reference?.column,
-            // An oversized file is read-only: no content was read, so there is
-            // nothing to edit and no partial content that could be written back.
-            editable: contentType === 'markdown' || contentType === 'image' || payload.oversized ? false : undefined,
-            oversized: payload.oversized,
-            sizeBytes: payload.sizeBytes,
-            thresholdBytes: payload.thresholdBytes,
-            lastModified: payload.lastModified,
-          },
-          { replace: true }
-        );
+        openPreview(payload.content, contentType, {
+          title: fileName,
+          file_name: fileName,
+          fileRef,
+          file_path,
+          workspace,
+          language: getPreviewLanguage(fileName),
+          targetLine: reference?.line,
+          targetColumn: reference?.column,
+          // An oversized file is read-only: no content was read, so there is
+          // nothing to edit and no partial content that could be written back.
+          editable: contentType === 'markdown' || contentType === 'image' || payload.oversized ? false : undefined,
+          oversized: payload.oversized,
+          sizeBytes: payload.sizeBytes,
+          thresholdBytes: payload.thresholdBytes,
+          lastModified: payload.lastModified,
+        });
       } catch {
-        openPreview(
-          '',
-          contentType,
-          {
-            title: fileName,
-            file_name: fileName,
-            fileRef,
-            file_path,
-            workspace,
-            language: getPreviewLanguage(fileName),
-            targetLine: reference?.line,
-            targetColumn: reference?.column,
-            editable: false,
-            missingFile: true,
-          },
-          { replace: true }
-        );
+        openPreview('', contentType, {
+          title: fileName,
+          file_name: fileName,
+          fileRef,
+          file_path,
+          workspace,
+          language: getPreviewLanguage(fileName),
+          targetLine: reference?.line,
+          targetColumn: reference?.column,
+          editable: false,
+          missingFile: true,
+        });
       }
     },
     [openPreview, workspace]
