@@ -177,11 +177,18 @@ function argValue(flag) {
 }
 
 if (require.main === module) {
-  preparePython({
+  const options = {
     projectRoot: path.resolve(__dirname, '..', '..', '..'),
     platform: argValue('--platform') || process.platform,
     arch: argValue('--arch') || process.arch,
-  });
+  };
+  preparePython(options);
+  require('./prepare-python-packages')
+    .preparePythonPackages(options)
+    .catch((error) => {
+      console.error(error.message);
+      process.exitCode = 1;
+    });
 }
 
 module.exports = {

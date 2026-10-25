@@ -18,6 +18,8 @@ import { composeManagedRules, installManagedSkills } from '@process/services/man
 import { catalogFixture, releaseFixture } from './managedFixture';
 import { prepareWorkspaceSkills, resolveManagedSkillSource } from '@process/services/managedagents/workspaceSkills';
 import { prepareManagedRuntime, setManagedRuntimePreparer } from '@/common/deptconfig/managedConversation';
+import { readManagedScript, managedScriptFunction } from '@/process/resources/builtinMcp/managedScript';
+import vm from 'node:vm';
 
 const unavailableMounts = vi.hoisted(() => new Set<string>());
 vi.mock('node:fs', async (importActual) => {
@@ -43,6 +45,72 @@ afterEach(() => {
   setManagedRuntimePreparer();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
+
+const purchaseSource = path.resolve(__dirname, '../../../../nex-agents/catalog');
+it.skipIf(!existsSync(purchaseSource))(
+  'installs the real procurement trio, resolves version IDs and injects compatible scripts',
+  async () => {
+    const catalog = catalogFixture();
+    const manifest = JSON.parse(readFileSync(path.join(purchaseSource, 'manifest.json'), 'utf8')) as {
+      agents: Array<{ id: string; rules_file: string; skills: string[] }>;
+      skills: Record<string, string>;
+    };
+    const purchase = manifest.agents.find((a) => a.id === 'purchase-req-review')!;
+    const readTree = (dir: string, prefix = ''): Record<string, string> =>
+      Object.fromEntries(
+        readdirSync(dir, { withFileTypes: true })
+          .filter((e) => !e.name.startsWith('.') && e.name !== '__pycache__')
+          .flatMap((e) =>
+            e.isDirectory()
+              ? Object.entries(readTree(path.join(dir, e.name), prefix + e.name + '/'))
+              : [[prefix + e.name, readFileSync(path.join(dir, e.name), 'utf8')]]
+          )
+      );
+    for (const name of purchase.skills)
+      catalog.skills[name] = { files: readTree(path.join(purchaseSource, manifest.skills[name])) };
+    const root = temporary();
+    const skillsRoot = path.join(root, 'skills', 'aaaaaaaaaaaaaaaa');
+    const workspace = path.join(root, 'workspace');
+    const names = installManagedSkills(skillsRoot, parseManagedCatalog(releaseFixture(1, catalog)));
+    const rules = composeManagedRules(
+      catalog,
+      readFileSync(path.join(purchaseSource, purchase.rules_file), 'utf8'),
+      names,
+      1
+    );
+    const selectedSkills = purchase.skills.map((s) => names[s]);
+    mkdirSync(path.join(workspace, '.claude/skills'), { recursive: true });
+    for (const id of selectedSkills)
+      symlinkSync(
+        path.join(skillsRoot, id),
+        path.join(workspace, '.claude/skills', id),
+        process.platform === 'win32' ? 'junction' : 'dir'
+      );
+    expect(purchase.skills.every((s) => rules.includes(names[s]))).toBe(true);
+    expect(rules).not.toContain('{{skill:');
+    const context = vm.createContext({ window: {}, TextEncoder, btoa });
+    for (const [name, relativePath] of [
+      ['k3-data-access', 'browser/k3_browser_helpers.js'],
+      ['purchase-req-review', 'tools/review_adapter.js'],
+      ['k3-data-access', 'browser/snapshot.js'],
+    ]) {
+      const script = await readManagedScript(
+        { skillId: names[name], relativePath },
+        { skillsRoot, workspace, selectedSkills }
+      );
+      vm.runInContext(`(${managedScriptFunction(script, name + relativePath)})()`, context);
+    }
+    expect(
+      vm.runInContext('[window.__k3.COMMON_API, window.__k3.REVIEW_API, typeof window.__k3.beginSnapshot]', context)
+    ).toEqual([1, 1, 'function']);
+    await expect(
+      readManagedScript(
+        { skillId: names['k3-data-access'], relativePath: 'browser/snapshot.js' },
+        { skillsRoot, workspace, selectedSkills: [names['purchase-req-review']] }
+      )
+    ).rejects.toThrow('not selected');
+  }
+);
 
 describe('runtime preparation before sending a conversation turn', () => {
   it('waits for the desktop preflight on historical and new conversation messages', async () => {

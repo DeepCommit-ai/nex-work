@@ -51,6 +51,13 @@ function verifyBundledResources(resourcesDir, electronPlatformName, targetArch) 
       );
     }
   }
+  const { verifyPythonPackages } = require('../packages/shared-scripts/src/prepare-python-packages');
+  const pythonPin = require('../package.json').bundledPython;
+  try {
+    verifyPythonPackages(path.join(resourcesDir, 'bundled-python', pythonKey), pythonPin, claudePlat);
+  } catch (error) {
+    result.missing.push(`bundled-python/${pythonKey}/nexwork-packages (${error.message})`);
+  }
 
   if (result.missing.length > 0) {
     console.error(`   Missing bundled resources: ${result.missing.join(', ')}`);

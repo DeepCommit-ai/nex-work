@@ -701,230 +701,239 @@ const packageJsonPath = path.resolve(__dirname, '../package.json');
 let restorePackageVersionOverride = () => {};
 let buildFailed = false;
 
-try {
-  restorePackageVersionOverride = applyDebugAutoUpdateVersionOverride(packageJsonPath);
+async function main() {
+  try {
+    restorePackageVersionOverride = applyDebugAutoUpdateVersionOverride(packageJsonPath);
 
-  // 1. Ensure package.json main entry is correct for electron-vite
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-  if (packageJson.main !== './out/main/index.js') {
-    packageJson.main = './out/main/index.js';
-    fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
-  }
+    // 1. Ensure package.json main entry is correct for electron-vite
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    if (packageJson.main !== './out/main/index.js') {
+      packageJson.main = './out/main/index.js';
+      fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+    }
 
-  // 2. Check if we can skip Vite build (incremental build)
-  const skipViteBuild = shouldSkipViteBuild(skipVite, forceBuild);
+    // 2. Check if we can skip Vite build (incremental build)
+    const skipViteBuild = shouldSkipViteBuild(skipVite, forceBuild);
 
-  if (!skipViteBuild) {
-    // Run electron-vite to build all bundles (main + preload + renderer)
-    console.log(`📦 Building ${targetArch}...`);
-    execSync(`bunx electron-vite build --config packages/desktop/electron.vite.config.ts`, {
+    if (!skipViteBuild) {
+      // Run electron-vite to build all bundles (main + preload + renderer)
+      console.log(`📦 Building ${targetArch}...`);
+      execSync(`bunx electron-vite build --config packages/desktop/electron.vite.config.ts`, {
+        stdio: 'inherit',
+        shell: process.platform === 'win32',
+        env: {
+          ...process.env,
+          ELECTRON_BUILDER_ARCH: targetArch,
+        },
+      });
+
+      // Save hash after successful build
+      saveCurrentHash(computeSourceHash());
+    } else {
+      console.log('📦 Using cached Vite build output');
+    }
+
+    // Re-bundle builtin MCP server as a fully self-contained CJS bundle so it can
+    // be executed by an external `node` process (no Electron ASAR support available).
+    // electron-vite's externalizeDepsPlugin leaves npm packages as require() calls
+    // which the standalone node process cannot resolve from inside app.asar.unpacked.
+    // Uses a dedicated script (build-mcp-servers.js) to avoid shell-quoting issues
+    // with special characters in esbuild --define values.
+    console.log('📦 Bundling builtin MCP servers (self-contained)...');
+    execSync(`node "${path.join(__dirname, 'build-mcp-servers.js')}"`, {
       stdio: 'inherit',
       shell: process.platform === 'win32',
-      env: {
-        ...process.env,
-        ELECTRON_BUILDER_ARCH: targetArch,
-      },
     });
 
-    // Save hash after successful build
-    saveCurrentHash(computeSourceHash());
-  } else {
-    console.log('📦 Using cached Vite build output');
-  }
+    // 3. Verify electron-vite output
+    const outDir = path.resolve(__dirname, '../out');
+    if (!fs.existsSync(outDir)) {
+      throw new Error('electron-vite did not generate out/ directory');
+    }
 
-  // Re-bundle builtin MCP server as a fully self-contained CJS bundle so it can
-  // be executed by an external `node` process (no Electron ASAR support available).
-  // electron-vite's externalizeDepsPlugin leaves npm packages as require() calls
-  // which the standalone node process cannot resolve from inside app.asar.unpacked.
-  // Uses a dedicated script (build-mcp-servers.js) to avoid shell-quoting issues
-  // with special characters in esbuild --define values.
-  console.log('📦 Bundling builtin MCP servers (self-contained)...');
-  execSync(`node "${path.join(__dirname, 'build-mcp-servers.js')}"`, {
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-  });
+    // 4. Validate output structure. This must reject source-only renderer shells;
+    // otherwise local fast builds can package a white-screen app.
+    const viteOutputValidation = validateViteBuildOutput();
+    if (!viteOutputValidation.valid) {
+      throw new Error(`Vite build output is incomplete:\n${viteOutputValidation.problems.join('\n')}`);
+    }
 
-  // 3. Verify electron-vite output
-  const outDir = path.resolve(__dirname, '../out');
-  if (!fs.existsSync(outDir)) {
-    throw new Error('electron-vite did not generate out/ directory');
-  }
+    // If --pack-only, skip electron-builder distributable creation
+    if (packOnly) {
+      console.log('✅ Package completed! (skipped distributable creation)');
+      return;
+    }
 
-  // 4. Validate output structure. This must reject source-only renderer shells;
-  // otherwise local fast builds can package a white-screen app.
-  const viteOutputValidation = validateViteBuildOutput();
-  if (!viteOutputValidation.valid) {
-    throw new Error(`Vite build output is incomplete:\n${viteOutputValidation.problems.join('\n')}`);
-  }
+    // 5. Prepare aioncore binary (for packaged runtime usage)
+    const { prepareClaude } = require('./prepareClaude.js');
+    prepareClaude({ platform: process.platform, arch: targetArch });
+    // Pinned standalone Python for managed skills; employee machines cannot be assumed to have one.
+    const { preparePython } = require('../packages/shared-scripts/src/prepare-python.js');
+    preparePython({ projectRoot: path.resolve(__dirname, '..'), platform: process.platform, arch: targetArch });
+    const { preparePythonPackages } = require('../packages/shared-scripts/src/prepare-python-packages.js');
+    await preparePythonPackages({
+      projectRoot: path.resolve(__dirname, '..'),
+      platform: process.platform,
+      arch: targetArch,
+    });
+    const { prepareAioncore } = require('../packages/shared-scripts/src/prepare-aioncore.js');
+    const { resolveAioncoreVersion } = require('./resolveAioncoreVersion.js');
+    const projectRoot = path.resolve(__dirname, '..');
+    writeGeneratedSentryDsnInclude(projectRoot);
+    prepareAioncore({
+      projectRoot,
+      platform: process.platform,
+      arch: targetArch,
+      version: resolveAioncoreVersion(projectRoot),
+    });
 
-  // If --pack-only, skip electron-builder distributable creation
-  if (packOnly) {
-    console.log('✅ Package completed! (skipped distributable creation)');
-    return;
-  }
+    // 6. Prepare hub resources (index.json + extension zips for offline fallback)
+    execSync('node scripts/prepareHubResources.js', { stdio: 'inherit', env: process.env });
 
-  // 5. Prepare aioncore binary (for packaged runtime usage)
-  const { prepareClaude } = require('./prepareClaude.js');
-  prepareClaude({ platform: process.platform, arch: targetArch });
-  // Pinned standalone Python for managed skills; employee machines cannot be assumed to have one.
-  const { preparePython } = require('../packages/shared-scripts/src/prepare-python.js');
-  preparePython({ projectRoot: path.resolve(__dirname, '..'), platform: process.platform, arch: targetArch });
-  const { prepareAioncore } = require('../packages/shared-scripts/src/prepare-aioncore.js');
-  const { resolveAioncoreVersion } = require('./resolveAioncoreVersion.js');
-  const projectRoot = path.resolve(__dirname, '..');
-  writeGeneratedSentryDsnInclude(projectRoot);
-  prepareAioncore({
-    projectRoot,
-    platform: process.platform,
-    arch: targetArch,
-    version: resolveAioncoreVersion(projectRoot),
-  });
+    // 6. 运行 electron-builder 生成分发包（DMG/ZIP/EXE等）
+    // Run electron-builder to create distributables (DMG/ZIP/EXE, etc.)
+    // Always disable auto-publish to avoid electron-builder's implicit tag-based publishing
+    // Publishing is handled by a separate release job in CI
+    const publishArg = '--publish=never';
 
-  // 6. Prepare hub resources (index.json + extension zips for offline fallback)
-  execSync('node scripts/prepareHubResources.js', { stdio: 'inherit', env: process.env });
+    // Set compression level based on environment
+    // 7za -mx accepts numeric values: 0 (store) to 9 (ultra)
+    // CI builds use 9 (maximum) for smallest size
+    // Local builds use 7 (normal) for 30-50% faster ASAR packing
+    const isCI = process.env.CI === 'true';
+    if (!process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL) {
+      process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL = isCI ? '9' : '7';
+    }
+    console.log(
+      `📦 Compression level: ${process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL} (${isCI ? 'CI build' : 'local build'})`
+    );
 
-  // 6. 运行 electron-builder 生成分发包（DMG/ZIP/EXE等）
-  // Run electron-builder to create distributables (DMG/ZIP/EXE, etc.)
-  // Always disable auto-publish to avoid electron-builder's implicit tag-based publishing
-  // Publishing is handled by a separate release job in CI
-  const publishArg = '--publish=never';
+    // 根据模式添加架构标志
+    // Add arch flags based on mode
+    let archFlag = '';
+    if (multiArch) {
+      // 多架构模式：将所有架构标志传递给 electron-builder
+      // Multi-arch mode: pass all arch flags to electron-builder
+      archFlag = archArgs.map((arch) => `--${arch}`).join(' ');
+      console.log(`🚀 Packaging for multiple architectures: ${archArgs.join(', ')}...`);
+    } else {
+      // 单架构模式：使用确定的目标架构
+      // Single arch mode: use the determined target arch
+      archFlag = `--${targetArch}`;
+      console.log(`🚀 Creating distributables for ${targetArch}...`);
+    }
 
-  // Set compression level based on environment
-  // 7za -mx accepts numeric values: 0 (store) to 9 (ultra)
-  // CI builds use 9 (maximum) for smallest size
-  // Local builds use 7 (normal) for 30-50% faster ASAR packing
-  const isCI = process.env.CI === 'true';
-  if (!process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL) {
-    process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL = isCI ? '9' : '7';
-  }
-  console.log(
-    `📦 Compression level: ${process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL} (${isCI ? 'CI build' : 'local build'})`
-  );
-
-  // 根据模式添加架构标志
-  // Add arch flags based on mode
-  let archFlag = '';
-  if (multiArch) {
-    // 多架构模式：将所有架构标志传递给 electron-builder
-    // Multi-arch mode: pass all arch flags to electron-builder
-    archFlag = archArgs.map((arch) => `--${arch}`).join(' ');
-    console.log(`🚀 Packaging for multiple architectures: ${archArgs.join(', ')}...`);
-  } else {
-    // 单架构模式：使用确定的目标架构
-    // Single arch mode: use the determined target arch
-    archFlag = `--${targetArch}`;
-    console.log(`🚀 Creating distributables for ${targetArch}...`);
-  }
-
-  // 为 Windows 构建添加架构检测脚本
-  // Add architecture detection scripts for Windows builds
-  // 使用 .onVerifyInstDir 避免与 electron-builder 冲突
-  // Use .onVerifyInstDir to avoid conflicts with electron-builder
-  let nsisInclude = '';
-  if (builderArgs.includes('--win') || builderArgs.includes('--all')) {
-    if (!multiArch) {
-      // 单架构构建：添加对应架构的检测脚本
-      // Single-arch build: Add architecture-specific detection script
-      if (targetArch === 'arm64') {
-        const arm64Script = 'resources/windows/windows-installer-arm64.nsh';
-        if (fs.existsSync(path.resolve(__dirname, '..', arm64Script))) {
-          nsisInclude += ` --config.nsis.include="${arm64Script}"`;
-          console.log(`📋 Including Windows ARM64 architecture check script`);
+    // 为 Windows 构建添加架构检测脚本
+    // Add architecture detection scripts for Windows builds
+    // 使用 .onVerifyInstDir 避免与 electron-builder 冲突
+    // Use .onVerifyInstDir to avoid conflicts with electron-builder
+    let nsisInclude = '';
+    if (builderArgs.includes('--win') || builderArgs.includes('--all')) {
+      if (!multiArch) {
+        // 单架构构建：添加对应架构的检测脚本
+        // Single-arch build: Add architecture-specific detection script
+        if (targetArch === 'arm64') {
+          const arm64Script = 'resources/windows/windows-installer-arm64.nsh';
+          if (fs.existsSync(path.resolve(__dirname, '..', arm64Script))) {
+            nsisInclude += ` --config.nsis.include="${arm64Script}"`;
+            console.log(`📋 Including Windows ARM64 architecture check script`);
+          }
+          nsisInclude += ' --config.nsis.useZip=true';
+          console.log('📋 Using ZIP payload for Windows ARM64 NSIS installer');
+        } else if (targetArch === 'x64') {
+          const x64Script = 'resources/windows/windows-installer-x64.nsh';
+          if (fs.existsSync(path.resolve(__dirname, '..', x64Script))) {
+            nsisInclude += ` --config.nsis.include="${x64Script}"`;
+            console.log(`📋 Including Windows x64 architecture check script`);
+          }
         }
-        nsisInclude += ' --config.nsis.useZip=true';
-        console.log('📋 Using ZIP payload for Windows ARM64 NSIS installer');
-      } else if (targetArch === 'x64') {
-        const x64Script = 'resources/windows/windows-installer-x64.nsh';
-        if (fs.existsSync(path.resolve(__dirname, '..', x64Script))) {
-          nsisInclude += ` --config.nsis.include="${x64Script}"`;
-          console.log(`📋 Including Windows x64 architecture check script`);
+      }
+      // 多架构构建：暂不支持架构检测脚本
+      // Multi-arch builds: Architecture detection not supported yet
+    }
+
+    if (process.platform === 'win32' && builderArgs.includes('--win')) {
+      const winUnpackedDir = path.join(outDir, 'win-unpacked');
+      let cleaned = tryRemoveDir(winUnpackedDir);
+      if (!cleaned) {
+        const aionRunning = isProcessRunningWindows('NexWork.exe') || isProcessRunningWindows('AionUi.exe');
+        const electronRunning = isProcessRunningWindows('electron.exe');
+        if (aionRunning || electronRunning) {
+          console.log('⚠️  Detected running AionUi/Electron process. Attempting to close...');
+          killWindowsProcesses(['NexWork.exe', 'AionUi.exe', 'electron.exe']);
+          cleaned = tryRemoveDir(winUnpackedDir);
+          if (!cleaned) {
+            console.log('⚠️  Directory still locked. Please close any running AionUi/Electron processes and retry.');
+          }
         }
       }
     }
-    // 多架构构建：暂不支持架构检测脚本
-    // Multi-arch builds: Architecture detection not supported yet
-  }
 
-  if (process.platform === 'win32' && builderArgs.includes('--win')) {
-    const winUnpackedDir = path.join(outDir, 'win-unpacked');
-    let cleaned = tryRemoveDir(winUnpackedDir);
-    if (!cleaned) {
-      const aionRunning = isProcessRunningWindows('NexWork.exe') || isProcessRunningWindows('AionUi.exe');
-      const electronRunning = isProcessRunningWindows('electron.exe');
-      if (aionRunning || electronRunning) {
-        console.log('⚠️  Detected running AionUi/Electron process. Attempting to close...');
-        killWindowsProcesses(['NexWork.exe', 'AionUi.exe', 'electron.exe']);
-        cleaned = tryRemoveDir(winUnpackedDir);
-        if (!cleaned) {
-          console.log('⚠️  Directory still locked. Please close any running AionUi/Electron processes and retry.');
-        }
-      }
-    }
-  }
-
-  const isWindowsBuild = builderArgs.includes('--win') || builderArgs.includes('--all');
-  if (isWindowsBuild) {
-    patchElectronBuilderNsisInstaller();
-    cleanupWindowsPackOutput();
-  }
-
-  const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${publishArg}`;
-  try {
-    buildWithDmgRetry(builderCommand, targetArch);
-  } catch (error) {
-    const winExePath = path.join(outDir, 'win-unpacked', 'NexWork.exe');
-    const firstError = formatExecError(error);
-    const canRetryWithoutExecutableEdit =
-      process.platform === 'win32' && isWindowsBuild && process.env.CI !== 'true' && fs.existsSync(winExePath);
-
-    if (!canRetryWithoutExecutableEdit) {
-      throw error;
+    const isWindowsBuild = builderArgs.includes('--win') || builderArgs.includes('--all');
+    if (isWindowsBuild) {
+      patchElectronBuilderNsisInstaller();
+      cleanupWindowsPackOutput();
     }
 
-    console.log('⚠️  Windows local build failed after NexWork.exe was produced.');
-    if (firstError) {
-      console.log('   First failure summary:');
-      console.log(
-        firstError
-          .split(/\r?\n/)
-          .slice(0, 6)
-          .map((line) => `   ${line}`)
-          .join('\n')
-      );
-    }
-    console.log('   Retrying local build with win.signAndEditExecutable=false...');
-    console.log('   This fallback is intended for transient rcedit / file-lock failures on developer machines.');
-    killWindowsProcesses(['NexWork.exe', 'AionUi.exe', 'electron.exe']);
-    cleanupWindowsPackOutput();
-
+    const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${publishArg}`;
     try {
-      buildWithDmgRetry(`${builderCommand} --config.win.signAndEditExecutable=false`, targetArch);
-    } catch (retryError) {
-      const retryFailure = formatExecError(retryError);
-      throw new Error(
-        [
-          'Windows local retry with win.signAndEditExecutable=false also failed.',
-          'First failure:',
-          firstError || String(error),
-          'Retry failure:',
-          retryFailure || String(retryError),
-        ].join('\n')
-      );
-    }
-  }
+      buildWithDmgRetry(builderCommand, targetArch);
+    } catch (error) {
+      const winExePath = path.join(outDir, 'win-unpacked', 'NexWork.exe');
+      const firstError = formatExecError(error);
+      const canRetryWithoutExecutableEdit =
+        process.platform === 'win32' && isWindowsBuild && process.env.CI !== 'true' && fs.existsSync(winExePath);
 
-  console.log('✅ Build completed!');
-} catch (error) {
-  buildFailed = true;
-  console.error('❌ Build failed:', error.message);
-  process.exitCode = 1;
-} finally {
-  try {
-    restorePackageVersionOverride();
-  } catch (restoreError) {
-    console.error('❌ Failed to restore package.json version:', restoreError.message);
-    if (!buildFailed) {
-      process.exitCode = 1;
+      if (!canRetryWithoutExecutableEdit) {
+        throw error;
+      }
+
+      console.log('⚠️  Windows local build failed after NexWork.exe was produced.');
+      if (firstError) {
+        console.log('   First failure summary:');
+        console.log(
+          firstError
+            .split(/\r?\n/)
+            .slice(0, 6)
+            .map((line) => `   ${line}`)
+            .join('\n')
+        );
+      }
+      console.log('   Retrying local build with win.signAndEditExecutable=false...');
+      console.log('   This fallback is intended for transient rcedit / file-lock failures on developer machines.');
+      killWindowsProcesses(['NexWork.exe', 'AionUi.exe', 'electron.exe']);
+      cleanupWindowsPackOutput();
+
+      try {
+        buildWithDmgRetry(`${builderCommand} --config.win.signAndEditExecutable=false`, targetArch);
+      } catch (retryError) {
+        const retryFailure = formatExecError(retryError);
+        throw new Error(
+          [
+            'Windows local retry with win.signAndEditExecutable=false also failed.',
+            'First failure:',
+            firstError || String(error),
+            'Retry failure:',
+            retryFailure || String(retryError),
+          ].join('\n')
+        );
+      }
+    }
+
+    console.log('✅ Build completed!');
+  } catch (error) {
+    buildFailed = true;
+    console.error('❌ Build failed:', error.message);
+    process.exitCode = 1;
+  } finally {
+    try {
+      restorePackageVersionOverride();
+    } catch (restoreError) {
+      console.error('❌ Failed to restore package.json version:', restoreError.message);
+      if (!buildFailed) {
+        process.exitCode = 1;
+      }
     }
   }
 }
+void main();
