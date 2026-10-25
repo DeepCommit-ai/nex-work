@@ -147,6 +147,8 @@
     "installHint": "OfficeCLI'yi resmi iOfficeAI/OfficeCLI releases sayfasından yükleyin"
   },
   "browser": {
+    "showBrowser": "Tarayıcıyı göster",
+    "hideBrowser": "Tarayıcıyı gizle",
     "newTab": "Yeni sekme",
     "addressPlaceholder": "Bir URL girin veya arama yapın",
     "agentActiveTooltip": "Aracı bu sekmeyi kullanıyor",

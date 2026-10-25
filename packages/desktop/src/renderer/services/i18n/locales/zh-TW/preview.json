@@ -147,6 +147,8 @@
     "installHint": "請從官方 iOfficeAI/OfficeCLI releases 頁面安裝 OfficeCLI"
   },
   "browser": {
+    "showBrowser": "開啟瀏覽器",
+    "hideBrowser": "收合瀏覽器",
     "newTab": "新增標籤頁",
     "addressPlaceholder": "輸入網址或搜尋內容",
     "agentActiveTooltip": "Agent 正在操作此標籤頁",

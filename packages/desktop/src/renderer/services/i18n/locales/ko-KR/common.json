@@ -1,4 +1,6 @@
 {
+  "showWorkspace": "작업 공간 표시",
+  "hideWorkspace": "작업 공간 숨기기",
   "send": "전송",
   "cancel": "취소",
   "save": "저장",

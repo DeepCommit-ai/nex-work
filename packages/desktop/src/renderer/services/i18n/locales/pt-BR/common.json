@@ -1,4 +1,6 @@
 {
+  "showWorkspace": "Mostrar espaço de trabalho",
+  "hideWorkspace": "Ocultar espaço de trabalho",
   "send": "Enviar",
   "cancel": "Cancelar",
   "save": "Salvar",

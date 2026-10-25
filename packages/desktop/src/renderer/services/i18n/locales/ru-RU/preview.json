@@ -149,6 +149,8 @@
     "installHint": "Установите OfficeCLI со страницы официальных выпусков iOfficeAI/OfficeCLI"
   },
   "browser": {
+    "showBrowser": "Показать браузер",
+    "hideBrowser": "Скрыть браузер",
     "newTab": "Новая вкладка",
     "addressPlaceholder": "Введите URL или поисковый запрос",
     "agentActiveTooltip": "Агент управляет этой вкладкой",

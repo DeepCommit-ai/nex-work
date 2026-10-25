@@ -136,6 +136,8 @@ export interface PreviewContextValue {
    * Open a browser tab; blank page when url is omitted.
    */
   openBrowserTab: (url?: string) => void;
+  /** Show the conversation's selected browser page, or hide it without closing tabs. */
+  toggleBrowser: () => void;
   setBrowserSlot: (slot: HTMLElement | null) => void;
   closePreview: () => void;
   /** 切换最大化 / Toggle maximized. */
@@ -965,6 +967,20 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDomSnippets([]);
   }, []);
 
+  const toggleBrowser = useCallback(() => {
+    const active = tabsRef.current.find((tab) => tab.id === activeTabIdRef.current);
+    if (isOpen && active?.content_type === 'browser') {
+      closePreview();
+      return;
+    }
+    // Reuse the conversation's selected guest. Opening a new tab on every toggle
+    // would navigate away from an existing form and defeat persistent browsers.
+    const browser = browserSessions.ensure(browserOwnerRef.current);
+    setTabs((previous) => (previous.some((tab) => tab.id === browser.id) ? previous : [...previous, browser]));
+    setActiveTabId(browser.id);
+    setIsOpen(true);
+  }, [closePreview, isOpen]);
+
   /**
    * Discard this scope's tabs outright — the panel closes and nothing is restored.
    *
@@ -1491,6 +1507,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       updateContent,
       updateTab,
       openBrowserTab,
+      toggleBrowser,
       browserTabLimitHitAt,
       persistQuotaExceededAt,
       setBrowserSlot,
@@ -1523,6 +1540,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     updateContent,
     updateTab,
     openBrowserTab,
+    toggleBrowser,
     browserTabLimitHitAt,
     persistQuotaExceededAt,
     saveContent,

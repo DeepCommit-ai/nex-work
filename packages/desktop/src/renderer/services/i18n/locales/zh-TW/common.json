@@ -1,4 +1,6 @@
 {
+  "showWorkspace": "開啟工作目錄",
+  "hideWorkspace": "收合工作目錄",
   "send": "發送",
   "cancel": "取消",
   "save": "儲存",

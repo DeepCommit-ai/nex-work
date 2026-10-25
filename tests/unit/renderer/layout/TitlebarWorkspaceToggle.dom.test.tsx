@@ -50,7 +50,7 @@ describe('Titlebar workspace toggle', () => {
     render(<Titlebar workspaceAvailable />);
 
     const report = screen.getByRole('button', { name: 'conversation.welcome.quickActionFeedback' });
-    const workspace = screen.getByRole('button', { name: 'common.expandMore' });
+    const workspace = screen.getByRole('button', { name: 'common.showWorkspace' });
 
     expect(report.nextElementSibling).toBe(workspace);
     expect(workspace.nextElementSibling).toBe(screen.getByTestId('window-controls'));
@@ -65,7 +65,7 @@ describe('Titlebar workspace toggle', () => {
     render(<Titlebar workspaceAvailable />);
 
     const report = screen.getByRole('button', { name: 'conversation.welcome.quickActionFeedback' });
-    const workspace = screen.getByRole('button', { name: 'common.expandMore' });
+    const workspace = screen.getByRole('button', { name: 'common.showWorkspace' });
 
     expect(report.nextElementSibling).toBe(workspace);
     expect(screen.queryByTestId('window-controls')).not.toBeInTheDocument();
@@ -78,13 +78,13 @@ describe('Titlebar workspace toggle', () => {
       window.dispatchEvent(new CustomEvent(WORKSPACE_STATE_EVENT, { detail: { collapsed: false } }));
     });
 
-    expect(screen.getByRole('button', { name: 'common.collapse' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'common.hideWorkspace' })).toBeInTheDocument();
   });
 
   it('omits the workspace toggle when no workspace is available', () => {
     render(<Titlebar workspaceAvailable={false} />);
 
-    expect(screen.queryByRole('button', { name: 'common.expandMore' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'common.collapse' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'common.showWorkspace' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'common.hideWorkspace' })).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,6 @@
 {
+  "showWorkspace": "Arbeitsbereich anzeigen",
+  "hideWorkspace": "Arbeitsbereich ausblenden",
   "send": "Senden",
   "cancel": "Abbrechen",
   "save": "Speichern",

@@ -1,6 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
-import { ArrowCircleLeft, ArrowLeft, ArrowRight, ExpandLeft, ExpandRight, Peoples, Search } from '@icon-park/react';
+import {
+  ArrowCircleLeft,
+  ArrowLeft,
+  ArrowRight,
+  Browser,
+  ExpandLeft,
+  ExpandRight,
+  Peoples,
+  Search,
+} from '@icon-park/react';
+import { Button } from '@arco-design/web-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -19,6 +29,7 @@ import { resolveFeedbackModule } from '@/renderer/services/feedback/resolveFeedb
 import { isElectronDesktop, isMacOS } from '@/renderer/utils/platform';
 import { IS_DISCONTINUED_BUILD } from '@/renderer/utils/discontinuedBuild';
 import MigrationInviteCapsule from './MigrationInviteCapsule';
+import { useOptionalPreviewContext } from '@renderer/pages/conversation/Preview/context/PreviewContext';
 import './titlebar.css';
 
 interface TitlebarProps {
@@ -99,6 +110,7 @@ const SidebarIcon: React.FC<{ size?: number; strokeWidth?: number }> = ({ size =
 
 const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
   const { t } = useTranslation();
+  const preview = useOptionalPreviewContext();
   const appTitle = useMemo(() => BRAND_NAME, []);
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(true);
   const [mobileCenterTitle, setMobileCenterTitle] = useState(appTitle);
@@ -136,10 +148,10 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
   const showWindowControls = isDesktopRuntime && !isMacRuntime;
   // Keep the workspace entry in the titlebar on every platform.
   const showWorkspaceButton = workspaceAvailable;
+  const browserOpen = Boolean(preview?.isOpen && preview.activeTab?.content_type === 'browser');
+  const browserTooltip = browserOpen ? t('preview.browser.hideBrowser') : t('preview.browser.showBrowser');
 
-  const workspaceTooltip = workspaceCollapsed
-    ? t('common.expandMore', { defaultValue: 'Expand workspace' })
-    : t('common.collapse', { defaultValue: 'Collapse workspace' });
+  const workspaceTooltip = workspaceCollapsed ? t('common.showWorkspace') : t('common.hideWorkspace');
   const backToChatTooltip = t('common.back', { defaultValue: 'Back to Chat' });
   const feedbackTooltip = t('conversation.welcome.quickActionFeedback', { defaultValue: 'Report Issue' });
   const isSettingsRoute = location.pathname.startsWith('/settings');
@@ -420,19 +432,37 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
         >
           <FeedbackIcon size={iconSize} strokeWidth={desktopIconStroke} />
         </button>
+        {workspaceAvailable && preview && (
+          <Button
+            type='text'
+            className={classNames(
+              'app-titlebar__button',
+              layout?.isMobile && 'app-titlebar__button--mobile',
+              browserOpen && '!bg-active'
+            )}
+            onClick={preview.toggleBrowser}
+            aria-label={browserTooltip}
+            title={browserTooltip}
+            aria-pressed={browserOpen}
+          >
+            <Browser theme='outline' size={iconSize} fill='currentColor' strokeWidth={desktopIconStroke} />
+          </Button>
+        )}
         {showWorkspaceButton && (
-          <button
-            type='button'
+          <Button
+            type='text'
             className={classNames('app-titlebar__button', layout?.isMobile && 'app-titlebar__button--mobile')}
             onClick={handleWorkspaceToggle}
             aria-label={workspaceTooltip}
+            title={workspaceTooltip}
+            aria-pressed={!workspaceCollapsed}
           >
             {workspaceCollapsed ? (
               <ExpandRight theme='outline' size={iconSize} fill='currentColor' />
             ) : (
               <ExpandLeft theme='outline' size={iconSize} fill='currentColor' />
             )}
-          </button>
+          </Button>
         )}
         {showWindowControls && <WindowControls />}
       </div>

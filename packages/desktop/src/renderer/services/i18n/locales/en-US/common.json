@@ -1,4 +1,6 @@
 {
+  "showWorkspace": "Show workspace",
+  "hideWorkspace": "Hide workspace",
   "send": "Send",
   "cancel": "Cancel",
   "save": "Save",

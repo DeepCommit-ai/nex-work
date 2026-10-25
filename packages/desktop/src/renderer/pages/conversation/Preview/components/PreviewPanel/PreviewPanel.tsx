@@ -1273,6 +1273,7 @@ const PreviewPanel: React.FC = () => {
             Browser layer: always mounted so tab switches don't reload pages */}
         <div
           ref={setBrowserSlot}
+          data-browser-viewport
           className='relative flex-1 overflow-hidden'
           style={{ display: browserTabs.some((tab) => tab.id === activeTabId) ? undefined : 'none' }}
         />

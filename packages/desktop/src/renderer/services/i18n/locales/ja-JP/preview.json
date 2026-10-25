@@ -147,6 +147,8 @@
     "installHint": "公式 iOfficeAI/OfficeCLI releases ページから OfficeCLI をインストールしてください"
   },
   "browser": {
+    "showBrowser": "ブラウザーを表示",
+    "hideBrowser": "ブラウザーを非表示",
     "newTab": "新しいタブ",
     "addressPlaceholder": "URL を入力または検索",
     "agentActiveTooltip": "エージェントがこのタブを操作しています",

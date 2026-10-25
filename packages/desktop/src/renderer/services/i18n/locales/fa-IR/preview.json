@@ -147,6 +147,8 @@
     "installHint": "OfficeCLI را از صفحه انتشارات رسمی iOfficeAI/OfficeCli نصب کنید"
   },
   "browser": {
+    "showBrowser": "نمایش مرورگر",
+    "hideBrowser": "پنهان کردن مرورگر",
     "newTab": "زبانه جدید",
     "addressPlaceholder": "نشانی اینترنتی را وارد کنید یا جست‌وجو کنید",
     "agentActiveTooltip": "عامل در حال کار با این زبانه است",

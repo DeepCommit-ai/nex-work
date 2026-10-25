@@ -147,6 +147,8 @@
     "installHint": "Assurez-vous qu'officecli est installé : npm run postinstall"
   },
   "browser": {
+    "showBrowser": "Afficher le navigateur",
+    "hideBrowser": "Masquer le navigateur",
     "newTab": "Nouvel onglet",
     "addressPlaceholder": "Saisissez une URL ou recherchez",
     "agentActiveTooltip": "L'agent utilise cet onglet",
