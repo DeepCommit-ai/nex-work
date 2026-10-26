@@ -121,6 +121,18 @@ describe('MarkdownView local file links', () => {
     expect(previewMocks.external).not.toHaveBeenCalled();
   });
 
+  it.each(['xlsx', 'docx'])('opens a Windows backslash %s link after Markdown URL encoding', async (extension) => {
+    const onLocalFileLink = vi.fn();
+    const target = String.raw`C:\Users\employee\runs\数据统计.${extension}`;
+    render(<MarkdownView onLocalFileLink={onLocalFileLink}>{`[报告](${target})`}</MarkdownView>);
+    fireEvent.click(screen.getByRole('button', { name: '报告' }));
+    expect(onLocalFileLink).toHaveBeenCalledWith(
+      `C:/Users/employee/runs/数据统计.${extension}`,
+      expect.objectContaining({ filePath: `C:/Users/employee/runs/数据统计.${extension}` })
+    );
+    expect(previewMocks.external).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['assets/%E4%B8%AD%E6%96%87%20report%23draft%3F1.png', 'C:/workspace/assets/中文 report#draft?1.png'],
     ['assets/100%25%20report.png', 'C:/workspace/assets/100% report.png'],

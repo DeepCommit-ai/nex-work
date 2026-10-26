@@ -147,7 +147,11 @@ const parseHref = (input: string): ParsedHref | null => {
   let hash = '';
   let host = '';
   const explicitFile = /^file:/i.test(raw);
-  const windowsAbsolute = /^(?:\/?[A-Za-z]:[\\/]|\\\\)/.test(raw) || raw.startsWith('//?/');
+  // Markdown percent-encodes backslashes in native drive paths. Decode that
+  // specific absolute-path form once; encoded separators in relative/URL paths
+  // remain rejected so they cannot bypass project containment.
+  const encodedWindowsDrive = /^[A-Za-z]:%5c/i.test(raw);
+  const windowsAbsolute = encodedWindowsDrive || /^(?:\/?[A-Za-z]:[\\/]|\\\\)/.test(raw) || raw.startsWith('//?/');
   if (explicitFile) {
     if (!/^file:(?:[\\/]|[A-Za-z]:[\\/])/i.test(raw)) return null;
     try {
@@ -167,7 +171,7 @@ const parseHref = (input: string): ParsedHref | null => {
     path = hashIndex < 0 ? raw : raw.slice(0, hashIndex);
     hash = hashIndex < 0 ? '' : raw.slice(hashIndex);
   }
-  if (!path || /%(?:2f|5c)/i.test(path)) return null;
+  if (!path || /%2f/i.test(path) || (!encodedWindowsDrive && /%5c/i.test(path))) return null;
   let location: LocalFileLocation = {};
   const column = /^(.*):(\d+):(\d+)$/.exec(path);
   const line = column ? null : /^(.*):(\d+)$/.exec(path);
