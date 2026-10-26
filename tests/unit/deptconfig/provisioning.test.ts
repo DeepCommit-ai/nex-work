@@ -79,6 +79,36 @@ describe('managed Claude configuration', () => {
     expect(env).toContainEqual({ name: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', value: 'test-model' });
   });
 
+  it("writes the department's Claude Code context window and removes it once the department drops it (spec 018)", async () => {
+    let stored: { name: string; value: string }[] = [{ name: 'HTTP_PROXY', value: 'http://squid:3128' }];
+    const backend: BackendCall = async <T>(method: string, route: string, body?: unknown): Promise<T> => {
+      if (route === '/api/agents/management') return [{ id: '2d23ff1c', enabled: true }] as T;
+      if (route === '/api/providers') return (method === 'GET' ? [] : { id: 'gateway' }) as T;
+      if (method === 'PUT') stored = (body as { env_override: typeof stored }).env_override;
+      return { command_override: '/managed/claude', env_override: stored } as T;
+    };
+    const install = (claude_context_tokens: number | null | undefined) => {
+      const cfg = configFixture();
+      cfg.gateway!.claude_context_tokens = claude_context_tokens;
+      return provisionGateway(cfg, {
+        backend,
+        skillsRoot: '/unused',
+        serverUrl: 'http://config',
+        deptKey: 'test',
+        clientId: 'test',
+        prepareClaude: vi.fn(),
+      });
+    };
+    const contextWindow = () => stored.filter((e) => e.name === 'CLAUDE_CODE_MAX_CONTEXT_TOKENS').map((e) => e.value);
+
+    await install(262144);
+    expect(contextWindow()).toEqual(['262144']);
+    expect(stored.some((e) => e.name === 'CLAUDE_CODE_AUTO_COMPACT_WINDOW')).toBe(false);
+    await install(undefined);
+    expect(contextWindow()).toEqual([]);
+    expect(stored).toContainEqual({ name: 'HTTP_PROXY', value: 'http://squid:3128' });
+  });
+
   it('does not replace gateway credentials when profile preparation fails', async () => {
     const writes: string[] = [];
     const backend: BackendCall = async <T>(method: string, route: string): Promise<T> => {

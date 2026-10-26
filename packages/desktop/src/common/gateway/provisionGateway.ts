@@ -12,6 +12,7 @@ import {
   CLAUDE_SLOT_ENV,
   GATEWAY_ENV_AUTH_TOKEN,
   GATEWAY_ENV_BASE_URL,
+  GATEWAY_ENV_CLAUDE_CONTEXT_TOKENS,
   GATEWAY_ENV_CLAUDE_MODELS,
   GATEWAY_ENV_CONFIG_DIR,
   GATEWAY_ENV_CUSTOM_HEADERS,
@@ -85,7 +86,7 @@ export const buildEnvOverride = (existing: readonly EnvEntry[], config: GatewayC
     GATEWAY_ENV_AUTH_TOKEN,
     GATEWAY_ENV_CONFIG_DIR,
     GATEWAY_ENV_CUSTOM_HEADERS,
-    ...(config.claudeModel === undefined ? [] : GATEWAY_ENV_CLAUDE_MODELS),
+    ...(config.claudeModel === undefined ? [] : [...GATEWAY_ENV_CLAUDE_MODELS, GATEWAY_ENV_CLAUDE_CONTEXT_TOKENS]),
   ]);
   const preserved = existing.filter((e) => !managed.has(e.name));
   const token = config.apiKey.trim()
@@ -117,6 +118,11 @@ export const buildEnvOverride = (existing: readonly EnvEntry[], config: GatewayC
     for (const name of GATEWAY_ENV_CLAUDE_MODELS) {
       const value = slotFor.get(name) ?? claudeModel;
       if (value) next.push({ name, value });
+    }
+    // spec 018: the department's window for every model without `[1m]`; absent removes it (200k).
+    const contextTokens = config.claudeContextTokens;
+    if (contextTokens != null && Number.isInteger(contextTokens) && contextTokens > 0) {
+      next.push({ name: GATEWAY_ENV_CLAUDE_CONTEXT_TOKENS, value: String(contextTokens) });
     }
   }
   return next;

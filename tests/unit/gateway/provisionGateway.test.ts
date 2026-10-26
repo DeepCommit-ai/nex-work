@@ -12,6 +12,7 @@ import {
   GATEWAY_ENV_CUSTOM_HEADERS,
   GATEWAY_ENV_AUTH_TOKEN,
   GATEWAY_ENV_BASE_URL,
+  GATEWAY_ENV_CLAUDE_CONTEXT_TOKENS,
   GATEWAY_ENV_CLAUDE_MODELS,
   GATEWAY_ENV_CONFIG_DIR,
   type EnvEntry,
@@ -19,6 +20,7 @@ import {
 
 const GW = 'http://litellm.internal:4000';
 const cfg = (apiKey = 'sk-test') => ({ baseUrl: GW, apiKey });
+const envValues = (env: EnvEntry[], name: string) => env.filter((e) => e.name === name).map((e) => e.value);
 
 describe('classifyRuntime', () => {
   it('reports unset when no base url is present', () => {
@@ -138,6 +140,51 @@ describe('buildEnvOverride', () => {
       const pinnedEnv = GATEWAY_ENV_CLAUDE_MODELS.map((name) => ({ name, value: 'glm-5.3-flash' }));
       const env = buildEnvOverride(pinnedEnv, { ...cfg(), claudeSlots: { opus: 'glm-5.3' } });
       expect(value(env, 'ANTHROPIC_DEFAULT_OPUS_MODEL')).toEqual(['glm-5.3-flash']);
+    });
+  });
+
+  describe("the department's context window (spec 018)", () => {
+    const TOKENS = GATEWAY_ENV_CLAUDE_CONTEXT_TOKENS;
+    const department = { ...cfg(), claudeModel: 'k3.1-pro', claudeSlots: { opus: 'k3.1-pro[1m]' } };
+
+    it('writes the window for Claude Code and keeps the [1m] slot as it is', () => {
+      const env = buildEnvOverride([], { ...department, claudeContextTokens: 262144 });
+      expect(envValues(env, TOKENS)).toEqual(['262144']);
+      expect(envValues(env, 'ANTHROPIC_MODEL')).toEqual(['k3.1-pro']);
+      expect(envValues(env, 'ANTHROPIC_DEFAULT_OPUS_MODEL')).toEqual(['k3.1-pro[1m]']);
+    });
+
+    it('replaces an earlier window instead of duplicating it', () => {
+      const env = buildEnvOverride([{ name: TOKENS, value: '131072' }], { ...department, claudeContextTokens: 262144 });
+      expect(envValues(env, TOKENS)).toEqual(['262144']);
+    });
+
+    it.each([null, undefined])('removes the window when the department serves %s, back to 200k', (served) => {
+      const env = buildEnvOverride([{ name: TOKENS, value: '262144' }], { ...department, claudeContextTokens: served });
+      expect(envValues(env, TOKENS)).toEqual([]);
+    });
+
+    it('removes the window even when the department pins no Claude model', () => {
+      const env = buildEnvOverride([{ name: TOKENS, value: '262144' }], { ...cfg(), claudeModel: null });
+      expect(envValues(env, TOKENS)).toEqual([]);
+    });
+
+    it('keeps the window on a manual gateway save and on non-Claude runtimes (claudeModel undefined)', () => {
+      const existing: EnvEntry[] = [{ name: TOKENS, value: '262144' }];
+      expect(envValues(buildEnvOverride(existing, cfg()), TOKENS)).toEqual(['262144']);
+      // nothing is written for a runtime that never had it, even if a window is passed
+      expect(envValues(buildEnvOverride([], { ...cfg(), claudeContextTokens: 262144 }), TOKENS)).toEqual([]);
+    });
+
+    it('never writes a value Claude Code cannot use', () => {
+      for (const bad of [0, -1, 1.5, Number.NaN]) {
+        expect(envValues(buildEnvOverride([], { ...department, claudeContextTokens: bad }), TOKENS)).toEqual([]);
+      }
+    });
+
+    it('never writes CLAUDE_CODE_AUTO_COMPACT_WINDOW, which would also cap the [1m] sessions', () => {
+      const env = buildEnvOverride([], { ...department, claudeContextTokens: 262144 });
+      expect(env.some((e) => e.name === 'CLAUDE_CODE_AUTO_COMPACT_WINDOW')).toBe(false);
     });
   });
 });
