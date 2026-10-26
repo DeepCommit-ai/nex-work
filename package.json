@@ -263,6 +263,35 @@
     "node": ">=22 <25"
   },
   "aioncoreVersion": "v0.1.72",
+  "bundledOffice": {
+    "assets": {
+      "darwin-arm64": {
+        "name": "officecli-mac-arm64",
+        "sha256": "67cf08d95fab556cad9d1e9d0d3b76a7962b5658c716aeaef2e83cbc19af7ff7"
+      },
+      "win32-x64": {
+        "name": "officecli-win-x64.exe",
+        "sha256": "117545f3bc817d7c6d2e78a62e4f73f75b918ccd61558e404c60949a8cb9fd1f"
+      },
+      "linux-x64": {
+        "name": "officecli-linux-x64",
+        "sha256": "9ee41d5558caea7bcd5aab1b3e76b2bd70f0535f09cf65dda3668130510cc719"
+      },
+      "darwin-x64": {
+        "name": "officecli-mac-x64",
+        "sha256": "038716417adb626d5e94bc71dfecea2d2be9838f3d9b2eb49c2f0b3d634cf4f2"
+      },
+      "win32-arm64": {
+        "name": "officecli-win-arm64.exe",
+        "sha256": "48567b4bc5a124fb0a709bac29a1e13b6760f094741d0e2bb755680ec9e51295"
+      },
+      "linux-arm64": {
+        "name": "officecli-linux-arm64",
+        "sha256": "b1d5e74d93a8471a47b037cc7774ac29c559940e226f99b9fdf788966cc395b8"
+      }
+    },
+    "version": "1.0.158"
+  },
   "bundledPython": {
     "version": "3.12.15",
     "release": "20261001",

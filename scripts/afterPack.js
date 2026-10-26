@@ -52,6 +52,13 @@ function verifyBundledResources(resourcesDir, electronPlatformName, targetArch) 
     }
   }
   const { verifyPythonPackages } = require('../packages/shared-scripts/src/prepare-python-packages');
+  const { verifyOfficecli } = require('../packages/shared-scripts/src/prepare-officecli');
+  verifyOfficecli(
+    path.join(resourcesDir, 'bundled-officecli', pythonKey),
+    require('../package.json').bundledOffice,
+    claudePlat,
+    targetArch
+  );
   const pythonPin = require('../package.json').bundledPython;
   try {
     verifyPythonPackages(path.join(resourcesDir, 'bundled-python', pythonKey), pythonPin, claudePlat);

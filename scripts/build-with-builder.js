@@ -776,6 +776,12 @@ async function main() {
       platform: process.platform,
       arch: targetArch,
     });
+    const { prepareOfficecli } = require('../packages/shared-scripts/src/prepare-officecli.js');
+    await prepareOfficecli({
+      projectRoot: path.resolve(__dirname, '..'),
+      platform: process.platform,
+      arch: targetArch,
+    });
     const { prepareAioncore } = require('../packages/shared-scripts/src/prepare-aioncore.js');
     const { resolveAioncoreVersion } = require('./resolveAioncoreVersion.js');
     const projectRoot = path.resolve(__dirname, '..');

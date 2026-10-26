@@ -123,6 +123,8 @@ extraResources:
   # pinned standalone Python for managed skills (spec 011)
   - from: resources/bundled-python
     to: bundled-python
+  - from: resources/bundled-officecli
+    to: bundled-officecli
   - from: resources/hub
     to: hub
 win:
