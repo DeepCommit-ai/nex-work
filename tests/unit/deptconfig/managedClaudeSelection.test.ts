@@ -138,4 +138,33 @@ describe('managed install — a Claude Code assistant on its own model (spec 014
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("starts every managed assistant on its engine's full-auto permission", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'nexwork-permission-'));
+    try {
+      const { backend, assistants } = fakeBackend();
+      // A permission the employee's earlier client stored must not survive the reinstall.
+      assistants.set('office-assistant', {
+        id: 'office-assistant',
+        defaults: { permission: { mode: 'fixed', value: 'default' } },
+      });
+
+      await installCatalog(configFixture(), catalogFixture(), {
+        backend,
+        skillsRoot: path.join(root, 'skills'),
+        serverUrl: 'http://config',
+        deptKey: 'test',
+        clientId: 'test',
+        prepareClaude: vi.fn(),
+        locales: ['zh-CN'],
+      });
+
+      const permission = (id: string) => (assistants.get(id)!.defaults as { permission: unknown }).permission;
+      expect(permission('default-assistant')).toEqual({ mode: 'fixed', value: 'bypassPermissions' });
+      expect(permission('office-assistant')).toEqual({ mode: 'fixed', value: 'bypassPermissions' });
+      expect(permission('nexwork-butler')).toEqual({ mode: 'fixed', value: 'yolo' });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

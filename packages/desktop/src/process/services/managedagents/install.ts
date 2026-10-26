@@ -5,7 +5,7 @@ import type { Assistant, AssistantDetail, CreateAssistantRequest } from '@/commo
 import type { IMcpServer } from '@/common/config/storage';
 import type { DeptConfig } from '@/common/deptconfig/types';
 import type { ManagedCatalog } from '@/common/deptconfig/catalog';
-import { MANAGED_BUTLER_ID, MANAGED_DEFAULT_ID } from '@/common/deptconfig/catalog';
+import { MANAGED_BUTLER_ID, MANAGED_DEFAULT_ID, MANAGED_PERMISSION } from '@/common/deptconfig/catalog';
 import { buildEnvOverride, resolveNexworkProfilePath } from '@/common/gateway/provisionGateway';
 import { buildProvenanceEnvValue } from '@/common/deptconfig/client';
 import { pinnedModel } from '@/common/deptconfig/applyConfig';
@@ -93,6 +93,8 @@ export async function provisionGateway(cfg: DeptConfig, options: InstallOptions,
     claudeModel: gateway.claude_model ?? null,
     // spec 014: one assistant's own model (opus → glm-5.3[1m]) without moving everyone else's default
     claudeSlots: gateway.claude_slots ?? null,
+    // spec 018: the department's window (e.g. 262144); absent puts Claude Code back on 200k
+    claudeContextTokens: gateway.claude_context_tokens ?? null,
   });
   undo.push(() => api('PUT', '/api/agents/2d23ff1c/overrides', overrides));
   await api('PUT', '/api/agents/2d23ff1c/overrides', {
@@ -183,6 +185,8 @@ export async function installCatalog(
           model: spec && pinnedModel(spec) ? { mode: 'fixed', value: pinnedModel(spec)! } : { mode: 'auto' },
           // spec 016: the department's thought level; the guide page starts new conversations on it
           thought_level: spec?.thought_level ? { mode: 'fixed', value: spec.thought_level } : { mode: 'auto' },
+          // spec 017: new conversations start on full-auto; employees can still switch per conversation
+          permission: { mode: 'fixed', value: MANAGED_PERMISSION[agent.engine] },
         },
       };
       if (old) {

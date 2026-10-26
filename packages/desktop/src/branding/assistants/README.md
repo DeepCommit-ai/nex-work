@@ -6,7 +6,9 @@ Product specification: `cynapse/doc/spec/2026-09-09-managed-nexwork-agents.md` i
 
 `runtime.ts` prepares those resources before spawn and restores the required default after backend startup. It retains the last installed server catalog and optional assistant preferences. It never rewrites conversation history. The previous four-assistant snapshot migration has been retired.
 
-`claudeProfile.ts` installs a neutral NexWork output style with coding-specific defaults disabled. Common rules and dedicated roles arrive through each conversation snapshot, so a global output-style update cannot replace an old conversation's role. This does not replace the vendor model identity or its entire system prompt.
+`claudeProfile.ts` installs a neutral NexWork output style with coding-specific defaults disabled, and sets `disableBundledSkills` so Claude Code's own developer skills (`/init`, `/security-review`, `/claude-api` and the like) stay out of the model's view; skills materialized in the workspace are unaffected. Common rules and dedicated roles arrive through each conversation snapshot, so a global output-style update cannot replace an old conversation's role. This does not replace the vendor identity line or the rest of Claude Code's system prompt; the published common rules make the assistant introduce itself as NexWork (spec 017).
+
+Managed assistants, including the restored default, start new guide-page conversations on their engine's full-auto permission (`MANAGED_PERMISSION`: Claude Code `bypassPermissions`, Aion `yolo`). Employees can still switch a conversation's permission.
 
 The pinned backend intentionally omits localized names from user-owned definitions. The desktop decorates managed records with the published localization map. Conversation creation also resolves the current skills and MCP transports after acquiring a main-process catalog reservation; stale renderer form values cannot override a freshly installed publication.
 

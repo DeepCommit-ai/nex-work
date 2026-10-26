@@ -20,13 +20,25 @@ describe('Claude common NexWork rules', () => {
     const existing = { permissions: { defaultMode: 'default' }, env: { EXAMPLE: 'retained' }, outputStyle: 'Default' };
     writeFileSync(file, JSON.stringify(existing));
     prepareNexworkClaudeProfile(dir);
-    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ ...existing, outputStyle: 'NexWork' });
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
+      ...existing,
+      outputStyle: 'NexWork',
+      disableBundledSkills: true,
+    });
     const styleFile = path.join(dir, 'output-styles/nexwork.md');
     writeFileSync(styleFile, 'stale');
     prepareNexworkClaudeProfile(dir);
     expect(readFileSync(styleFile, 'utf8')).toContain('keep-coding-instructions: false');
     expect(readFileSync(styleFile, 'utf8')).not.toContain(NEXWORK_BASE_RULES);
     expect(readFileSync(styleFile, 'utf8')).not.toMatch(/office assistant|Word|Excel|PowerPoint/);
+  });
+
+  it('hides Claude Code bundled skills in a profile an earlier release already styled', () => {
+    const dir = temp();
+    const file = path.join(dir, 'settings.json');
+    writeFileSync(file, JSON.stringify({ outputStyle: 'NexWork', disableBundledSkills: false }));
+    prepareNexworkClaudeProfile(dir);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ outputStyle: 'NexWork', disableBundledSkills: true });
   });
 
   it('does not replace malformed user settings with an empty configuration', () => {

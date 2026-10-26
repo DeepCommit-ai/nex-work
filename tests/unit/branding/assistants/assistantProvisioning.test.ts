@@ -52,6 +52,24 @@ describe('assistant bootstrap', () => {
     await reconcileNexworkAssistants(1234, api);
     expect(states).toEqual(before);
   });
+  it('recreates a missing default that starts conversations on full-auto permission', async () => {
+    const states: { id: string; enabled: boolean }[] = [];
+    const created: Record<string, unknown>[] = [];
+    const api = vi.fn<typeof fetch>(async (input, init) => {
+      const route = new URL(String(input)).pathname;
+      if (route === '/api/settings/client') return Response.json({ success: true, data: {} });
+      if (init?.method === 'POST' && route === '/api/assistants') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown> & { id: string };
+        created.push(body);
+        states.push({ id: body.id, enabled: false });
+      }
+      if (init?.method === 'PATCH' && route === '/api/assistants/default-assistant/state') states[0].enabled = true;
+      return Response.json({ success: true, data: states });
+    });
+    await reconcileNexworkAssistants(1234, api);
+    expect(created.map((body) => body.id)).toEqual(['default-assistant']);
+    expect(created[0].defaults).toMatchObject({ permission: { mode: 'fixed', value: 'bypassPermissions' } });
+  });
   it('rejects acknowledged writes that leave the default disabled', async () => {
     await expect(reconcileNexworkAssistants(1234, backend(true).api)).rejects.toThrow('not enabled');
   });

@@ -64,6 +64,11 @@ export const MANAGED_DEFAULT_ID = 'default-assistant';
 export const MANAGED_BUTLER_ID = 'nexwork-butler';
 export const MANAGED_OFFICE_ID = 'office-assistant';
 export const MANAGED_CORE_IDS = [MANAGED_DEFAULT_ID, MANAGED_OFFICE_ID, MANAGED_BUTLER_ID] as const;
+/** New managed conversations run unattended: each engine's full-auto permission mode. */
+export const MANAGED_PERMISSION: Record<ManagedAgent['engine'], string> = {
+  'claude-code': 'bypassPermissions',
+  aion: 'yolo',
+};
 export const MANAGED_ID_RE = /^[a-z0-9][a-z0-9-]{0,47}$/;
 export const MAX_CATALOG_BYTES = 2 * 1024 * 1024;
 

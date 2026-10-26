@@ -6,7 +6,7 @@ import path from 'node:path';
 import upstream from './upstream.json';
 import metadata from './metadata.json';
 import { NEXWORK_BASE_RULES } from './prompts';
-import { MANAGED_DEFAULT_ID } from '@/common/deptconfig/catalog';
+import { MANAGED_DEFAULT_ID, MANAGED_PERMISSION } from '@/common/deptconfig/catalog';
 import { createBackendCall } from '@process/services/managedagents/backend';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 
@@ -74,7 +74,10 @@ export async function reconcileNexworkAssistants(port: number, fetchImpl: typeof
       ),
       agent_id: '2d23ff1c',
       enabled_skills: [],
-      defaults: { skills: { mode: 'fixed', value: [] } },
+      defaults: {
+        skills: { mode: 'fixed', value: [] },
+        permission: { mode: 'fixed', value: MANAGED_PERMISSION['claude-code'] },
+      },
     });
     await api('POST', '/api/skills/assistant-rule/write', {
       assistant_id: MANAGED_DEFAULT_ID,
