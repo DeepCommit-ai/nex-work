@@ -90,6 +90,16 @@ describe('validateConfig', () => {
     ).toContainEqual(expect.stringContaining('claude_selection'));
   });
 
+  it('accepts a context window that is null, absent or an integer in range, and rejects the rest (spec 018)', () => {
+    const gateway = { base_url: 'http://gw', api_key: 'sk' };
+    const problems = (claude_context_tokens: unknown) =>
+      validateConfig(cfg({ gateway: { ...gateway, claude_context_tokens } as DeptConfig['gateway'] }));
+    for (const ok of [262144, 1, 1048576, null, undefined]) expect(problems(ok)).toEqual([]);
+    for (const bad of ['262144', 0, -1, 1.5, 1048577, true, {}]) {
+      expect(problems(bad)).toContainEqual(expect.stringContaining('gateway.claude_context_tokens'));
+    }
+  });
+
   it('rejects a config without usable gateway credentials', () => {
     // 半份网关配置（有地址没 token）会让流量绕过网关或每次 401，且两种失败
     // 此刻都表现成"配置成功"。

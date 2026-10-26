@@ -84,6 +84,22 @@ export const CLAUDE_SLOT_ENV = {
 
 export type ClaudeSlots = Partial<Record<keyof typeof CLAUDE_SLOT_ENV, string>>;
 
+/**
+ * Claude Code's default context window for gateway models (cynapse `gateway.claude_context_tokens`,
+ * spec 018). Bundled Claude Code 2.1.235 sizes a model's window as: `[1m]` suffix → 1,000,000; else,
+ * for a name not starting with `claude-`, this variable; else 200,000. Auto-compact follows the
+ * window. Measured 2026-10-26 with 262144: `k3.1-pro` reports contextWindow 262144 and
+ * `k3.1-pro[1m]` still 1000000.
+ *
+ * `CLAUDE_CODE_AUTO_COMPACT_WINDOW` is deliberately not managed: Claude Code takes
+ * min(model window, that value) for every session, so it would also cut a `[1m]` slot's sessions
+ * (spec 014) down to the same compaction point.
+ */
+export const GATEWAY_ENV_CLAUDE_CONTEXT_TOKENS = 'CLAUDE_CODE_MAX_CONTEXT_TOKENS';
+
+/** Largest window cynapse may serve in `gateway.claude_context_tokens` (validateConfig, spec 018). */
+export const CLAUDE_CONTEXT_TOKENS_MAX = 1_048_576;
+
 /** The single gateway configuration for this install. */
 export type GatewayConfig = {
   baseUrl: string;
@@ -111,6 +127,12 @@ export type GatewayConfig = {
    * the one assistant whose sessions select `opus`. Only read when `claudeModel` is not `undefined`.
    */
   claudeSlots?: ClaudeSlots | null;
+  /**
+   * Context window for GATEWAY_ENV_CLAUDE_CONTEXT_TOKENS (spec 018), e.g. 262144. Only read when
+   * `claudeModel` is not `undefined`; then `null` or absent removes the variable, which puts Claude
+   * Code back on its own 200k.
+   */
+  claudeContextTokens?: number | null;
 };
 
 /**

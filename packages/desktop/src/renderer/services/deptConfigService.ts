@@ -267,6 +267,8 @@ const provisionGatewayFor = async (
         claudeModel: agentId === CLAUDE_AGENT_ID ? (gw.claude_model ?? null) : undefined,
         // spec 014: slots of their own, e.g. opus → glm-5.3[1m] for the one assistant on opus
         claudeSlots: agentId === CLAUDE_AGENT_ID ? (gw.claude_slots ?? null) : undefined,
+        // spec 018: the department's window (e.g. 262144); absent puts Claude Code back on 200k
+        claudeContextTokens: agentId === CLAUDE_AGENT_ID ? (gw.claude_context_tokens ?? null) : undefined,
       });
       // PUT 是整体替换（实测：漏掉 command_override 会把它清成 null）。这里只管
       // env，command_override（受管 claude 的钉子，issue #8）必须原样带过。

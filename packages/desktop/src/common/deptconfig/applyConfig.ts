@@ -24,7 +24,7 @@
  */
 
 import type { ApplyReport, AssistantSpec, DeptConfig } from './types';
-import { CLAUDE_CODE_MODEL_IDS, CLAUDE_SLOT_ENV, gatewayModelOf } from '../gateway/types';
+import { CLAUDE_CODE_MODEL_IDS, CLAUDE_CONTEXT_TOKENS_MAX, CLAUDE_SLOT_ENV, gatewayModelOf } from '../gateway/types';
 
 /**
  * The model to pin as the assistant's default (spec 014): its Claude Code selection when the
@@ -138,6 +138,22 @@ export const validateConfig = (cfg: DeptConfig): string[] => {
     // Same failure as a bad assistant pin: every Claude Code request would get a 404.
     problems.push(
       `gateway.claude_model ${String(claudeModel)} 不在 model_aliases 里——Claude Code 的每次请求都会得到 404`
+    );
+  }
+  // spec 018：这个值原样写进 CLAUDE_CODE_MAX_CONTEXT_TOKENS，Claude Code 按它定窗口与自动压缩点；
+  // 字符串、小数、0 或超大值都不是一个可用的窗口。
+  const contextTokens: unknown = cfg.gateway?.claude_context_tokens;
+  if (
+    contextTokens != null &&
+    !(
+      typeof contextTokens === 'number' &&
+      Number.isInteger(contextTokens) &&
+      contextTokens >= 1 &&
+      contextTokens <= CLAUDE_CONTEXT_TOKENS_MAX
+    )
+  ) {
+    problems.push(
+      `gateway.claude_context_tokens ${JSON.stringify(contextTokens)} 不是 1–${CLAUDE_CONTEXT_TOKENS_MAX} 之间的整数——Claude Code 会按错误的上下文窗口压缩会话`
     );
   }
   if (!cfg.gateway?.base_url?.trim() || !cfg.gateway?.api_key?.trim()) {

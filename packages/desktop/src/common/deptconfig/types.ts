@@ -37,7 +37,8 @@ export type AssistantSpec = {
    */
   fixed_model?: string | null;
   /**
-   * 只给这个 Claude Code 助手的上下文窗口（cynapse spec §18 / nex-work spec 014）：`1m` 或 `200k`。
+   * 只给这个 Claude Code 助手的上下文窗口（cynapse spec §18 / nex-work spec 014）：`1m` 或 `200k`；
+   * `256k` 是部门默认窗口（spec 018），落实看 gateway.claude_context_tokens。
    * 仅作记录与排错；落实看 claude_selection。
    */
   context_window?: string | null;
@@ -84,6 +85,12 @@ export type GatewaySection = {
    * claude_model.
    */
   claude_slots?: Record<string, string> | null;
+  /**
+   * Claude Code's default context window on this machine for gateway models (spec 018), e.g. 262144.
+   * Written as CLAUDE_CODE_MAX_CONTEXT_TOKENS; null or absent removes it (Claude Code's own 200k).
+   * A `[1m]` slot keeps its 1M window. Machine-wide, so per department, not per assistant.
+   */
+  claude_context_tokens?: number | null;
 };
 
 /** 服务端返回的一份部门配置。 */

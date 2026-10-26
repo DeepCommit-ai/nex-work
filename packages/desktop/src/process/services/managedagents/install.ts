@@ -93,6 +93,8 @@ export async function provisionGateway(cfg: DeptConfig, options: InstallOptions,
     claudeModel: gateway.claude_model ?? null,
     // spec 014: one assistant's own model (opus → glm-5.3[1m]) without moving everyone else's default
     claudeSlots: gateway.claude_slots ?? null,
+    // spec 018: the department's window (e.g. 262144); absent puts Claude Code back on 200k
+    claudeContextTokens: gateway.claude_context_tokens ?? null,
   });
   undo.push(() => api('PUT', '/api/agents/2d23ff1c/overrides', overrides));
   await api('PUT', '/api/agents/2d23ff1c/overrides', {
