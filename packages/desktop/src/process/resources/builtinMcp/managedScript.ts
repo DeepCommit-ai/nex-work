@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { realpath, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveManagedSkillSource } from '@/process/services/managedagents/workspaceSkills';
+import { verifyManagedSkillIntegrity } from '@/process/services/managedagents/files';
 
 export type ManagedScriptRequest = { skillId: string; relativePath: string };
 
@@ -24,6 +25,7 @@ export async function readManagedScript(
   const sourceRoot = resolveManagedSkillSource(context.workspace, skillId, context.skillsRoot);
   if (!sourceRoot) throw new Error('The managed skill is unavailable; reload its conversation runtime.');
   const skill = await realpath(sourceRoot);
+  verifyManagedSkillIntegrity(skill, skillId);
   const file = await realpath(path.join(skill, relativePath));
   if (!inside(skill, file)) throw new Error('The script escapes its selected skill directory.');
   const info = await stat(file);

@@ -5,6 +5,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createBrowserProxy } from '@/process/resources/builtinMcp/browserProxy';
 import { readManagedScript, managedScriptFunction } from '@/process/resources/builtinMcp/managedScript';
+import { installManagedSkills } from '@/process/services/managedagents/files';
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -12,26 +13,34 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'nexwork-script-'));
   roots.push(root);
-  const skillsRoot = path.join(root, 'installed', '0123456789abcdef'),
-    skill = path.join(skillsRoot, 'test-nw-0123456789ab');
+  const skillsRoot = path.join(root, 'installed', '0123456789abcdef');
+  const names = installManagedSkills(skillsRoot, {
+    schema_version: 1,
+    common_rules: '',
+    agents: [],
+    skills: {
+      test: {
+        files: {
+          'SKILL.md': '---\nname: test\ndescription: Test script\n---\n',
+          'helper.js': 'globalThis.loaded = (globalThis.loaded ?? 0) + 1;\n' + '// quotes " \\ 汉字\n'.repeat(6000),
+        },
+      },
+    },
+  });
+  const skill = path.join(skillsRoot, names.test);
   const workspace = path.join(root, 'workspace');
   await mkdir(skill, { recursive: true });
   await mkdir(path.join(workspace, '.claude', 'skills'), { recursive: true });
   await symlink(
     skill,
-    path.join(workspace, '.claude', 'skills', 'test-nw-0123456789ab'),
+    path.join(workspace, '.claude', 'skills', names.test),
     process.platform === 'win32' ? 'junction' : 'dir'
   );
-  await writeFile(
-    path.join(skill, 'helper.js'),
-    'globalThis.loaded = (globalThis.loaded ?? 0) + 1;\n' + '// quotes " \\ 汉字\n'.repeat(6000)
-  );
-  await writeFile(path.join(skill, 'SKILL.md'), '---\nname: test-nw-0123456789ab\ndescription: Test script\n---\n');
   return {
     root,
     skill,
-    context: { skillsRoot, workspace, selectedSkills: ['test-nw-0123456789ab'] },
-    request: { skillId: 'test-nw-0123456789ab', relativePath: 'helper.js' },
+    context: { skillsRoot, workspace, selectedSkills: [names.test] },
+    request: { skillId: names.test, relativePath: 'helper.js' },
   };
 }
 describe('managed file injection', () => {
@@ -63,16 +72,53 @@ describe('managed file injection', () => {
     expect(() => vm.runInContext(expression, context)).toThrow('broken');
     expect(Object.keys(context.__nexworkManagedScripts)).toEqual([]);
   });
-  it('reloads a changed content hash and reports missing files', async () => {
+  it('rejects a changed immutable script instead of executing it and reports missing files', async () => {
     const f = await fixture(),
       context = vm.createContext({});
     const first = await readManagedScript(f.request, f.context);
     vm.runInContext(`(${managedScriptFunction(first, 'helper')})()`, context);
     await writeFile(path.join(f.skill, 'helper.js'), 'globalThis.loaded += 10;');
-    const changed = await readManagedScript(f.request, f.context);
-    expect(changed.sha256).not.toBe(first.sha256);
-    expect(vm.runInContext(`(${managedScriptFunction(changed, 'helper')})()`, context).status).toBe('loaded');
+    await expect(readManagedScript(f.request, f.context)).rejects.toThrow('content was modified');
+    expect(context.loaded).toBe(1);
     await expect(readManagedScript({ ...f.request, relativePath: 'missing.js' }, f.context)).rejects.toThrow();
+  });
+  it('verifies a historical canonical package without new integrity metadata', async () => {
+    const f = await fixture();
+    await rm(path.join(f.context.skillsRoot, '.integrity'), { recursive: true });
+    expect((await readManagedScript(f.request, f.context)).source).toContain('globalThis.loaded');
+    await writeFile(path.join(f.skill, 'helper.js'), 'throw new Error("corrupt");');
+    await expect(readManagedScript(f.request, f.context)).rejects.toThrow('content was modified');
+  });
+  it('rejects changes elsewhere in the selected package and unexpected added files', async () => {
+    const f = await fixture();
+    await writeFile(path.join(f.skill, 'extra.js'), 'throw new Error("unexpected");');
+    await expect(readManagedScript(f.request, f.context)).rejects.toThrow('content was modified');
+    await rm(path.join(f.skill, 'extra.js'));
+    await writeFile(path.join(f.skill, 'SKILL.md'), '---\nname: other\ndescription: Test script\n---\n');
+    await expect(readManagedScript(f.request, f.context)).rejects.toThrow('content was modified');
+  });
+  it('preserves original quoted names when verifying an installed package', async () => {
+    const f = await fixture();
+    const names = installManagedSkills(f.context.skillsRoot, {
+      schema_version: 1,
+      common_rules: '',
+      agents: [],
+      skills: { quoted: { files: { 'SKILL.md': '---\nname: "quoted"\ndescription: Test\n---\n', 'helper.js': '1' } } },
+    });
+    await symlink(
+      path.join(f.context.skillsRoot, names.quoted),
+      path.join(f.context.workspace, '.claude', 'skills', names.quoted),
+      process.platform === 'win32' ? 'junction' : 'dir'
+    );
+    expect(
+      (
+        await readManagedScript(
+          { skillId: names.quoted, relativePath: 'helper.js' },
+          { ...f.context, selectedSkills: [names.quoted] }
+        )
+      ).source
+    ).toBe('1');
+    expect((await readManagedScript(f.request, f.context)).source).toContain('globalThis.loaded');
   });
   it('advertises the file tool and rewrites only that call to upstream evaluation', async () => {
     const f = await fixture(),
