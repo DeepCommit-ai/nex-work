@@ -43,6 +43,6 @@ therefore apply to every spec:
 | [016](016-assistant-thought-level/spec.md)            | Department thought level for an assistant        | Implemented, verified live                          |
 | [017](017-nexwork-identity-full-auto/spec.md)         | NexWork self-identity, full-auto conversations   | Implemented, verified live                          |
 | [018](018-claude-context-window/spec.md)              | Department default Claude Code context window    | Implemented, unit-tested; live check pending        |
-| [019](019-self-contained-runtime/spec.md)             | Installed app never downloads or replaces itself | Implemented, verified on a local arm64 package      |
+| [019](019-self-contained-runtime/spec.md)             | Installed app never downloads or replaces itself | Shipped in nexwork.8; catalog revision 8 published  |
 
 Cross-repository specs live in cynapse, per the current AGENTS.md contract. The four-assistant rollout is recorded in [NexWork four assistants](../../cynapse/doc/spec/2026-09-09-nexwork-four-assistants.md), including its upstream-drift accounting.

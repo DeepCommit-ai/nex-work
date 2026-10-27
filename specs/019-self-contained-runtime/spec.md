@@ -2,7 +2,9 @@
 
 **Feature Branch**: `nex-work`
 **Created**: 2026-10-27
-**Status**: Implemented; verified on a locally built Apple Silicon package. Windows not run.
+**Status**: Shipped in `v2.1.61-nexwork.8` (2026-10-27); the office-skill half reached every client with catalog
+revision 8 the same day (cynapse managed-agents spec §23). Verified on a locally built Apple Silicon package and on the
+released installers' contents. Windows not run.
 
 ## Why
 
