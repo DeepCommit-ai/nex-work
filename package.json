@@ -263,6 +263,11 @@
     "node": ">=22 <25"
   },
   "aioncoreVersion": "v0.1.72",
+  "bundledBrowserMcp": {
+    "name": "chrome-devtools-mcp",
+    "version": "0.16.0",
+    "integrity": "sha512-Jw+h8OGhpU9UjXl7Mm4yZe8IRzHmC19VNPP48+MI8AkWtCmnsbOsZ0hdoV2oq0veh3T1OcBbZSFHXVpFMBBi9Q=="
+  },
   "bundledOffice": {
     "assets": {
       "darwin-arm64": {

@@ -43,8 +43,9 @@ import { AUTO_UPDATE_ENABLED } from '@/branding';
 import { prepareNexworkSkills } from '@/branding/tools/resources';
 import { migrateNexworkTools } from '@/branding/tools/migration';
 import { officeRuntimeEnvironment } from '@/branding/tools/officeRuntime';
+import { browserMcpRuntimeEnvironment } from '@/branding/tools/browserMcpRuntime';
 import { prepareNexworkAssistants, reconcileNexworkAssistants } from '@/branding/assistants/runtime';
-import { configureNexworkClaude } from '@/branding/assistants/claudeProfile';
+import { NEXWORK_CLAUDE_PROCESS_ENV, configureNexworkClaude } from '@/branding/assistants/claudeProfile';
 import { startManagedAgents } from '@process/services/managedagents';
 import { startWebHost } from '@aionui/web-host';
 import { initializeZoomFactor, setupZoomForWindow } from './process/utils/zoom';
@@ -229,18 +230,24 @@ const backendManager = new BackendLifecycleManager(
   },
   resolveBinaryPath,
   {
-    spawnEnvironment: (dataDir) => ({
-      ...prepareNexworkAssistants(dataDir),
-      ...prepareNexworkSkills(dataDir),
-      ...officeRuntimeEnvironment(
-        app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources'),
-        JSON.parse(fs.readFileSync(path.join(app.getAppPath(), 'package.json'), 'utf8')).bundledOffice,
-        process.platform,
-        process.arch,
-        process.env,
-        app.isPackaged
-      ),
-    }),
+    spawnEnvironment: (dataDir) => {
+      const resources = app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'resources');
+      const pins = JSON.parse(fs.readFileSync(path.join(app.getAppPath(), 'package.json'), 'utf8'));
+      return {
+        ...prepareNexworkAssistants(dataDir),
+        ...prepareNexworkSkills(dataDir),
+        ...officeRuntimeEnvironment(
+          resources,
+          pins.bundledOffice,
+          process.platform,
+          process.arch,
+          process.env,
+          app.isPackaged
+        ),
+        ...browserMcpRuntimeEnvironment(resources, pins.bundledBrowserMcp, app.isPackaged),
+        ...NEXWORK_CLAUDE_PROCESS_ENV,
+      };
+    },
     afterReady: async (port, dataDir) => {
       backendDataDir = dataDir;
       // Wait for backend ownership, legacy database copy, and schema upgrades first.

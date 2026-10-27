@@ -207,6 +207,7 @@ resources/bundled-aioncore
 resources/bundled-claude
 resources/bundled-python
 resources/bundled-officecli
+resources/bundled-browser-mcp
 resources/hub
 /resources/windows/support/_sentry-dsn.generated.nsh
 

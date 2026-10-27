@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
@@ -58,29 +58,41 @@ describe('bundled Office preview runtime', () => {
     });
     const env = { Path: 'C:/system', KEEP: 'value' };
     expect(officeRuntimeEnvironment(path.join(root, 'resources'), pin, 'win32', 'x64', env)).toEqual({
+      OFFICECLI_SKIP_UPDATE: '1',
       Path: path.dirname(file) + ';C:/system',
     });
     expect(env).toEqual({ Path: 'C:/system', KEEP: 'value' });
   });
-  it('fails closed when a packaged binary is missing or has been replaced', async () => {
+  it('keeps a missing or replaced packaged binary off PATH without stopping the backend (spec 019)', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const root = fixture();
-    expect(() => officeRuntimeEnvironment(root, pin, 'win32', 'x64')).toThrow();
+    expect(officeRuntimeEnvironment(root, pin, 'win32', 'x64')).toEqual({ OFFICECLI_SKIP_UPDATE: '1' });
     const file = await prepareOfficecli({
       projectRoot: root,
       platform: 'win32',
       arch: 'x64',
       fetchBytes: async () => bytes,
     });
+    // What OfficeCLI's own updater does: swap the executable for a newer release.
     writeFileSync(file, 'changed');
     expect(() => verifyOfficecli(path.dirname(file), pin, 'win32', 'x64')).toThrow('checksum');
-    expect(() => officeRuntimeEnvironment(path.join(root, 'resources'), pin, 'win32', 'x64')).toThrow('checksum');
+    expect(officeRuntimeEnvironment(path.join(root, 'resources'), pin, 'win32', 'x64', { Path: 'C:/system' })).toEqual({
+      OFFICECLI_SKIP_UPDATE: '1',
+    });
+    expect(error).toHaveBeenCalledTimes(2);
+    error.mockRestore();
   });
-  it('allows an unprepared development checkout without masking a corrupt existing bundle', () => {
+  it('allows an unprepared development checkout without exposing a corrupt existing bundle', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const root = fixture();
-    expect(officeRuntimeEnvironment(root, pin, 'win32', 'x64', {}, false)).toEqual({});
+    expect(officeRuntimeEnvironment(root, pin, 'win32', 'x64', {}, false)).toEqual({ OFFICECLI_SKIP_UPDATE: '1' });
     const dir = path.join(root, 'bundled-officecli', 'win32-x64');
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, 'officecli.exe'), 'bad');
-    expect(() => officeRuntimeEnvironment(root, pin, 'win32', 'x64', {}, false)).toThrow('checksum');
+    expect(officeRuntimeEnvironment(root, pin, 'win32', 'x64', { PATH: '/usr/bin' }, false)).toEqual({
+      OFFICECLI_SKIP_UPDATE: '1',
+    });
+    expect(error).toHaveBeenCalledOnce();
+    error.mockRestore();
   });
 });

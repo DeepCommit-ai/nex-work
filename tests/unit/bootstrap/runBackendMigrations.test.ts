@@ -292,3 +292,37 @@ describe('builtin browser MCP node command (spec 007 FR-3)', () => {
     expect(updateServerMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * [NexWork spec 019] Without npx on PATH (a Finder-launched employee Mac), the upstream preflight tests the
+ * chrome-devtools server, which runs `npx chrome-devtools-mcp@latest` and holds startup migrations for 30 s
+ * when the npm registry is unreachable. The server is disabled by default, so there is nothing to prepare.
+ */
+describe('chrome-devtools preflight (spec 019)', () => {
+  const chromeDevtools = (enabled: boolean): IMcpServer => ({
+    id: 'chrome-devtools-id',
+    name: 'chrome-devtools',
+    description: 'Default MCP server: chrome-devtools',
+    enabled,
+    builtin: true,
+    transport: { type: 'stdio', command: 'npx', args: ['-y', 'chrome-devtools-mcp@latest'] },
+    original_json: '{"mcpServers":{"chrome-devtools":{}}}',
+    created_at: 1,
+    updated_at: 1,
+  });
+
+  it.each([
+    { enabled: true, tests: 1 },
+    { enabled: false, tests: 0 },
+  ])('tests the connection only for an enabled server (enabled=$enabled)', async ({ enabled, tests }) => {
+    listServersMock.mockResolvedValue([imageServer(), chromeDevtools(enabled)]);
+    const path = process.env.PATH;
+    process.env.PATH = '/nonexistent-nexwork-test-bin';
+    try {
+      await runBackendMigrations(configFile as never);
+    } finally {
+      process.env.PATH = path;
+    }
+    expect(testMcpConnectionMock).toHaveBeenCalledTimes(tests);
+  });
+});

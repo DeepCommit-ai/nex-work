@@ -34,6 +34,7 @@ import { delimiter } from 'node:path';
 import { createInterface } from 'node:readline';
 import { createBrowserProxy } from './browserProxy';
 import { buildMcpChildEnv, buildMcpSpawnCommand, resolveBridgeToken, resolveBrowserUrl } from './browserServerPort';
+import { BUNDLED_BROWSER_MCP_ENV } from '@/branding/tools/browserMcpRuntime';
 
 /**
  * stdio MCP 服务器的 stdout 是协议通道，任何附加输出都会破坏握手。
@@ -175,7 +176,14 @@ async function main(): Promise<void> {
     platform: process.platform,
     version: CHROME_DEVTOOLS_MCP_VERSION,
     browserUrl,
+    // [NexWork spec 019] Packaged builds ship this version: an npx registry check that stalls past the
+    // client's 30s MCP handshake would remove the browser tools for the whole session.
+    bundledEntry: process.env[BUNDLED_BROWSER_MCP_ENV]?.trim() || undefined,
+    execPath: process.execPath,
   });
+  logDiagnostic(
+    spawnPlan.command === process.execPath ? 'Using bundled chrome-devtools-mcp' : 'Using npx chrome-devtools-mcp'
+  );
 
   const child = spawn(spawnPlan.command, spawnPlan.args, {
     // stdio 直通：这个进程只是转发者，MCP 协议流不能被中间层缓冲或改写

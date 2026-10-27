@@ -125,6 +125,9 @@ extraResources:
     to: bundled-python
   - from: resources/bundled-officecli
     to: bundled-officecli
+  # spec 019: chrome-devtools-mcp for the in-app browser tools, never downloaded on an employee machine
+  - from: resources/bundled-browser-mcp
+    to: bundled-browser-mcp
   - from: resources/hub
     to: hub
 win:

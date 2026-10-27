@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { prepareNexworkClaudeProfile } from '@/branding/assistants/claudeProfile';
+import { NEXWORK_CLAUDE_PROCESS_ENV, prepareNexworkClaudeProfile } from '@/branding/assistants/claudeProfile';
 import { NEXWORK_BASE_RULES } from '@/branding/assistants/prompts';
 const dirs: string[] = [];
 const temp = (): string => {
@@ -39,6 +39,10 @@ describe('Claude common NexWork rules', () => {
     writeFileSync(file, JSON.stringify({ outputStyle: 'NexWork', disableBundledSkills: false }));
     prepareNexworkClaudeProfile(dir);
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ outputStyle: 'NexWork', disableBundledSkills: true });
+  });
+
+  it('keeps Claude Code from calling Anthropic outside the company gateway (spec 019)', () => {
+    expect(NEXWORK_CLAUDE_PROCESS_ENV).toEqual({ CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' });
   });
 
   it('does not replace malformed user settings with an empty configuration', () => {

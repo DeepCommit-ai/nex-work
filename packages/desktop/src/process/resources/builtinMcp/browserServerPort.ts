@@ -145,7 +145,12 @@ export const buildMcpSpawnCommand = (deps: {
   platform: string;
   version: string;
   browserUrl: string;
+  /** [NexWork spec 019] chrome-devtools-mcp shipped in the app, started by `execPath` without npx. */
+  bundledEntry?: string;
+  execPath?: string;
 }): { command: string; args: string[] } => {
+  if (deps.bundledEntry && deps.execPath)
+    return { command: deps.execPath, args: [deps.bundledEntry, '--browser-url', deps.browserUrl] };
   const mcpArgs = ['-y', `chrome-devtools-mcp@${deps.version}`, '--browser-url', deps.browserUrl];
   // Match the runtime health probe and prevent cmd AutoRun from polluting stdio.
   return deps.platform === 'win32'

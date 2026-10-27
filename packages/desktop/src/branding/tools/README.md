@@ -38,6 +38,11 @@ or upstream Actions overrides must first receive a reviewed source patch; packag
 fails instead of silently losing the branding. Native macOS and Windows runners are
 used for their respective installers; Rust handles the macOS architecture target.
 
+`officeRuntime.ts` and `browserMcpRuntime.ts` hand payloads prepared at build time to the backend
+environment: the pinned OfficeCLI on `PATH`, and the pinned chrome-devtools-mcp entry as
+`NEXWORK_CHROME_DEVTOOLS_MCP`. The in-app browser tools then start without npx or the npm
+registry (spec 019). Development checkouts that skipped `prepare-browser-mcp.js` fall back to npx.
+
 `@aionui/web-host` shares `runtime/dataDirectories.ts` across the desktop and standalone launchers. It migrates owned desktop/standalone data roots before startup and
 retains legacy aliases for historical absolute paths. A fresh desktop uses
 `NexWork[-Dev[-2]]/nexwork`, with `~/.nexwork[-dev[-2]]` and

@@ -18,7 +18,8 @@ import {
 } from '@/common/config/imageGenerationMcpEnv';
 import { BUILTIN_IMAGE_GEN_NAME, type IMcpServer, type IProvider } from '@/common/config/storage';
 import { getBuiltinMcpScriptPath, type ProcessConfig as ProcessConfigType } from './initStorage';
-import { resolveMcpNodeCommand } from './mcpNodeCommand';
+import { readBundledNode, resolveMcpNodeCommand } from './mcpNodeCommand';
+import { getPlatformServices } from '@/common/platform';
 import { getDataPath } from './utils';
 import { migrateAssistantsToBackend } from './migrateAssistants';
 
@@ -254,6 +255,9 @@ async function isCommandAvailable(command: string): Promise<boolean> {
 async function ensureBuiltinChromeDevtoolsAvailability(server?: IMcpServer): Promise<void> {
   if (
     !server ||
+    // [NexWork spec 019] The preflight runs `npx chrome-devtools-mcp@latest` and holds startup migrations for
+    // 30 s when the npm registry is unreachable; a disabled server has nothing to prepare.
+    server.enabled === false ||
     server.name !== BUILTIN_CHROME_DEVTOOLS_NAME ||
     server.transport.type !== 'stdio' ||
     server.transport.command !== 'npx'
@@ -322,8 +326,10 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
   // --mcp-config). Loud when PATH node is unusable; never blocks startup.
   const nodeResolution = await resolveMcpNodeCommand({
     runtimeNodeRoot: path.join(getDataPath(), 'runtime', 'node'),
+    // spec 019: a packaged app runs its browser tools on the node it ships.
+    bundledNode: getPlatformServices().paths.isPackaged() ? readBundledNode(process.resourcesPath) : undefined,
   });
-  if (nodeResolution.source !== 'path') {
+  if (nodeResolution.source !== 'path' && nodeResolution.source !== 'bundled') {
     console.warn(
       '[Migration] PATH Node/npx toolchain is unusable; builtin browser MCP node command resolved to %s (source: %s)',
       nodeResolution.command,

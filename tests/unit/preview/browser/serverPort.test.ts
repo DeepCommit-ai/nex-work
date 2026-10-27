@@ -145,6 +145,22 @@ describe('buildMcpSpawnCommand — issue #3883', () => {
     expect(args).not.toContain('chrome-devtools-mcp@latest');
     expect(args).toContain(`chrome-devtools-mcp@${version}`);
   });
+
+  it('starts the shipped chrome-devtools-mcp with the launcher node, never npx (spec 019)', () => {
+    const bundledEntry = '/app/bundled-browser-mcp/chrome-devtools-mcp/build/src/index.js';
+    for (const platform of ['win32', 'darwin', 'linux']) {
+      expect(buildMcpSpawnCommand({ platform, version, browserUrl, bundledEntry, execPath: '/app/node' })).toEqual({
+        command: '/app/node',
+        args: [bundledEntry, '--browser-url', browserUrl],
+      });
+    }
+  });
+
+  it('keeps npx for checkouts that ship no bundle', () => {
+    expect(buildMcpSpawnCommand({ platform: 'darwin', version, browserUrl, execPath: '/app/node' }).command).toBe(
+      'npx'
+    );
+  });
 });
 
 /**

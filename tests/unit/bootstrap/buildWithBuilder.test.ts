@@ -319,6 +319,15 @@ Module._load = function patchedLoad(request, parent, isMain) {
     return { preparePythonPackages: async (options) => recordPrepareCall({ platform: options.platform, arch: options.arch, runtime: 'python-packages' }) };
   }
 
+  // Real prepares download other architectures into resources/, which a later local build then ships.
+  if (request.endsWith('packages/shared-scripts/src/prepare-officecli.js')) {
+    return { prepareOfficecli: async (options) => recordPrepareCall({ platform: options.platform, arch: options.arch, runtime: 'officecli' }) };
+  }
+
+  if (request.endsWith('packages/shared-scripts/src/prepare-browser-mcp.js')) {
+    return { prepareBrowserMcp: async () => recordPrepareCall({ runtime: 'browser-mcp' }) };
+  }
+
   if (request === './prepareAioncore' || request.endsWith('/prepareAioncore')) {
     return recordPrepareCall;
   }
@@ -405,6 +414,8 @@ childProcess.execSync = function mockedExecSync(command) {
         expect(calls[0]).toEqual({ platform: process.platform, arch: expectedArch, runtime: 'claude' });
         expect(calls[1]).toEqual({ platform: process.platform, arch: expectedArch, runtime: 'python' });
         expect(calls[2]).toEqual({ platform: process.platform, arch: expectedArch, runtime: 'python-packages' });
+        expect(calls[3]).toEqual({ platform: process.platform, arch: expectedArch, runtime: 'officecli' });
+        expect(calls[4]).toEqual({ runtime: 'browser-mcp' });
       } finally {
         rmSync(outDir, { recursive: true, force: true });
         if (movedExistingOut) {

@@ -59,6 +59,13 @@ function verifyBundledResources(resourcesDir, electronPlatformName, targetArch) 
     claudePlat,
     targetArch
   );
+  // spec 019: without this payload the browser tools fall back to an npx download at run time.
+  const { verifyBrowserMcp } = require('../packages/shared-scripts/src/prepare-browser-mcp');
+  try {
+    verifyBrowserMcp(path.join(resourcesDir, 'bundled-browser-mcp'), require('../package.json').bundledBrowserMcp);
+  } catch (error) {
+    result.missing.push(`bundled-browser-mcp (${error.message})`);
+  }
   const pythonPin = require('../package.json').bundledPython;
   try {
     verifyPythonPackages(path.join(resourcesDir, 'bundled-python', pythonKey), pythonPin, claudePlat);

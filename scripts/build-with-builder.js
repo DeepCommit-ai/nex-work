@@ -782,6 +782,9 @@ async function main() {
       platform: process.platform,
       arch: targetArch,
     });
+    // spec 019: the browser tools must not depend on npx reaching the npm registry on employee machines.
+    const { prepareBrowserMcp } = require('../packages/shared-scripts/src/prepare-browser-mcp.js');
+    await prepareBrowserMcp({ projectRoot: path.resolve(__dirname, '..') });
     const { prepareAioncore } = require('../packages/shared-scripts/src/prepare-aioncore.js');
     const { resolveAioncoreVersion } = require('./resolveAioncoreVersion.js');
     const projectRoot = path.resolve(__dirname, '..');

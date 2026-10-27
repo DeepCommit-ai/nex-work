@@ -9,6 +9,13 @@ export const NEXWORK_OUTPUT_STYLE = 'NexWork';
 /** Claude Code's own developer skills (/init, /security-review, ...) stay out of the model's view; workspace skills are unaffected. */
 const NEXWORK_SETTINGS = { outputStyle: NEXWORK_OUTPUT_STYLE, disableBundledSkills: true };
 
+/**
+ * Backend environment for every Claude Code session (spec 019). Without it Claude Code calls
+ * api.anthropic.com directly every 10–30 s (telemetry, error reports, update checks), bypassing the
+ * company gateway; measured 2026-10-27, none of those calls remain with it set.
+ */
+export const NEXWORK_CLAUDE_PROCESS_ENV = { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
+
 /** Install minimal product rules without changing credentials, permissions, or other settings. */
 export function prepareNexworkClaudeProfile(configDir: string): void {
   if (!path.isAbsolute(configDir)) throw new Error('Claude configuration directory must be absolute');

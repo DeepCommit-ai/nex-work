@@ -25,23 +25,24 @@ therefore apply to every spec:
 
 ## Index
 
-| Spec                                                  | Title                                           | Status                                              |
-| ----------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------- |
-| [001](001-nexwork-rebrand/spec.md)                    | AionUi → NexWork rebrand                        | Implemented                                         |
-| [002](002-server-controlled-capabilities/spec.md)     | Server-controlled capability policy             | Draft (rev 3)                                       |
-| [003](003-nexwork-constitution/spec.md)               | NexWork constitution                            | Implemented (rev 3)                                 |
-| [004](004-app-icon-geometry/spec.md)                  | App icon geometry                               | Implemented (rev 5)                                 |
-| [005](005-trajectory-export/spec.md)                  | Trajectory export                               | Withdrawn — collection belongs at the gateway       |
-| [006](006-gateway-provisioning/spec.md)               | Gateway provisioning                            | Implemented, partially verified — resolves 002 OQ-1 |
-| [007](007-runtime-path-hardening/spec.md)             | Runtime path hardening                          | Implemented, verified live                          |
-| [010](010-browser-bridge-busy-and-background/spec.md) | In-app browser: one driver, awake while driving | Implemented; live checks pending                    |
-| [011](011-bundled-python/spec.md)                     | Bundled Python for managed skills               | Implemented; installer checks pending               |
-| [012](012-claude-model-pin/spec.md)                   | Department model for Claude Code assistants     | Implemented, verified live                          |
-| [013](013-in-app-browser-sso/spec.md)                 | In-app browser keeps single sign-on sessions    | Implemented, verified live                          |
-| [014](014-assistant-model-window/spec.md)             | Claude assistant on its own model and window    | Implemented, verified live; gateway check pending   |
-| [015](015-migration-line-endings/spec.md)             | Windows nexwork.1 databases open after upgrade  | Shipped in nexwork.4; verified on a Windows runner  |
-| [016](016-assistant-thought-level/spec.md)            | Department thought level for an assistant       | Implemented, verified live                          |
-| [017](017-nexwork-identity-full-auto/spec.md)         | NexWork self-identity, full-auto conversations  | Implemented, verified live                          |
-| [018](018-claude-context-window/spec.md)              | Department default Claude Code context window   | Implemented, unit-tested; live check pending        |
+| Spec                                                  | Title                                            | Status                                              |
+| ----------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------- |
+| [001](001-nexwork-rebrand/spec.md)                    | AionUi → NexWork rebrand                         | Implemented                                         |
+| [002](002-server-controlled-capabilities/spec.md)     | Server-controlled capability policy              | Draft (rev 3)                                       |
+| [003](003-nexwork-constitution/spec.md)               | NexWork constitution                             | Implemented (rev 3)                                 |
+| [004](004-app-icon-geometry/spec.md)                  | App icon geometry                                | Implemented (rev 5)                                 |
+| [005](005-trajectory-export/spec.md)                  | Trajectory export                                | Withdrawn — collection belongs at the gateway       |
+| [006](006-gateway-provisioning/spec.md)               | Gateway provisioning                             | Implemented, partially verified — resolves 002 OQ-1 |
+| [007](007-runtime-path-hardening/spec.md)             | Runtime path hardening                           | Implemented, verified live                          |
+| [010](010-browser-bridge-busy-and-background/spec.md) | In-app browser: one driver, awake while driving  | Implemented; live checks pending                    |
+| [011](011-bundled-python/spec.md)                     | Bundled Python for managed skills                | Implemented; installer checks pending               |
+| [012](012-claude-model-pin/spec.md)                   | Department model for Claude Code assistants      | Implemented, verified live                          |
+| [013](013-in-app-browser-sso/spec.md)                 | In-app browser keeps single sign-on sessions     | Implemented, verified live                          |
+| [014](014-assistant-model-window/spec.md)             | Claude assistant on its own model and window     | Implemented, verified live; gateway check pending   |
+| [015](015-migration-line-endings/spec.md)             | Windows nexwork.1 databases open after upgrade   | Shipped in nexwork.4; verified on a Windows runner  |
+| [016](016-assistant-thought-level/spec.md)            | Department thought level for an assistant        | Implemented, verified live                          |
+| [017](017-nexwork-identity-full-auto/spec.md)         | NexWork self-identity, full-auto conversations   | Implemented, verified live                          |
+| [018](018-claude-context-window/spec.md)              | Department default Claude Code context window    | Implemented, unit-tested; live check pending        |
+| [019](019-self-contained-runtime/spec.md)             | Installed app never downloads or replaces itself | Implemented, verified on a local arm64 package      |
 
 Cross-repository specs live in cynapse, per the current AGENTS.md contract. The four-assistant rollout is recorded in [NexWork four assistants](../../cynapse/doc/spec/2026-09-09-nexwork-four-assistants.md), including its upstream-drift accounting.
